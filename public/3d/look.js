@@ -19,6 +19,8 @@ export const LOOK = {
   canopy: { on: false, height: 0.5, scale: 1.15, density: 0.33, gap: 0, brightness: 0.9 },
   // Sunnyside's small houses, folded: scale 1 = 2 cells wide; roofTilt is the roof's lean back from upright, in degrees.
   houses: { scale: 0.85, lodge: 1.4, roofTilt: 58 },
+  // The Ember Well: Sunnyside's stone well, folded the same way (tilt: how far its rim leans back toward flat).
+  well: { scale: 1.15, tilt: 72 },
   clouds: { wispHeight: 9.4 },
   ground: { brightness: 0.56 },
   water: { opacity: 1, flow: 0.67 },

@@ -134,39 +134,47 @@ export async function load() {
     return obj;
   }
 
-  // Houses: the tileset's small gabled houses (blue, green, orange roofs), drawn top-down at 3/4. Each is folded like a
-  // card: the front wall (bottom 24 rows) stands upright and the roof (top 32 rows) leans back from its top edge by
-  // LOOK.houses.roofTilt degrees, with plain side panels so it never looks hollow from an angle. The roof and wall are
-  // separate meshes so each catches the sun at its own angle.
-  const HOUSES = [[520, 168], [520, 296], [520, 424]], HW = 32, ROOF = 32, WALL = 24;
-  function house(variant = 0, scale = LOOK.houses.scale) {
-    const [hx, hy] = HOUSES[variant % HOUSES.length], u = scale / PX;
-    const part = (y, h) => { const c = canvas(HW, h); c.getContext('2d').drawImage(tiles, hx, hy + y, HW, h, 0, 0, HW, h); return pixelTex(c); };
-    const roofTex = part(0, ROOF), wallTex = part(ROOF, WALL);
+  // Folded sprites. The tileset draws buildings top-down at 3/4: the part seen from above on top, the front face below.
+  // folded() stands the front face upright and leans the top part back from its upper edge by `tilt` degrees, so the
+  // piece reads as a solid object from the camera. Each part is its own mesh and catches the sun at its own angle.
+  // `sides` fills the space under the top with plain panels, so a building never looks hollow from an angle.
+  function folded({ x, y, w, top, front, tilt, scale, sides }) {
+    const u = scale / PX;
+    const part = (py, h) => { const c = canvas(w, h); c.getContext('2d').drawImage(tiles, x, py, w, h, 0, 0, w, h); return pixelTex(c); };
     const solid = map => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshLambertMaterial({ map, alphaTest: 0.5, side: THREE.DoubleSide }));
       m.castShadow = m.receiveShadow = true;
       m.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.5 });
       return m;
     };
-    const w = HW * u, wh = WALL * u, rl = ROOF * u, tilt = THREE.MathUtils.degToRad(LOOK.houses.roofTilt);
-    const depth = Math.sin(tilt) * rl, rise = Math.cos(tilt) * rl;
-    const wall = solid(wallTex); wall.scale.set(w, wh, 1); wall.position.set(0, wh / 2, depth / 2);
-    const roof = solid(roofTex); roof.scale.set(w, rl, 1);
-    roof.rotation.x = -tilt; roof.position.set(0, wh + rise / 2, depth / 2 - depth / 2);
-    // Side panels fill the space under the roof, in the wall's darkest wood.
-    const shape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0, wh), new THREE.Vector2(depth, wh + rise), new THREE.Vector2(depth, 0)]);
-    const sideMat = new THREE.MeshLambertMaterial({ color: 0x7a4e30, side: THREE.DoubleSide });
+    const ww = w * u, fh = front * u, tl = top * u, a = THREE.MathUtils.degToRad(tilt);
+    const depth = Math.sin(a) * tl, rise = Math.cos(a) * tl;
+    const face = solid(part(y + top, front)); face.scale.set(ww, fh, 1); face.position.set(0, fh / 2, depth / 2);
+    const cap = solid(part(y, top)); cap.scale.set(ww, tl, 1); cap.rotation.x = -a; cap.position.set(0, fh + rise / 2, 0);
     const obj = new THREE.Group();
-    for (const sx of [-1, 1]) {
-      const side = new THREE.Mesh(new THREE.ShapeGeometry(shape), sideMat);
-      side.rotation.y = Math.PI / 2; side.position.set(sx * (w / 2 - 0.02), 0, depth / 2);
-      side.castShadow = side.receiveShadow = true;
-      obj.add(side);
+    if (sides) {
+      const shape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0, fh), new THREE.Vector2(depth, fh + rise), new THREE.Vector2(depth, 0)]);
+      const mat = new THREE.MeshLambertMaterial({ color: sides, side: THREE.DoubleSide });
+      for (const sx of [-1, 1]) {
+        const side = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat);
+        side.rotation.y = Math.PI / 2; side.position.set(sx * (ww / 2 - 0.02), 0, depth / 2);
+        side.castShadow = side.receiveShadow = true;
+        obj.add(side);
+      }
     }
-    obj.add(wall, roof);
+    obj.add(face, cap);
+    // Where the top's near edge sits, for things placed on it (the well's fire).
+    obj.userData.rim = { y: fh, z: depth / 2, depth, rise, unit: u };
     return obj;
   }
+  // Houses: the small gabled houses (blue, green, orange roofs), 32 px wide: roof rows 0-31, front wall rows 32-55.
+  const HOUSES = [[520, 168], [520, 296], [520, 424]];
+  const house = (variant = 0, scale = LOOK.houses.scale) => {
+    const [x, y] = HOUSES[variant % HOUSES.length];
+    return folded({ x, y, w: 32, top: 32, front: 24, tilt: LOOK.houses.roofTilt, scale, sides: 0x7a4e30 });
+  };
+  // The stone well: rim and opening rows 0-10, stonework rows 11-20 (its drawn shadow below is left out).
+  const well = (scale = LOOK.well.scale) => folded({ x: 598, y: 311, w: 20, top: 11, front: 10, tilt: LOOK.well.tilt, scale });
 
   // Trees standing between the camera and the player fade out so the player is never hidden.
   // Animals: 4-frame strips facing left, shadows drawn in. FOOT is each strip's bottom pixel row, so they stand on y = 0.
@@ -198,5 +206,5 @@ export async function load() {
     }
   }
 
-  return { ground, tiled, person, tree, animal, house, update, HAIR };
+  return { ground, tiled, person, tree, animal, house, well, update, HAIR };
 }

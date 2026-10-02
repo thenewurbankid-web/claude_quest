@@ -236,6 +236,8 @@ wellLight.position.set(wellPos.x, 0.9, wellPos.z);
 wellLight.castShadow = true;
 wellLight.shadow.mapSize.set(512, 512);
 scene.add(wellLight);
+// Placeholder well, hidden once the Sunnyside stone well is built (build() moves the fire into its opening).
+const wellParts = new THREE.Group();
 {
   const stone = new THREE.MeshStandardMaterial({ color: 0x9a9aa8, roughness: 0.9 });
   const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 0.42, 14, 1, true), stone);
@@ -244,10 +246,12 @@ scene.add(wellLight);
   rim.rotation.x = Math.PI / 2; rim.position.set(wellPos.x, 0.42, wellPos.z);
   const embers = new THREE.Mesh(new THREE.CircleGeometry(0.5, 18), new THREE.MeshStandardMaterial({ color: 0x3a1a08, emissive: 0xff7a20, emissiveIntensity: 2.2 }));
   embers.rotation.x = -Math.PI / 2; embers.position.set(wellPos.x, 0.3, wellPos.z);
-  scene.add(shadowed(ring), shadowed(rim), embers);
+  wellParts.add(shadowed(ring), shadowed(rim), embers);
+  scene.add(wellParts);
 }
-const fire = emitter({ map: fx('flame_03'), count: 26, color: 0xffa040, size: 0.55, origin: { x: wellPos.x, y: 0.35, z: wellPos.z }, spread: 0.22, rise: 0.9, life: 1.1 });
-const sparks = emitter({ map: fx('spark_04'), count: 18, color: 0xffd080, size: 0.16, origin: { x: wellPos.x, y: 0.5, z: wellPos.z }, spread: 0.35, rise: 2.6, life: 2.4 });
+const fireAt = { x: wellPos.x, y: 0.35, z: wellPos.z }, sparkAt = { x: wellPos.x, y: 0.5, z: wellPos.z };
+const fire = emitter({ map: fx('flame_03'), count: 26, color: 0xffa040, size: 0.55, origin: fireAt, spread: 0.22, rise: 0.9, life: 1.1 });
+const sparks = emitter({ map: fx('spark_04'), count: 18, color: 0xffd080, size: 0.16, origin: sparkAt, spread: 0.35, rise: 2.6, life: 2.4 });
 
 // ---------- fireflies at night ----------
 const fireflies = (() => {
@@ -467,6 +471,13 @@ async function build() {
   await loadManifest();
   sunny = await loadSunnyside();
   if (sunny) paintSunnyside(sunny);
+  if (sunny) {
+    const w = sunny.well(), { y, z, unit } = w.userData.rim, a = THREE.MathUtils.degToRad(LOOK.well.tilt), d = 1.5 * unit;
+    w.position.set(wellPos.x, 0, wellPos.z); scene.add(w); wellParts.visible = false;
+    // The opening sits 1.5 px back from the rim's front edge.
+    fireAt.y = y + Math.cos(a) * d + 0.02; fireAt.z = wellPos.z + z - Math.sin(a) * d;
+    sparkAt.y = fireAt.y + 0.15; sparkAt.z = fireAt.z;
+  }
   document.getElementById('models').textContent = [sunny && 'Sunnyside World by Daniel Diggle', CHARS === '3d' && manifest.player && 'KayKit Adventurers by Kay Lousberg'].filter(Boolean).join(' · ') || 'Placeholder shapes · art pack not added';
   const jobs = [];
   for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
