@@ -1,3 +1,6 @@
+> **Art (2026-10-02):** 2.5D with Three.js and free CC0 low-poly packs on the tile grid. Wherever this plan says
+> "drawn in code" or "procedural art", read it as that instead. See HANDOFF "Art direction".
+
 # Quest: Adventure mode (a real game for casual players)
 
 Status: **plan only.** The user approved the direction on 2026-10-02. It builds on `PLAN-settlements.md`.

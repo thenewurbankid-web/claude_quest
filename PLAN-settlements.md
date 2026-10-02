@@ -1,3 +1,6 @@
+> **Art (2026-10-02):** 2.5D with Three.js and free CC0 low-poly packs on the tile grid. Wherever this plan says
+> "drawn in code" or "procedural art", read it as that instead. See HANDOFF "Art direction".
+
 # Quest, Phase 6 plan: Settlements (Age of Empires + tycoon layer)
 
 **Names (user, 2026-10-02):** in game (title screen, page titles, dialogue, Studio, `/settings`) the game is called

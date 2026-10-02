@@ -22,6 +22,24 @@ Decisions made 2026-10-02 (details in the plan):
 
 Still open: the licence for shared lore and art in the marketplace.
 
+## Art direction: 2.5D (user, 2026-10-02)
+Supersedes "all art drawn in code" (`public/art.js`) and the plans' "art is yours or procedural".
+- **Look:** like Pokémon Brilliant Diamond/Shining Pearl and Let's Go: chibi low-poly 3D characters on the existing
+  tile grid, a tilted top-down camera, warm lighting, day/night, animated grass and water, effects (Ember Well glow, the Long Night).
+- **Tech:** Three.js renderer replaces the Phaser drawing in `public/world.js`. **Game logic stays on the tile grid**,
+  so every plan, lore file, save and the server stay valid. Battles, maps and the minimap get 3D presentation later.
+- **Assets:** free CC0 low-poly packs only, all in one consistent style. Candidates are KayKit (Kay Lousberg),
+  Quaternius and Kenney (Fantasy Town / Castle / Nature kits). **Nothing downloaded yet.** Ask the user before each
+  download (name, source, size), check each pack's licence file, and keep a credits file.
+- The user said "don't do any art": no hand-drawn or AI art. Use the packs.
+- The user wants it to feel like a delight for players. Be honest about "AAA": the target is polished indie, cohesive and lively.
+- `art.js` stays as a fallback while the swap happens, through the asset registry (`PLAN-settlements.md` §13).
+- Parallax (old Phase 3b) is dropped, because the 3D camera gives real depth.
+- Open: whether music and SFX also come from free packs, or stay generated in `music.js`.
+- Uncommitted on purpose: `site/index.html` and `scripts/build-pages.sh` draw the landing hero with the game's 2D
+  `art.js`, replacing an earlier imitation. Under 2.5D, the hero should become a screenshot of the 3D game, so decide
+  whether to keep or drop this change.
+
 ## Live on GitHub Pages (deployed 2026-10-02)
 Game: https://thenewurbankid-web.github.io/claude_quest/ · guide: /guide/ (from `site/index.html`).
 `.github/workflows/pages.yml` redeploys on every push to main.
