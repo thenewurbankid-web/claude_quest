@@ -252,6 +252,35 @@ a frame (localhost only; it doesn't block framing).
 11. The Recall Bell stops all work, from anywhere.
 12. Agents work on branches, and merging always takes a human.
 
+## Releases (build order, user 2026-10-03; replaces "M0 first")
+Playable slices first; the shared-core refactor waits until the fun is proven. The milestones below stay as the
+feature list; releases pick from them.
+- **R0 (today's MVP): "The Beacon lights up".** 3D view, read-only, from the Paperclip snapshot already in
+  `world.guild`: the Beacon (unified status), the in-game log (open items + last 5 resolved), one Sealed Hall per
+  Paperclip goal shown locked/open, Keepers busy/free. Nothing writes to Paperclip. Check against MAX FE.
+- **R1 "Riddles":** blocked / review-needed issues become NPCs with Riddles; answer with the Warden's Seal, True
+  Sight, outbox recall; write-back as a Paperclip comment.
+- **R2 "The Gloamwyrm":** a simple turn-based boss from the weighted backlog score, pausing per real question, with
+  retreat. Vertical slice complete: **playtest the fun here**.
+- **R3 "Bring your Keeper":** agent polling endpoint, `/work` copy-paste page, local Claude runner, start work from
+  an NPC with a token readout.
+- **R4 "The first Sealed Hall":** one hand-made dungeon themed from its milestone, and a Sigil.
+- **R5 "Your own Realm":** Local Ledger (no Paperclip), New Game / Load, split save with archiving.
+- **R6+:** shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes, 2D parity.
+Cost accepted: R0–R4 are built straight into the 3D code and partly moved into the core later.
+
+## Risks and gaps (2026-10-03)
+Risks: the fun is unproven (hence releases); boss pressure could push hasty real decisions (no timers on question
+pauses, "ask me later" always available, answers never affect combat power); scope keeps growing (re-scope per
+release); prompt injection from task text and pasted results (treat as data, NPC LLM gets no tools); Local Ledger
+loss when browser data is cleared (autosave plus a "download your save" nudge); missing art (Tanglers, Gloamwyrm,
+Wardens, dungeon kits); 2D + 3D doubles view work; Paperclip API drift (read only the fields we need).
+Gaps to design: agents claiming work (a renewable claim that lapses when an agent goes quiet); who accepts a
+milestone without Paperclip (a sealed decision that breaks the Hall's seal); team conflicts (sealed decisions need
+one authority, the shared ledger only merges); notifications when the game is closed; local counters for the success
+measures; an automated test suite for the safety rules. Still open with the user: does "no GitHub" also cover GitHub
+Pages hosting and the save repos / Marketplace in PLAN-settlements; the pack licences vs open source.
+
 ## Milestones
 Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
 

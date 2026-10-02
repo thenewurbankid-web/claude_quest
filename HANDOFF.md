@@ -11,9 +11,13 @@ boss that pauses for each real question. A Quest protocol sits between the game 
 first `source` plugin). One render-free shared core for the 2D and 3D views. Ink for lore files. 12 safety rules.
 Each project is a campaign win; Sigils, trophies and the Champions League live in the save file. No creature
 collecting (PLAN-adventure §5 rewritten).
-- **Next: M0, the shared core** (`public/core/`, moving grid rules, input map and storage helpers out of
-  `world.js` and `3d/scene.js`; both views must play exactly as before). Scope it before building. Estimate for
-  everything: ~20–27 sessions, first full loop M0–M6 ~13–18.
+- **Next: R0 "The Beacon lights up"** (see Releases in PLAN-engine.md; releases replaced "M0 first"): in the 3D
+  view, read-only from the Paperclip snapshot in `world.guild`: the Beacon, the in-game log (open + last 5 resolved),
+  a Sealed Hall per Paperclip goal (locked/open), Keepers busy/free. Test on a side server with a scratchpad copy of
+  `data/`, against MAX FE. Then R1 Riddles, R2 the Gloamwyrm (playtest the fun).
+- Later decisions in PLAN-engine.md: no GitHub source (Local Ledger + Paperclip), agents poll the Quest server
+  (`/work` page for hand relay), saves carry the full ledger, split into parts with archiving, LLM adapter routing.
+- **The game server on 4777 is down** (the app quit); restart it with the `claude-quest` launch config.
 - The game-studio plugin work below continues alongside (step 2, the Blender plugin, is scoped but not started).
 - The real game on 4777 was restarted from this session on 2026-10-03 and now runs the studio code.
 
