@@ -24,6 +24,17 @@ Blender or any other 3D tool, any 2D/tile editor, and any model.
     using the same provider picker. It shows a preview or diff before saving. Fantasy tone; no real product names.
 - **Chat panel** (shared): inline beside the canvas, viewer or lore text, with the provider + model picker. A reply
   can produce an asset or lore, refine it ("taller chimney"), keep it, or place it in the world.
+- **Step 1 done (2026-10-02): plugin interface + chat panel + Ollama.** `plugins/<kind>/<name>/{plugin.json,index.js}`
+  (spec in `plugins/README.md`), loaded by `lib/plugins.js`; local-only endpoints `GET /api/studio/plugins`,
+  `GET /api/studio/models?provider=`, `POST /api/studio/chat` (NDJSON stream; JSON + same-host Origin required).
+  `plugins/provider/ollama` lists chat models and streams replies. qwen3 on Ollama 0.34 reasons even with
+  `think: false`, so thinking models get `think: true` and the reasoning shows only as "thinking… (n chars)".
+  Shared panel `public/studio/chat.js` (`mountChat(el, { system, key, placeholder })`): provider + model picker
+  (remembered), streaming, Stop, Clear, history per surface in localStorage, asks before `cost: "paid"` providers.
+  Mounted in the asset editor in place of the Generate placeholder. Tested on a side server (port 4781): models list,
+  a full reply, Stop mid-stream, wrong-origin and wrong-type rejected. **The real game on 4777 needs a restart.**
+  Replies don't produce assets yet; that comes with the Blender plugin (step 2). Browser-side providers (WebLLM)
+  will need a `runs: "browser"` manifest field and a client loader; not designed in yet.
 - **Build order:** plugin interface + chat panel + Ollama provider → Blender plugin until one house comes out end to
   end → Claude + WebLLM providers → lore generator → built-in pixel/tile editor with chat drawing → placing assets
   in the world. Scope each step before building it; the user adds ideas quickly, so re-scope instead of building
