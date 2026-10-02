@@ -276,7 +276,7 @@ In working sessions like today's (one focused build-and-test session each). Roug
 | M1 Protocol + three sources | 3–4 | three adapters (Local Ledger, GitHub, Paperclip) mapping cleanly onto one schema |
 | M2 Lore runtime (Ink) | 2 | moving all hard-coded text without changing what players see |
 | M3 Map from protocol | 2–3 | laying out regions that grow and unfog nicely |
-| M4 Questions + safety + agents | 4–5 | the largest: many flows, write-back, scheduler, signed webhooks; must be bulletproof |
+| M4 Questions + safety + agents | 4–5 | the largest: many flows, write-back, scheduler, agent link; must be bulletproof |
 | M5 Starting work | 1 | small; reuses the studio chat |
 | M6 Battle core, hybrid | 3–4 | combat feel needs tuning; boss and foe art (Blender plugin helps) |
 | M7 Sealed Halls as dungeons | 3–4 | generating puzzles that are actually fun |
