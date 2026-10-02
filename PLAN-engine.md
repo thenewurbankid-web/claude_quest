@@ -53,6 +53,18 @@ milestone's dungeon.**
   milestones shipped; token spend kept inside the budget; and whether players keep playing in quiet times (the
   north star: people "forget they are working").
 
+## First run (user, 2026-10-03)
+Title screen: **Start game → New Game or Load.**
+- **New Game:** a short intro with Warden Ash at the edge of the Haze; "Where is your Realm written?" (start fresh
+  in the browser's Local Ledger, the default, or Paperclip when it's running); the Cartographer founds the first
+  March in a short chat (what you're working on, the first big goal), which creates the first project, Sealed Hall
+  and a few Works; "Bring your Keeper home" connects Claude (copy and paste on the `/work` page, the one-click
+  desktop extension, or Claude Code; skippable, planning-only without one); a tutorial Errand Trail whose Riddle is
+  real (e.g. "who is this project for?") and teaches walking, talking, the Seal and the token readout; a quick tour
+  (the Beacon, the log, the Recall Bell); then free play.
+- **Load:** pick a save file, or connect to an existing project with no save; either way the world is refreshed from
+  the source, and Lumi opens with a recap ("While you were away: 3 Works done, 2 Riddles waiting").
+
 ## Design (all confirmed by the user)
 
 **Structure, from Paperclip** (checked read-only against the live instance on 127.0.0.1:3100):
