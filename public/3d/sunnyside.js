@@ -34,15 +34,55 @@ export async function load() {
   const sw = { grass: swatch('grass'), water: swatch('water'), path: swatch('path') };
 
   // One canvas for the whole map: grass, path and (transparent) water cells, so the lit water plane shows through.
+  // Grass mixes plain and dotted tiles so it doesn't repeat; road cells get a ragged grass fringe where they meet grass;
+  // flowers ('F' cells, plus a few strays) and grass tufts (',' cells, plus strays) are painted on as decals.
+  const GRASS = { plain: [[32, 16], [16, 48], [32, 48]], dotted: [[16, 32], [32, 32], [48, 32], [64, 32], [80, 32], [16, 64], [32, 64]] };
+  const FLOWERS = [[533, 18, 5, 6], [552, 19, 7, 8], [533, 34, 5, 6], [552, 35, 7, 8], [532, 51, 7, 6], [551, 52, 9, 8], [538, 57, 6, 6]];
+  const TUFTS = [[438, 39, 8, 8], [454, 38, 8, 9], [470, 38, 8, 9], [486, 39, 8, 8], [434, 50, 8, 9], [450, 49, 8, 10], [466, 49, 8, 10]];
+  const hash = (q, r, k = 0) => (((q + 101) * 73856093 ^ (r + 37) * 19349663 ^ (k + 7) * 83492791) >>> 0);
   function ground(cols, rows, at) {
     const c = canvas(cols * PX, rows * PX), g = c.getContext('2d');
     g.imageSmoothingEnabled = false;
+    const tile = ([sx, sy], q, r) => g.drawImage(tiles, sx, sy, PX, PX, q * PX, r * PX, PX, PX);
+    const isGrass = (q, r) => { const ch = at(q, r); return ch !== '=' && ch !== '~' && ch !== undefined; };
     for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
-      const ch = at(q, r);
+      const ch = at(q, r), h = hash(q, r);
       if (ch === '~') continue;
-      const s = ch === '=' ? sw.path : sw.grass;
-      const sx = (q * PX) % s.width, sy = (r * PX) % s.height;
-      g.drawImage(s, sx, sy, PX, PX, q * PX, r * PX, PX, PX);
+      if (ch === '=') { const sx = (q * PX) % sw.path.width, sy = (r * PX) % sw.path.height; g.drawImage(sw.path, sx, sy, PX, PX, q * PX, r * PX, PX, PX); continue; }
+      const set = h % 100 < 28 ? GRASS.dotted : GRASS.plain;
+      tile(set[(h >>> 8) % set.length], q, r);
+    }
+    // Ragged fringe: grass creeps 1-3 px onto the road along each grass edge, with a darker rim pixel under it.
+    const probe = canvas(1, 1).getContext('2d'); probe.drawImage(tiles, 40, 20, 1, 1, 0, 0, 1, 1);
+    const [gr, gg, gb] = probe.getImageData(0, 0, 1, 1).data, grass = `rgb(${gr},${gg},${gb})`, rim = `rgb(${gr * 0.62 | 0},${gg * 0.7 | 0},${gb * 0.55 | 0})`;
+    for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+      if (at(q, r) !== '=') continue;
+      for (const [dq, dr, side] of [[0, -1, 'n'], [0, 1, 's'], [-1, 0, 'w'], [1, 0, 'e']]) {
+        const nq = q + dq, nr = r + dr;
+        if (nq < 0 || nr < 0 || nq >= cols || nr >= rows || !isGrass(nq, nr)) continue;
+        for (let i = 0; i < PX; i++) {
+          // Depth varies along the edge in runs of 2-3 px, so it reads as tufts rather than noise.
+          const run = Math.floor((i + (hash(q, r, side.charCodeAt(0)) % 3)) / 3), d = 1 + hash(q * PX + i, r, run) % 3;
+          for (let k = 0; k <= d; k++) {
+            const [x, y] = side === 'n' ? [i, k] : side === 's' ? [i, PX - 1 - k] : side === 'w' ? [k, i] : [PX - 1 - k, i];
+            g.fillStyle = k === d ? rim : grass;
+            g.fillRect(q * PX + x, r * PX + y, 1, 1);
+          }
+        }
+      }
+    }
+    // Decals: flowers and tufts, kept off the cell edges so they never spill onto the road.
+    const decal = ([sx, sy, w, h], q, r, k) => {
+      const ox = 2 + hash(q, r, k) % Math.max(1, PX - w - 3), oy = 2 + hash(q, r, k + 50) % Math.max(1, PX - h - 3);
+      g.drawImage(tiles, sx, sy, w, h, q * PX + ox, r * PX + oy, w, h);
+    };
+    for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+      const ch = at(q, r), h = hash(q, r, 3);
+      if (!isGrass(q, r)) continue;
+      if (ch === 'F') for (let k = 0; k < 3; k++) decal(FLOWERS[hash(q, r, k + 9) % FLOWERS.length], q, r, k + 20);
+      else if (ch === ',') for (let k = 0; k < 2; k++) decal(TUFTS[hash(q, r, k + 9) % TUFTS.length], q, r, k + 20);
+      else if (h % 100 < LOOK.ground.flowers * 100) decal(FLOWERS[(h >>> 7) % FLOWERS.length], q, r, 1);
+      else if (h % 100 < (LOOK.ground.flowers + LOOK.ground.tufts) * 100) decal(TUFTS[(h >>> 7) % TUFTS.length], q, r, 1);
     }
     return pixelTex(c);
   }

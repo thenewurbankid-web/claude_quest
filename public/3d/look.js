@@ -22,6 +22,7 @@ export const LOOK = {
   // The Ember Well: Sunnyside's stone well, folded the same way (tilt: how far its rim leans back toward flat).
   well: { scale: 1.15, tilt: 72 },
   clouds: { wispHeight: 9.4 },
-  ground: { brightness: 0.56 },
+  // flowers / tufts: share of plain grass cells that get a stray flower or grass tuft painted on.
+  ground: { brightness: 0.56, flowers: 0.07, tufts: 0.1 },
   water: { opacity: 1, flow: 0.67 },
 };
