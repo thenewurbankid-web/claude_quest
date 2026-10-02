@@ -179,9 +179,13 @@ each one is a sealed decision with a token readout.
 `GET /api/agents/work?agent=<id>` (pending tasks and sealed decisions) and `POST /api/agents/progress` (progress,
 results, new questions). Each agent gets a token when it registers. Any script, `curl` or agent framework can use it;
 connections are outgoing-only, so it works behind routers. No connector package, no webhooks, no WebRTC for agents.
-Work waits for the next poll (10–30 s), which is fine for agent work. Limit: a browser-only Local Ledger has no
-endpoint, so agents need the local server running (or the ledger synced to GitHub, which agents can poll instead).
+Work waits for the next poll (10–30 s), which is fine for agent work. Without the server, agents poll GitHub issues (the GitHub source as the queue), or the player relays work by hand
+through the `/work` page below.
 Push delivery (Socket.IO or WebRTC) can be added later behind the same endpoints if polling ever feels slow.
+**Manual relay page for browser-only play** (user, 2026-10-03): a `/work` route on the game site (works on GitHub
+Pages, no server) lists queued work per agent as ready-to-copy prompts. The player pastes a prompt into their own
+agent (e.g. Claude Code), then pastes the result back on the page, and it enters the protocol like any other
+progress report (marked as relayed by the player). Results still pass the same validation and safety rules.
 
 **Seeing the source in game.** A Ledger panel in the Keeper's Lodge shows the protocol view (Marches, Halls, Works,
 Riddles, agents, the Beacon) for any source. With Paperclip present, the panel can switch to Paperclip's own page in
