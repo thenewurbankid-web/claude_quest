@@ -62,8 +62,10 @@ Title screen: **Start game → New Game or Load.**
   desktop extension, or Claude Code; skippable, planning-only without one); a tutorial Errand Trail whose Riddle is
   real (e.g. "who is this project for?") and teaches walking, talking, the Seal and the token readout; a quick tour
   (the Beacon, the log, the Recall Bell); then free play.
-- **Load:** pick a save file, or connect to an existing project with no save; either way the world is refreshed from
-  the source, and Lumi opens with a recap ("While you were away: 3 Works done, 2 Riddles waiting").
+- **Load:** load the save file, then look for its source: the Paperclip it came from, or its Local Ledger in this
+  browser. If found, the world is refreshed from it and Lumi opens with a recap ("While you were away: 3 Works
+  done, 2 Riddles waiting"). If not found, offer to **start a new Local Ledger** (seeded from the save's last known
+  Marches, Halls and Works) or **connect a Paperclip**; until then the save plays as saved.
 
 ## Design (all confirmed by the user)
 
