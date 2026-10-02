@@ -38,12 +38,14 @@ milestone's dungeon.**
   size, so the league can't be climbed with busywork. Cross-Realm leagues can come later with multiplayer.
   Sigils, trophies, league standings and season history live in the **save file** (state), not the lore files
   (lore and settings only).
-- **Save file safety** (user, 2026-10-03). **No encryption.** Every save file is loaded as a new copy: loading never
-  touches the original, so a bad session can't corrupt it. The new copy is then **updated from the source if it's present**
-  (Paperclip reachable): live work state (tasks, milestones, questions, outcomes) replaces whatever the save had,
-  while play state (position, items, settings) comes from the save. With no source, the copy plays as saved. On top of that: atomic writes (temp file + rename), a
-  checksum, a schema version with migrations, and a signature so edits are detected (standings can also be
-  re-checked against Paperclip outcomes). Built with saves in M8.
+- **Saves and the source** (user, 2026-10-03). **No encryption, no copy-on-load.** On every load the save is
+  updated from the source if present (Paperclip reachable): live work state (tasks, milestones, questions,
+  outcomes) replaces whatever the save had; play state (position, items, settings) comes from the save. With no
+  source, it plays as saved. Play state is protected by atomic writes (temp file + rename), a checksum, the previous
+  save kept as a fallback, and a schema version with migrations; a signature detects edits.
+  **A save is optional:** with the save deleted, or on a new device, the player can connect to an existing project
+  and the world rebuilds from the source (Marches, Halls, open questions, outcomes, and the Sigils and standings
+  recomputed from outcomes). Only play state starts fresh. Built with saves in M8.
 - **In real life:** projects ship with the human in the loop at the right moments. Agents spend less time blocked,
   questions get answered in batches instead of one ping at a time, nothing risky happens without a sealed decision,
   and the whole team sees one shared status.
