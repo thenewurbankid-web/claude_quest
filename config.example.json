@@ -1,0 +1,18 @@
+{
+  "port": 4777,
+  "scanSeconds": 15,
+  "storyMinMinutes": 10,
+  "sharedTranscripts": ["-Users-you-Repositories"],
+  "ollama": { "url": "http://localhost:11434", "model": "qwen3:4b" },
+  "projects": [
+    {
+      "id": "my-project",
+      "name": "My Project",
+      "path": "/Users/you/Repositories/my-project",
+      "extraPaths": [],
+      "transcripts": ["-Users-you-Repositories-my-project"],
+      "docs": ["README.md"],
+      "color": "#3878d0"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Quest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --px: 4px;
+    --ink: #303040;
+    --paper: #f8f8f0;
+    --frame: #4878b8;
+    --frame-dark: #284878;
+    --accent: #d97757;
+    --bg: #101018;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; }
+  body { display: grid; place-items: center; font-family: 'Pixelify Sans', ui-monospace, monospace; }
+  #screen { position: relative; width: min(100vw, 150vh); aspect-ratio: 3 / 2; image-rendering: pixelated; }
+  #game, #game canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+  .hidden { display: none !important; }
+
+  .box {
+    position: absolute; background: var(--paper);
+    border: calc(var(--px) * 1) solid var(--frame-dark);
+    box-shadow: inset 0 0 0 calc(var(--px) * 1) #fff, inset 0 0 0 calc(var(--px) * 2) var(--frame);
+    border-radius: calc(var(--px) * 3);
+    padding: calc(var(--px) * 5) calc(var(--px) * 7);
+    font-size: calc(var(--px) * 7.5); line-height: 1.35; color: var(--ink);
+  }
+  #dialog { left: calc(var(--px) * 3); right: calc(var(--px) * 3); bottom: calc(var(--px) * 3); height: calc(var(--px) * 46); }
+  #dtext { white-space: pre-wrap; overflow: hidden; height: 100%; }
+  #dtext.small { font-size: calc(var(--px) * 6); }
+  #dmore { position: absolute; right: calc(var(--px) * 7); bottom: calc(var(--px) * 3); color: var(--accent); animation: bob .6s steps(2) infinite; }
+  @keyframes bob { 50% { transform: translateY(calc(var(--px) * 1.5)); } }
+
+  #choices { right: calc(var(--px) * 3); bottom: calc(var(--px) * 51); max-width: 70%; max-height: calc(var(--px) * 104); overflow-y: auto; padding-left: calc(var(--px) * 12); }
+  #choices.menu { top: calc(var(--px) * 3); bottom: auto; min-width: calc(var(--px) * 64); }
+  .opt { position: relative; padding: calc(var(--px) * 1) 0; }
+  .opt.sel::before { content: '▶'; position: absolute; left: calc(var(--px) * -8); color: var(--ink); }
+
+  #panel { left: calc(var(--px) * 8); right: calc(var(--px) * 8); top: calc(var(--px) * 8); bottom: calc(var(--px) * 8); display: flex; flex-direction: column; }
+  #ptitle { font-weight: 600; color: var(--frame-dark); margin-bottom: calc(var(--px) * 3); display: flex; justify-content: space-between; }
+  #plist { flex: 1; overflow-y: auto; padding-left: calc(var(--px) * 9); }
+  #plist .opt { padding: calc(var(--px) * 1.5) 0; border-bottom: calc(var(--px) * .5) dashed #c8c8c0; }
+  #plist .sub { font-size: calc(var(--px) * 5.5); color: #686878; }
+  #plist .tag { display: inline-block; font-size: calc(var(--px) * 5); padding: 0 calc(var(--px) * 2); border-radius: calc(var(--px) * 1); color: #fff; margin-right: calc(var(--px) * 2); vertical-align: middle; }
+  #pheader { margin-bottom: calc(var(--px) * 3); font-size: calc(var(--px) * 6); color: #484858; }
+  #pheader img { display: block; width: 100%; max-height: calc(var(--px) * 70); object-fit: contain; image-rendering: pixelated; border-radius: calc(var(--px) * 1); background: #284020; }
+  .hp { height: calc(var(--px) * 4); background: #383848; border-radius: calc(var(--px) * 1); overflow: hidden; margin: calc(var(--px) * 2) 0; }
+  .hp > i { display: block; height: 100%; background: linear-gradient(#78e078, #38a038); }
+  .hp.low > i { background: linear-gradient(#f8d058, #c89820); }
+  .hp.crit > i { background: linear-gradient(#f87858, #c03828); }
+  .lore { font-style: italic; color: #686878; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0 calc(var(--px) * 6); }
+  #phint, .hint { font-size: calc(var(--px) * 5); color: #787888; margin-top: calc(var(--px) * 2); }
+
+  #input { left: calc(var(--px) * 12); right: calc(var(--px) * 12); top: calc(var(--px) * 22); }
+  #itext { width: 100%; height: calc(var(--px) * 44); margin-top: calc(var(--px) * 3); font: inherit; font-size: calc(var(--px) * 6.5); border: calc(var(--px) * .5) solid var(--frame); border-radius: calc(var(--px) * 1); padding: calc(var(--px) * 2); background: #fff; color: var(--ink); resize: none; outline: none; }
+
+  #startmenu { right: calc(var(--px) * 3); top: calc(var(--px) * 3); padding-left: calc(var(--px) * 12); min-width: calc(var(--px) * 64); }
+
+  #banner {
+    position: absolute; left: calc(var(--px) * 3); top: calc(var(--px) * 3);
+    background: #f8f0d8; border: calc(var(--px) * 1) solid #886830; border-radius: calc(var(--px) * 1);
+    padding: calc(var(--px) * 2) calc(var(--px) * 6); font-size: calc(var(--px) * 7); color: #503818;
+    animation: slide 2.8s forwards;
+  }
+  @keyframes slide { 0% { transform: translateY(-150%); } 12%, 85% { transform: none; } 100% { transform: translateY(-150%); } }
+
+  #toasts { position: absolute; right: calc(var(--px) * 3); top: calc(var(--px) * 3); display: flex; flex-direction: column; gap: calc(var(--px) * 2); align-items: flex-end; pointer-events: none; }
+  .toast { position: static; max-width: calc(var(--px) * 150); padding: calc(var(--px) * 3) calc(var(--px) * 5); font-size: calc(var(--px) * 5.5); animation: toast 6s forwards; }
+  .toast b { color: var(--accent); }
+  @keyframes toast { 0% { opacity: 0; transform: translateX(20%); } 6%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+  #hud { position: absolute; left: calc(var(--px) * 3); bottom: calc(var(--px) * 3); font-size: calc(var(--px) * 5); color: #fff; text-shadow: 0 calc(var(--px) * .5) 0 #000; pointer-events: none; }
+  #boot { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: calc(var(--px) * 8); text-align: center; background: var(--bg); }
+  #boot small { display: block; font-size: calc(var(--px) * 5); color: #aaa; margin-top: calc(var(--px) * 3); }
+</style>
+</head>
+<body>
+<div id="screen">
+  <div id="game"></div>
+  <div id="hud"></div>
+  <div id="banner" class="hidden"></div>
+  <div id="toasts"></div>
+  <div id="dialog" class="box hidden"><div id="dtext"></div><div id="dmore" class="hidden">▼</div></div>
+  <div id="choices" class="box hidden"></div>
+  <div id="startmenu" class="box hidden"></div>
+  <div id="panel" class="box hidden"><div id="ptitle"></div><div id="pheader" class="hidden"></div><div id="plist"></div><div id="phint">↑↓ choose · Z open · X close</div></div>
+  <div id="input" class="box hidden"><div id="ilabel"></div><textarea id="itext" spellcheck="true"></textarea><div class="hint">Enter send · Shift+Enter new line · Esc cancel</div></div>
+  <div id="boot">CLAUDE QUEST<small>Loading the world…</small></div>
+</div>
+<script src="/phaser.js"></script>
+<script src="/ui.js"></script>
+<script src="/art.js"></script>
+<script src="/world.js"></script>
+</body>
+</html>

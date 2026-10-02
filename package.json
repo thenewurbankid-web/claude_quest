@@ -1,0 +1,14 @@
+{
+  "name": "claude-quest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GBA-style overworld that turns Claude Code activity into towns, missions and decisions. Local models only.",
+  "scripts": {
+    "start": "node app.js",
+    "install-hook": "node hook/install.js"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "main": "app.js"
+}

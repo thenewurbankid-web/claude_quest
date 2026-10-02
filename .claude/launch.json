@@ -1,0 +1,13 @@
+{
+ "version": "0.0.1",
+ "configurations": [
+  {
+   "name": "claude-quest",
+   "runtimeExecutable": "node",
+   "runtimeArgs": [
+    "app.js"
+   ],
+   "port": 4777
+  }
+ ]
+}
