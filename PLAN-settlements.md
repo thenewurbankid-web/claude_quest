@@ -402,8 +402,8 @@ Saves cover only game state. Loading or importing a save never touches work reco
 - validation status per file
 
 ## 15. Quest Marketplace: a GitHub repo where players share lore packs (user, 2026-10-02)
-**Not created yet.** Creating a public GitHub repo is a publishing action, so ask the user first: which account (their repos
-are under `thenewurbankid-web`), the repo name (`claude-quest-marketplace`), and the licence for shared lore and art.
+**Not created yet.** Creating a public GitHub repo is a publishing action, so the user confirmed `thenewurbankid-web/claude-quest-marketplace` (2026-10-02). Still open: the licence for shared lore and
+art. Creating the repo still asks first.
 
 **Pack format** (data only, no code ever):
 ```
