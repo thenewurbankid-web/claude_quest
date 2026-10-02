@@ -453,7 +453,8 @@ function paintSunnyside(ss) {
 }
 async function tree(c, r, opts) {
   const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
-  const kinds = LOOK.trees.kind === 'round' ? [0] : LOOK.trees.kind === 'tall' ? [1] : [0, 1];
+  // 'mixed' leans on the two big trees, with pines and bushes for variety (indices into sunnyside.js TREES).
+  const kinds = LOOK.trees.kind === 'round' ? [0] : LOOK.trees.kind === 'tall' ? [1] : [0, 1, 0, 1, 0, 1, 2, 3, 4, 5, 6, 7];
   const obj = sunny && await sunny.tree(kinds[h % kinds.length], LOOK.trees.scale);
   if (!obj) return place('tree', 'tree', c, r, opts);
   const { x, z } = grid.toWorld(c, r), [ox, oz] = opts.offset || [0, 0];

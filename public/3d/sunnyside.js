@@ -155,13 +155,23 @@ export async function load() {
   }
 
   // Trees: the two Sunnyside trees, held on their first frame (cycling the strip made them look like they were dancing).
-  const TREES = [['Elements/Plants/spr_deco_tree_01_strip4.png', 32, 34], ['Elements/Plants/spr_deco_tree_02_strip4.png', 28, 43]];
+  // Then pieces cut from the tileset ([x, y, w, h]): two pines, a round bush, berry and flowering bushes, a shrub.
+  const TREES = [['Elements/Plants/spr_deco_tree_01_strip4.png', 32, 34], ['Elements/Plants/spr_deco_tree_02_strip4.png', 28, 43],
+    [833, 61, 14, 35], [823, 100, 18, 35], [788, 22, 24, 21], [788, 54, 24, 21], [788, 86, 24, 21], [816, 65, 16, 15]];
   const trees = [];
   async function tree(variant = 0, scale = 1) {
-    const [src, w, h] = TREES[variant % TREES.length];
-    const s = await strip(src);
-    if (!s) return null;
-    const t = pixelTex(s); t.repeat.set(1 / 4, 1);
+    const entry = TREES[variant % TREES.length];
+    let t, w, h;
+    if (typeof entry[0] === 'string') {
+      const s = await strip(entry[0]);
+      if (!s) return null;
+      [, w, h] = entry;
+      t = pixelTex(s); t.repeat.set(1 / 4, 1);
+    } else {
+      const [x, y] = entry; [, , w, h] = entry;
+      const c = canvas(w, h); c.getContext('2d').drawImage(tiles, x, y, w, h, 0, 0, w, h);
+      t = pixelTex(c);
+    }
     // Trees stand upright (not tipped back toward the camera) so their trunks meet the ground, and always keep a
     // contact shadow; tipped-back trees without one looked like they were floating.
     const mesh = new THREE.Mesh(quad(w, h, scale / PX), lit(t));
@@ -169,7 +179,7 @@ export async function load() {
     mesh.material.transparent = true;
     mesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: t, alphaTest: 0.5 });
     const obj = new THREE.Group();
-    obj.add(mesh, contact(1.3 * scale, treeBlob));
+    obj.add(mesh, contact(Math.max(0.6, 1.3 * w / 32) * scale, treeBlob)); // smaller shadow under bushes
     trees.push({ obj, mat: mesh.material, fade: 1 });
     return obj;
   }
