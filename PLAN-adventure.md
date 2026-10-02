@@ -1,4 +1,7 @@
 > **Art (2026-10-02):** HD-2D: CC0 pixel sprites (Ninja Adventure) in a lit Three.js scene on the tile grid. No low poly. Wherever this plan says
+
+> **Superseded in part (2026-10-03) by `PLAN-engine.md`.** Where they differ, PLAN-engine wins. In particular
+> there is no creature collecting: ignore the Sprites party, catching, Sprite eggs and Sprite species below.
 > "drawn in code" or "procedural art", read it as that instead. See HANDOFF "Art direction".
 
 # Quest: Adventure mode (a real game for casual players)
@@ -91,16 +94,15 @@ chapters forever:
   gentle for casual play, so a raid never destroys anything and only slows production.
 - Quest log, tracked quest arrow (the existing edge pointer), and rewards (gold, items, Sprite eggs, reputation per land).
 
-## 5. Battles and collection
-- **Turn-based battles** in `public/battle.js`, the GBA layout from v2 Phase 4. In Adventure, moves are game moves; in
-  Claude mode, they're real actions (v2 plan).
-- **Sprites:** creatures typed by land kind (artisan, trade, mine, forge, theatre, festival, scriptorium), with a type chart.
-  - Party of 6; they level up and learn moves (some from the library building).
-  - **Catching** works by befriending: a quick riddle or offering instead of a throw, which fits the lore.
-  - 12 Sprites in the first release, with art drawn in code and replaceable through the Studio asset sheets.
-- **Bosses** use small behaviour trees, e.g. the Golem *hardens* when hit twice. They're defined in `lore/bosses/*.md`
-  as data: moves, phases, taunt lines.
-- **Gyms:** one per campaign land, 3 trainers plus a leader, and a badge each.
+## 5. Battles (rewritten 2026-10-03; see PLAN-engine.md, which wins where they differ)
+- **No creature collecting** (user, 2026-10-03): no Sprites party, catching or type chart. The player fights with
+  the Keepers against Tanglers, Hall Wardens and Gloamwyrms.
+- **Combat style is a setting:** light real-time (Zelda), turn-based, or hybrid (default: real-time small foes,
+  turn-based full-screen 3D for ambushes and bosses). One battle core in the shared core, two front ends.
+- **Bosses** use small behaviour trees, e.g. the Golem *hardens* when hit twice. They're defined in lore files as
+  data: moves, phases, taunt lines.
+- **Gyms are Sealed Halls:** Zelda-style dungeons (rooms, puzzles, keys, a Hall Warden), one per milestone, and a
+  Sigil each.
 - Casual-friendly:
   - losing sends you to the last Waystone with nothing lost
   - an optional "easy" setting

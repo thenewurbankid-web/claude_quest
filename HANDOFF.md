@@ -3,6 +3,20 @@
 **New session, start here.** Run with `npm start` (http://localhost:4777) or the `claude-quest` preview config.
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
+## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**Read `PLAN-engine.md` first.** Approved plan: a customizable engine driven by lore files, where Paperclip work
+becomes Zelda-balanced play. Paperclip company = Realm (world); project = team = March (region); milestone = Sealed
+Hall (dungeon, locked until the work is done, then won through play); blockers ambush; a weighted backlog summons a
+boss that pauses for each real question. A Quest protocol sits between the game and the work (Paperclip is the
+first `source` plugin). One render-free shared core for the 2D and 3D views. Ink for lore files. 12 safety rules.
+Each project is a campaign win; Sigils, trophies and the Champions League live in the save file. No creature
+collecting (PLAN-adventure §5 rewritten).
+- **Next: M0, the shared core** (`public/core/`, moving grid rules, input map and storage helpers out of
+  `world.js` and `3d/scene.js`; both views must play exactly as before). Scope it before building. Estimate for
+  everything: ~20–27 sessions, first full loop M0–M6 ~13–18.
+- The game-studio plugin work below continues alongside (step 2, the Blender plugin, is scoped but not started).
+- The real game on 4777 was restarted from this session on 2026-10-03 and now runs the studio code.
+
 ## NEXT SESSION START HERE: game studio as plugins (user, 2026-10-02, latest)
 Goal: players can **fully customize their game** (art and lore) from inside it, through inline chats. The whole
 thing is **open source and user-customizable**: every tool and every AI provider is a **plugin**, so users can bring
