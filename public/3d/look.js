@@ -17,6 +17,8 @@ export const LOOK = {
   trees: { kind: 'mixed', scale: 1.2, density: 0.27, ring: 4, inside: 4, fadeTo: 0.55, contact: 0.45 },
   // Off: the crowns have no trunks, and near the ground (the lab's 0.5) they read as floating trees.
   canopy: { on: false, height: 0.5, scale: 1.15, density: 0.33, gap: 0, brightness: 0.9 },
+  // Sunnyside's small houses, folded: scale 1 = 2 cells wide; roofTilt is the roof's lean back from upright, in degrees.
+  houses: { scale: 0.85, lodge: 1.4, roofTilt: 58 },
   clouds: { wispHeight: 9.4 },
   ground: { brightness: 0.56 },
   water: { opacity: 1, flow: 0.67 },

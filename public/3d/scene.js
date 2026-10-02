@@ -472,8 +472,11 @@ async function build() {
   for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
     const ch = at(c, r);
     if (ch === 'T') jobs.push(tree(c, r, { rot: (c * 7 + r * 3) % 6, scale: 0.9 + ((c + r) % 3) * 0.12 }));
-    if (ch === 'C') jobs.push(place('center', 'center', c, r, { color: 0xd97757, offset: [0.5, -0.5] }));
-    if (ch === 'H') jobs.push(place('house', 'house', c, r, { color: [0xe0a84f, 0x7a8fd0, 0xc05050][(c + r) % 3], rot: Math.PI }));
+    // The Keeper's Lodge: the ember-orange house, larger, on its 2x2 plot. Village houses take the blue and green roofs.
+    if (ch === 'C' && sunny) { const h = sunny.house(2, LOOK.houses.lodge), { x, z } = grid.toWorld(c, r); h.position.set(x + 0.5, 0, z - 0.5); scene.add(h); }
+    else if (ch === 'C') jobs.push(place('center', 'center', c, r, { color: 0xd97757, offset: [0.5, -0.5] }));
+    if (ch === 'H' && sunny) { const h = sunny.house((c + r) % 2), { x, z } = grid.toWorld(c, r); h.position.set(x, 0, z); scene.add(h); }
+    else if (ch === 'H') jobs.push(place('house', 'house', c, r, { color: [0xe0a84f, 0x7a8fd0, 0xc05050][(c + r) % 3], rot: Math.PI }));
     if (ch === 'B') jobs.push(place('board', 'prop', c, r, { color: 0x8a6440 }));
     if (ch === 'M') jobs.push(place('mailbox', 'prop', c, r, { color: 0xc04040 }));
     if (ch === 'S') jobs.push(place('waystone', 'prop', c, r, { color: 0x6aa8e8 }));

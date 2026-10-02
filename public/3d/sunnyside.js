@@ -134,6 +134,40 @@ export async function load() {
     return obj;
   }
 
+  // Houses: the tileset's small gabled houses (blue, green, orange roofs), drawn top-down at 3/4. Each is folded like a
+  // card: the front wall (bottom 24 rows) stands upright and the roof (top 32 rows) leans back from its top edge by
+  // LOOK.houses.roofTilt degrees, with plain side panels so it never looks hollow from an angle. The roof and wall are
+  // separate meshes so each catches the sun at its own angle.
+  const HOUSES = [[520, 168], [520, 296], [520, 424]], HW = 32, ROOF = 32, WALL = 24;
+  function house(variant = 0, scale = LOOK.houses.scale) {
+    const [hx, hy] = HOUSES[variant % HOUSES.length], u = scale / PX;
+    const part = (y, h) => { const c = canvas(HW, h); c.getContext('2d').drawImage(tiles, hx, hy + y, HW, h, 0, 0, HW, h); return pixelTex(c); };
+    const roofTex = part(0, ROOF), wallTex = part(ROOF, WALL);
+    const solid = map => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshLambertMaterial({ map, alphaTest: 0.5, side: THREE.DoubleSide }));
+      m.castShadow = m.receiveShadow = true;
+      m.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.5 });
+      return m;
+    };
+    const w = HW * u, wh = WALL * u, rl = ROOF * u, tilt = THREE.MathUtils.degToRad(LOOK.houses.roofTilt);
+    const depth = Math.sin(tilt) * rl, rise = Math.cos(tilt) * rl;
+    const wall = solid(wallTex); wall.scale.set(w, wh, 1); wall.position.set(0, wh / 2, depth / 2);
+    const roof = solid(roofTex); roof.scale.set(w, rl, 1);
+    roof.rotation.x = -tilt; roof.position.set(0, wh + rise / 2, depth / 2 - depth / 2);
+    // Side panels fill the space under the roof, in the wall's darkest wood.
+    const shape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0, wh), new THREE.Vector2(depth, wh + rise), new THREE.Vector2(depth, 0)]);
+    const sideMat = new THREE.MeshLambertMaterial({ color: 0x7a4e30, side: THREE.DoubleSide });
+    const obj = new THREE.Group();
+    for (const sx of [-1, 1]) {
+      const side = new THREE.Mesh(new THREE.ShapeGeometry(shape), sideMat);
+      side.rotation.y = Math.PI / 2; side.position.set(sx * (w / 2 - 0.02), 0, depth / 2);
+      side.castShadow = side.receiveShadow = true;
+      obj.add(side);
+    }
+    obj.add(wall, roof);
+    return obj;
+  }
+
   // Trees standing between the camera and the player fade out so the player is never hidden.
   // Animals: 4-frame strips facing left, shadows drawn in. FOOT is each strip's bottom pixel row, so they stand on y = 0.
   const ANIMAL = { Chicken: ['spr_deco_chicken_01_strip4.png', 26], Duck: ['spr_deco_duck_01_strip4.png', 16], Sheep: ['spr_deco_sheep_01_strip4.png', 27], Pig: ['spr_deco_pig_01_strip4.png', 27], Cow: ['spr_deco_cow_strip4.png', 29] };
@@ -164,5 +198,5 @@ export async function load() {
     }
   }
 
-  return { ground, tiled, person, tree, animal, update, HAIR };
+  return { ground, tiled, person, tree, animal, house, update, HAIR };
 }
