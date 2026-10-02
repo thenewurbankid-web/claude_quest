@@ -1,4 +1,4 @@
-# Claude Quest: handoff (2026-10-02, evening)
+# Quest (formerly Claude Quest): handoff (2026-10-02, evening)
 
 **New session, start here.** Run with `npm start` (http://localhost:4777) or the `claude-quest` preview config.
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
@@ -17,7 +17,10 @@ Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is 
    names win). The storyteller (Ollama qwen3:4b) generates names and lines for each Claude, boss, NPC and event from the
    real project and situation, cached by id so they stay stable, with the real fact as grey subtext (the plan's
    cross-cutting "standalone game, real data as subtext" item). No Claude tokens.
-3. Older backlog: battles phase (proposed), spread Claudes out (Phase 3), parallax/RS feel (3b), mounts (5), plugin.
+3. **Settlements (Phase 6, planned 2026-10-02):** an Age of Empires and tycoon layer on top of the overworld. Each land's
+   repo type sets its economy, and real stats become game stats. The game itself costs 0 Claude tokens.
+   See `PLAN-settlements.md`. Start after the hosted-link work is committed.
+4. Older backlog: battles phase (proposed), spread Claudes out (Phase 3), parallax/RS feel (3b), mounts (5), plugin.
 
 ## What changed today (Phase 2 + polish)
 - **Areas come from `data/world.json`** via `lib/areas.js`, not `config.json`. Server, storyteller and `hook/live.js`
