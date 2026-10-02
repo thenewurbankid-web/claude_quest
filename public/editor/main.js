@@ -3,6 +3,7 @@
 import { createSheetView } from './sheet.js';
 import { zip } from './zip.js';
 import * as store from './store.js';
+import { mountChat } from '../studio/chat.js';
 
 const $ = id => document.getElementById(id);
 const TILESET = 'Sunnyside_World_ASSET_PACK_V2.1/Sunnyside_World_ASSET_PACK_V2.1/Sunnyside_World_Assets/Tileset/spr_tileset_sunnysideworld_16px.png';
@@ -302,3 +303,11 @@ if (!serverImport) { $('to-server').disabled = true; $('to-server').parentElemen
 const want = decodeURIComponent(location.hash.slice(1));
 const first = items.find(i => i.id === want) || items.find(i => i.featured) || items.find(i => i.kind === 'model');
 if (first) select(first);
+
+// ---------- studio chat ----------
+mountChat($('chat'), {
+  key: 'editor',
+  placeholder: 'e.g. what props would a fishing village need?',
+  system: 'You help the player of Quest, a cosy fantasy adventure game, with its art in the asset editor. The world is 16 px pixel art; '
+    + 'people and buildings are smooth low-poly 3D in a stylised, flat-coloured look. Be brief and practical. Fantasy tone; never name real products or companies.',
+});

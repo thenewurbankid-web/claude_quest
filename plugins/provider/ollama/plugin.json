@@ -1,0 +1,7 @@
+{
+  "id": "ollama",
+  "kind": "provider",
+  "label": "Ollama (local)",
+  "description": "Models running on this Mac through Ollama. Free, nothing leaves the machine.",
+  "cost": "free"
+}
