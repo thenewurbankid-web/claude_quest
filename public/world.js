@@ -21,6 +21,7 @@ const ROLE_LOOK = {
   player: { hat: '#e03030', shirt: '#3050c0', pants: '#303850' },
   claude: { cap: false, hair: '#c05a38', shirt: '#d97757', pants: '#6a4030', skin: '#f8d8b0' },
   courier: { hat: '#3868c8', shirt: '#f8c838', pants: '#384060' },
+  cartographer: { hat: '#6a4a2a', shirt: '#c8a060', pants: '#504038' },
 };
 const CLAUDE_BUBBLE = { question: '?', failing: '!', stalled: '…', sleeping: 'Z', looping: '@' };
 const CLAUDE_LINE = {
@@ -91,6 +92,7 @@ function buildLayout(towns) {
   objs.push({ kind: 'mailbox', x: 51, y: 34 });
   objs.push({ kind: 'board', x: 44, y: 34 });
   objs.push({ kind: 'waystone', x: 51, y: 37, stone: 'hub' });
+  objs.push({ kind: 'npc', role: 'cartographer', x: 54, y: 36 });
   S.areas.push({ id: 'hub', name: 'Claude Center', x0: HUB.x - 9, x1: HUB.x + 9, y0: HUB.y - 5, y1: HUB.y + 7, spawn: [48, 36] });
 
   towns.forEach((t, i) => {
@@ -165,9 +167,14 @@ function create() {
     spark: Art.dot('#ffffff'), drop: Art.dot('#a8c8ff', 1, 4), star: Art.dot('#ffffff', 1, 1),
   })) sc.textures.addCanvas(k, c);
   for (const kind of ['question', 'failing', 'looping', 'stalled']) sc.textures.addCanvas(`boss-${kind}`, Art.boss(kind));
+  for (let f = 0; f < 3; f++) sc.textures.addCanvas(`spirit${f}`, Art.spirit(f));
+  sc.textures.addCanvas('halo', Art.glow(14, 'rgba(168,240,248,0.55)'));
+  sc.textures.addCanvas('mote', Art.glow(3, 'rgba(232,252,255,1)'));
+  sc.textures.addCanvas('ember', Art.glow(3, 'rgba(248,192,96,1)'));
   for (const [ch, color] of [['!', '#e04040'], ['?', '#3060c0'], ['…', '#606060'], ['Z', '#5868a8'], ['@', '#8058c8'], ['♪', '#d97757']]) sc.textures.addCanvas(`bub-${ch}`, Art.bubble(ch, color));
 
   const { g, objs, reserved } = buildLayout(WORLD.towns);
+  S.objs = objs;
   S.reserved = reserved;
   S.tiles = g;
   S.grid = g.map(row => row.map(tile => SOLID_TILES.has(tile)));
@@ -226,6 +233,8 @@ function create() {
 
   sc.time.addEvent({ delay: 650, loop: true, callback: tickNpcs });
   sc.time.addEvent({ delay: 1000, loop: true, callback: () => { hud(); fireFlicker(); } });
+  sc.time.addEvent({ delay: 250, loop: true, callback: () => { flushAnswers(); guide(); } });
+  sc.time.addEvent({ delay: 200, loop: true, callback: () => MapView.tickMini() });
 
   syncDynamic();
   refreshMarkers();
@@ -483,7 +492,8 @@ function bfs(from, goalFn, maxNodes = 6000) {
 }
 
 function maybeStartAuto() {
-  if (performance.now() - S.lastInput > 60e3 && !S.auto) { S.auto = true; S.path = []; hud(); }
+  const sec = WORLD.save?.settings.autoplaySec ?? 60;
+  if (sec > 0 && performance.now() - S.lastInput > sec * 1e3 && !S.auto) { S.auto = true; S.path = []; hud(); }
 }
 
 // Autoplay: wander toward wherever Claude is busy, glance at things, never answer anything.
@@ -546,8 +556,68 @@ function hud() {
   if (awake) parts.push(`${awake} woken Claude${awake > 1 ? 's' : ''} at work`);
   const q = WORLD ? WORLD.towns.reduce((n, t) => n + t.decisions.filter(d => d.source === 'claude').length, 0) : 0;
   if (q) parts.push(`${q} riddle${q > 1 ? 's' : ''} waiting`);
-  if (!parts.length) parts.push('Arrows move · Z talk · X back · Enter menu');
+  if (!parts.length) parts.push('Arrows move · Z talk · Enter menu · M map · N minimap');
   document.getElementById('hud').textContent = parts.join('   ·   ');
+}
+
+// ---------- the guide: the one most useful thing to do next, with a compass arrow ----------
+function nextAction() {
+  const claudes = [...S.dyn.values()].filter(e => e.kind === 'claude');
+  for (const t of WORLD.towns) for (const d of t.decisions.filter(x => x.source === 'claude')) {
+    const e = claudes.find(c => c.sid === d.session);
+    if (e) return { text: `Answer Claude's riddle in ${t.townName}`, x: e.x, y: e.y };
+  }
+  for (const t of WORLD.towns) for (const b of t.bosses) {
+    const e = S.dyn.get(`boss-${b.id}`);
+    if (e) return { text: `Face ${b.name} in ${t.townName}`, x: e.bx, y: e.by + 2 };
+  }
+  for (const t of WORLD.towns) if (t.missions.some(m => m.state === 'new' && !seen.missions.includes(m.id))) {
+    const g = S.npcs.find(n => n.role === 'guide' && n.town === t.id);
+    if (g) return { text: `Hear the Guide's new missions in ${t.townName}`, x: g.x, y: g.y };
+  }
+  if (WORLD.towns.length < 2) { const c = S.npcs.find(n => n.role === 'cartographer'); if (c) return { text: 'Ask the Cartographer to chart a new land', x: c.x, y: c.y }; }
+  const stone = S.objs?.find(o => o.kind === 'waystone' && !attuned.has(o.stone));
+  if (stone) return { text: `Attune the Waystone in ${S.areas.find(a => a.id === stone.stone)?.name || 'a new land'}`, x: stone.x, y: stone.y };
+  return { text: 'All quiet. Post a quest at the Guild Hall, or explore', x: null };
+}
+
+function guide() {
+  const el = document.getElementById('guide');
+  if (!el || !WORLD || !S.player) return;
+  const n = nextAction();
+  let where = '';
+  if (n.x !== null) {
+    const dx = n.x - S.px, dy = n.y - S.py, dist = Math.abs(dx) + Math.abs(dy);
+    const arrows = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
+    where = dist <= 1 ? ' · right here, press Z' : ` · ${arrows[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8]} ${dist} steps`;
+  }
+  const text = `NEXT ▸ ${n.text}${where}`;
+  // The line fades back once read; it brightens again when the goal changes.
+  if (n.text !== S.guideText) { S.guideText = n.text; S.guideAt = performance.now(); }
+  el.textContent = text;
+  el.classList.toggle('quiet', performance.now() - S.guideAt > 5000);
+  el.classList.toggle('hidden', !!UI.open);
+  pointer(n);
+}
+
+// A soft arrow on the screen edge toward the goal; over the goal itself once it's in view.
+function pointer(n) {
+  const el = document.getElementById('pointer');
+  const cam = S.scene.cameras.main, W = 240, H = 160, pad = 9;
+  if (n.x === null || UI.open || S.warping || Math.abs(n.x - S.px) + Math.abs(n.y - S.py) <= 1) return el.classList.add('hidden');
+  const sx = n.x * T + 8 - cam.scrollX, sy = n.y * T - cam.scrollY;
+  let x, y, ang, onScreen = sx > pad && sx < W - pad && sy > pad + 4 && sy < H - pad - 14;
+  if (onScreen) { x = sx; y = sy - 10; ang = 90; }
+  else {
+    // Walk from the screen centre toward the goal until the ray meets the inset border.
+    const cx = W / 2, cy = H / 2, dx = sx - cx, dy = sy - cy;
+    const k = Math.min((W / 2 - pad) / Math.abs(dx || 1e-6), (H / 2 - pad - 6) / Math.abs(dy || 1e-6));
+    x = cx + dx * k; y = cy + dy * k; ang = Math.atan2(dy, dx) * 180 / Math.PI;
+  }
+  el.classList.remove('hidden');
+  el.classList.toggle('over', onScreen);
+  el.style.left = `${(x / W) * 100}%`; el.style.top = `${(y / H) * 100}%`;
+  el.style.setProperty('--ang', `${ang}deg`);
 }
 
 function refreshMarkers() {
@@ -558,6 +628,7 @@ function refreshMarkers() {
     if (n.role === 'guide' && t.missions.some(m => m.state === 'new' && !seen.missions.includes(m.id))) mark = '!';
     if (n.role === 'scout' && WORLD.events.some(e => e.project === t.id && e.at > (seen.news[t.id] || ''))) mark = '!';
     if (n.role === 'clerk' && WORLD.towns.some(x => x.decisions.length)) mark = '?';
+    if (n.role === 'cartographer' && WORLD.towns.length < 2) mark = '!';
     n.bubble.setVisible(!!mark);
     if (mark) n.bubble.setTexture(`bub-${mark}`);
   }
@@ -633,7 +704,7 @@ function interact() {
     if (o.kind === 'boss') return bossScreen(t, t.bosses.find(b => b.id === o.boss));
     if (o.kind === 'camp') return campSign(t, t.camps.find(c => c.id === o.camp));
     if (o.kind === 'statue') return UI.say(`A statue honoring a cleared blocker in ${t.townName}. It gleams.`);
-    if (o.kind === 'npc') return ({ scout: talkScout, historian: talkHistorian, guide: talkGuide, messenger: talkMessenger, clerk: talkClerk })[o.role](t);
+    if (o.kind === 'npc') return ({ scout: talkScout, historian: talkHistorian, guide: talkGuide, messenger: talkMessenger, clerk: talkClerk, cartographer: talkCartographer })[o.role](t);
     if (o.kind === 'sign') return UI.say([`${t.townName.toUpperCase()}`, `"${t.motto}"`, `(The ${t.name} project.${t.camps.length ? ` ${t.camps.length} worktree camp${t.camps.length > 1 ? 's' : ''} through the Rift.` : ''})`]);
     if (o.kind === 'door') return o.label === 'center' ? talkClerk() : readJournal(t);
     if (o.kind === 'mailbox') return mailPanel();
@@ -686,7 +757,8 @@ async function claudeMenu(t, c) {
     if (act === 'history') await UI.say(c.recent.map(r => `CLAUDE (${r.ago}): ${r.text}`));
     if (act === 'chat' || act === 'command') {
       const text = await UI.ask(act === 'chat' ? 'Say to Claude:' : 'Command for Claude:');
-      if (text) await sendFlow(t, c, act, text);
+      if (!text) continue; // Esc: back to the menu
+      await sendFlow(t, c, act, text);
       return;
     }
     if (act === 'stop') {
@@ -697,7 +769,8 @@ async function claudeMenu(t, c) {
     }
     if (act === 'wake') {
       const text = await UI.ask(`Wake Claude in "${short(c.title, 30)}" with this task:`);
-      if (text) await wakeFlow(t, c, text);
+      if (!text) continue;
+      await wakeFlow(t, c, text);
       return;
     }
   }
@@ -826,12 +899,14 @@ async function missionFlow(t, m) {
   await UI.say([`MISSION: ${m.title}`, m.detail]);
   if (m.state === 'accepted') {
     const i = await UI.choose('This mission is on your list.', ['Mark done', 'Abandon it', 'Back']);
-    if (i === 0) { await api('/api/mission', { project: t.id, missionId: m.id, action: 'done' }); Sound.jingle(); await UI.say('Mission complete! A statue will rise in town. ★'); }
+    if (i === 0) { await api('/api/mission', { project: t.id, missionId: m.id, action: 'done' }); await celebrate('MISSION COMPLETE!', `${m.title} · a statue will rise in ${t.townName}`, '★'); }
     if (i === 1) { await api('/api/mission', { project: t.id, missionId: m.id, action: 'abandon' }); await UI.say(`Mission dropped. Claude will be told next time it works in ${t.name}.`); }
   } else {
-    const i = await UI.choose('Take this mission?', ['Accept: tell Claude to prioritize it', 'Not now', 'Dismiss for good']);
-    if (i === 0) { await api('/api/mission', { project: t.id, missionId: m.id, action: 'accept' }); Sound.mail(); await UI.say(['Mission accepted!', `Claude gets the order at its next step in ${t.name}.`]); }
-    if (i === 2) await api('/api/mission', { project: t.id, missionId: m.id, action: 'dismiss' });
+    const opts = ['Post it at the Guild Hall (uses Claude tokens)', 'Keep it as a letter for Claude', 'Not now', 'Dismiss for good'];
+    const i = await UI.choose('Take this mission?', opts);
+    if (i === 0 && await postQuest(t, m.title, m.detail)) await api('/api/mission', { project: t.id, missionId: m.id, action: 'accept' });
+    if (i === 1) { await api('/api/mission', { project: t.id, missionId: m.id, action: 'accept' }); Sound.mail(); await UI.say(['Mission accepted!', `Claude gets the order at its next step in ${t.name}.`]); }
+    if (i === 3) await api('/api/mission', { project: t.id, missionId: m.id, action: 'dismiss' });
   }
 }
 
@@ -839,15 +914,19 @@ async function decideFlow(t, d) {
   const who = d.source === 'claude' ? `Claude asks${d.sessionTitle ? ` (in "${short(d.sessionTitle, 30)}")` : ''}:` : 'The Oracle wonders:';
   await UI.say(who);
   const opts = [...d.options, 'Write my own reply…', 'Ask me later'];
-  const i = await UI.choose(d.question, opts);
-  if (i < 0 || i === opts.length - 1) return false;
-  const answer = i === opts.length - 2 ? await UI.ask(`Your reply to: ${d.question}`) : d.options[i];
-  if (!answer) return false;
+  let answer = null;
+  // Esc in the reply box goes back to the options; only "Ask me later" (or X here) leaves.
+  while (!answer) {
+    const i = await UI.choose(d.question, opts);
+    if (i < 0 || i === opts.length - 1) return false;
+    answer = i === opts.length - 2 ? await UI.ask(`Your reply to: ${d.question}`) : d.options[i];
+  }
   await api('/api/decide', { project: t.id, decisionId: d.id, question: d.question, answer });
+  S.flushPending = true; // sent to Claude as soon as the menu closes
   Sound.mail();
   const boss = t.bosses.find(b => b.steps.some(s => s.decisionId === d.id));
   if (boss) hitFx(boss.id);
-  await UI.say([boss ? `You answer the riddle. ${boss.name} staggers!` : 'Your answer was sealed in a letter!', `Claude reads it at its next step in ${t.name}.`]);
+  await UI.say([boss ? `You answer the riddle. ${boss.name} staggers!` : 'Your answer is sealed!', 'Lumi carries it to Claude the moment you close this.']);
   return true;
 }
 
@@ -886,8 +965,9 @@ async function talkClerk() {
     `${pending} question${pending === 1 ? '' : 's'} need you. ${bosses} boss${bosses === 1 ? '' : 'es'} block the roads.`,
   ]);
   for (;;) {
-    const i = await UI.choose('CLERK: How can I help?', ['World map', 'Read mail', 'Quest log', 'Open questions', 'Trainer card', 'Outbox', 'Rewrite every chapter', 'Bye']);
-    if (i === 0) await mapScreen();
+    const i = await UI.choose('CLERK: How can I help?', ['World map', 'Read mail', 'Quest log', 'Open questions', 'Trainer card', 'Outbox', 'Rewrite every chapter', 'Guild Hall', 'Bye']);
+    if (i === 7) await guildHall();
+    else if (i === 0) await mapScreen();
     else if (i === 1) await mailPanel();
     else if (i === 2) await questLog();
     else if (i === 3) await decisionsPanel();
@@ -955,60 +1035,215 @@ async function trainerCard() {
   await UI.panel('Trainer card', items, { header, right: `${WORLD.badges.length} badges`, hint: items.length ? 'X close' : 'Answer riddles and clear blockers to earn badges · X close' });
 }
 
-function renderMap() {
-  const s = 3, c = document.createElement('canvas');
-  c.width = MW * s; c.height = MH * s;
-  const g = c.getContext('2d');
-  const col = { [TILE.GRASS]: '#78c060', [TILE.GRASS2]: '#70b858', [TILE.PATH]: '#e8d8a0', [TILE.TREE]: '#2f6a38', [TILE.WATER]: '#5890e8', [TILE.FLOWER_R]: '#78c060', [TILE.FLOWER_Y]: '#78c060', [TILE.TALL]: '#4f9a40' };
-  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) { g.fillStyle = col[S.tiles[y][x]]; g.fillRect(x * s, y * s, s, s); }
-  const dot = (x, y, color, r = 2) => { g.fillStyle = '#181820'; g.fillRect(x * s - r - 1, y * s - r - 1, r * 2 + 3, r * 2 + 3); g.fillStyle = color; g.fillRect(x * s - r, y * s - r, r * 2 + 1, r * 2 + 1); };
-  dot(48, 31, '#d97757', 4);
-  for (const t of WORLD.towns) {
-    dot(t._cx, t._cy - 3, t.color, 4);
-    for (const c of t.camps) { const slot = campSlots[t.id]?.[c.id]; if (slot !== undefined) dot(t._camps[slot].kx, t._camps[slot].ky, '#c8a060', 2); }
-  }
-  for (const e of S.dyn.values()) {
-    if (e.kind === 'claude') dot(e.x, e.y, e.data.state === 'sleeping' ? '#8080a0' : '#ffb080', 1);
-    if (e.kind === 'boss') dot(e.bx + 1, e.by + 1, '#ff3030', 2);
-  }
-  dot(S.px, S.py, '#ffffff', 2);
-  g.font = 'bold 9px monospace'; g.textAlign = 'center';
-  const label = (txt, x, y) => { g.fillStyle = '#181820'; g.fillText(txt, x * s + 1, y * s + 1); g.fillStyle = '#ffffff'; g.fillText(txt, x * s, y * s); };
-  label('Claude Center', 48, 28);
-  for (const t of WORLD.towns) label(t.townName, t._cx, t._cy - 6);
-  if (isNight()) { g.fillStyle = 'rgba(10,16,64,0.45)'; g.fillRect(0, 0, c.width, c.height); }
-  return c.toDataURL();
-}
-
-async function mapScreen() {
-  const dests = S.areas.filter(a => a.slot === undefined);
-  const items = dests.map(a => {
-    const t = a.town && town(a.town);
-    const st = t ? `${t.status} · ${t.claudes.length} Claude${t.claudes.length === 1 ? '' : 's'} · ${t.camps.length} camp${t.camps.length === 1 ? '' : 's'}${t.bosses.length ? ` · ${t.bosses.length} boss` : ''}` : 'Mail, quests, outbox';
-    return { label: a.name, sub: st, tag: attuned.has(a.id) ? 'WARP' : '—', tagColor: attuned.has(a.id) && !isNight() ? '#58a8f8' : '#888' };
-  });
-  const header = `<img src="${renderMap()}" alt="World map">`;
-  const i = await UI.panel('World map', items, { header, right: isNight() ? '🌙 stones dark' : 'warp from attuned stones', hint: 'Orange: Claude · Red: boss · White: you · Z warp · X close' });
-  if (i < 0) return;
-  const a = dests[i];
-  if (isNight()) return UI.say('The Waystones are dark in the Long Night. You will have to walk.');
-  if (!attuned.has(a.id)) return UI.say(`You haven't attuned the ${a.name} Waystone yet. Walk there once and touch it.`);
-  await warp(...spawnNear(a.spawn));
-}
-
 async function startMenu() {
   for (;;) {
     const q = WORLD.towns.reduce((n, t) => n + t.decisions.length, 0);
-    const i = await UI.choose(null, ['Map', 'Quest log', 'Mail', `Questions${q ? ` (${q})` : ''}`, 'Trainer card', 'Outbox', `Sound: ${Sound.on ? 'on' : 'off'}`, 'Close'], { menu: true });
+    const i = await UI.choose(null, ['Map', 'Quest log', 'Mail', `Questions${q ? ` (${q})` : ''}`, 'Trainer card', 'Outbox', `Sound: ${Sound.on ? 'on' : 'off'}`, `Music: ${Music.on ? 'on' : 'off'}`, 'Guild Hall', 'Settings', 'Close'], { menu: true });
+    if (i === 7) { Music.toggle(); continue; }
+    if (i === 8) { await guildHall(); continue; }
+    if (i === 9) { window.open('/settings', 'cq-settings'); continue; }
     if (i === 0) return mapScreen();
     if (i === 1) await questLog();
     else if (i === 2) await mailPanel();
     else if (i === 3) await decisionsPanel();
     else if (i === 4) await trainerCard();
     else if (i === 5) await outboxPanel();
-    else if (i === 6) Sound.on = !Sound.on;
+    else if (i === 6) { Sound.on = !Sound.on; api('/api/settings', { sound: Sound.on }); }
     else return;
   }
+}
+
+// ---------- the Guild Hall (Paperclip): quests the guild's Claude takes on ----------
+const GUILD_TAG = {
+  backlog: ['IDLE', '#888'], todo: ['POSTED', '#c8a030'], in_progress: ['OUT', '#d97757'], in_review: ['REVIEW', '#3878d0'],
+  blocked: ['STUCK', '#c04040'], done: ['DONE', '#489868'], cancelled: ['OFF', '#686878'],
+};
+const guildAgent = () => WORLD.guild?.agents?.[0] || null;
+const areaOfIssue = i => WORLD.towns.find(t => t.projectId && t.projectId === i.projectId);
+
+async function guildClosed() {
+  if (WORLD.guild?.up) return false;
+  await UI.say(['The Guild Hall is closed. Its doors are barred.', '(Paperclip isn\'t running at 127.0.0.1:3100. Start it, and the hall opens on the next scan.)']);
+  return true;
+}
+
+// Posting a quest assigns it to the guild's Claude, which sets out at once. That spends Claude tokens, so ask first.
+async function postQuest(t, title, detail = '') {
+  if (await guildClosed()) return false;
+  if (isNight()) { await UI.say('No one leaves the Guild Hall during the Long Night. Post it at dawn.'); return false; }
+  if (!t.projectId) { await UI.say([`${t.townName} isn't on the guild's maps yet.`, '(This land has no Paperclip project. It registers on the next scan while the hall is open.)']); return false; }
+  const a = guildAgent();
+  const warn = a?.status === 'paused' ? ' The guild is sent home, so it waits until you call them back.' : '';
+  if (await UI.choose(`Post "${short(title, 50)}" for ${t.townName}? A guild Claude sets out right away.${warn}`, ['Post it (uses Claude tokens)', 'Not yet']) !== 0) return false;
+  const r = await api('/api/guild/mission', { area: t.id, title, detail });
+  if (r.error || r.closed || r.night) { await UI.say(r.error || 'The hall turned you away. Try again later.'); return false; }
+  Sound.mail();
+  await UI.say(['The clerk pins your quest to the board!', `(Paperclip issue ${r.key || r.id}, assigned to ${a?.name || 'the guild agent'}.)`]);
+  return true;
+}
+
+async function guildHall() {
+  if (await guildClosed()) return;
+  for (;;) {
+    const g = WORLD.guild, a = guildAgent();
+    const paused = a?.status === 'paused';
+    const issues = (g.issues || []).slice().sort((x, y) => Date.parse(y.updatedAt || 0) - Date.parse(x.updatedAt || 0));
+    const live = new Set((g.liveRuns || []).map(r => r.issueId));
+    const items = [
+      { label: 'Post a new quest', sub: 'Write it yourself; a guild Claude takes it on', tag: 'NEW', tagColor: '#489868' },
+      { label: paused ? 'Call the guild back to work' : 'Send the guild home', sub: paused ? 'Quests resume' : 'Stops every run now. Nothing starts until you call them back', tag: paused ? 'RESUME' : 'STOP', tagColor: paused ? '#489868' : '#c04040' },
+      ...issues.map(i => {
+        const [tag, tagColor] = live.has(i.id) ? ['OUT', '#d97757'] : GUILD_TAG[i.status] || [i.status.toUpperCase(), '#888'];
+        return { label: i.title, sub: `${areaOfIssue(i)?.townName || 'Unmapped land'} · ${i.key || ''} · ${ago(i.updatedAt)}`, tag, tagColor };
+      }),
+    ];
+    const right = a ? `${a.name}: ${paused ? 'sent home' : live.size ? 'on a quest' : 'resting'}` : 'no guild member';
+    const i = await UI.panel('Guild Hall', items, { right, hint: 'Quests run on Paperclip · Z open · X leave' });
+    if (i < 0) return;
+    if (i === 0) {
+      const t = await pickTown('Which land is the quest for?');
+      if (!t) continue;
+      const title = await UI.ask(`Quest for ${t.townName}, in one line:`);
+      if (!title) continue;
+      const detail = await UI.ask('Any details for the guild? (Enter to skip)');
+      await postQuest(t, title, detail || '');
+      continue;
+    }
+    if (i === 1) {
+      if (!paused && await UI.choose('Send the whole guild home? Any running quest stops mid-step.', ['Send them home', 'Keep working']) !== 0) continue;
+      await api('/api/guild/stop', { on: !paused });
+      Sound.mail();
+      await UI.say(paused ? 'The guild hurries back to the board.' : 'The guild packs up and heads home.');
+      continue;
+    }
+    await guildQuest(issues[i - 2], live.has(issues[i - 2].id));
+  }
+}
+
+async function guildQuest(q, running) {
+  const t = areaOfIssue(q);
+  await UI.say([`QUEST: ${q.title}`, `${t?.townName || 'Unmapped land'} · ${running ? 'a guild Claude is out on it now' : (GUILD_TAG[q.status]?.[0] || q.status).toLowerCase()}`, `(Paperclip ${q.key || q.id} · ${q.status} · ${q.priority || 'medium'} priority)`]);
+  if (['done', 'cancelled'].includes(q.status)) return;
+  const i = await UI.choose('What do you do?', ['Send word to the guild (uses Claude tokens)', 'Call off this quest', 'Back']);
+  if (i === 0) {
+    if (isNight()) return UI.say('Your word waits for dawn. The guild sleeps in the Long Night.');
+    const text = await UI.ask(`Word for the guild about "${short(q.title, 40)}":`);
+    if (!text) return;
+    const r = await api('/api/guild/send', { issueId: q.id, text });
+    if (r.error) return UI.say(r.error);
+    Sound.mail();
+    return UI.say(['A runner takes your word to the guild.', '(Comment added and the agent woken.)']);
+  }
+  if (i === 1 && await UI.choose(`Call off "${short(q.title, 40)}"? Its run stops now.`, ['Call it off', 'Keep it']) === 0) {
+    await api('/api/guild/stop', { issueId: q.id });
+    return UI.say('The quest is struck from the board.');
+  }
+}
+
+async function pickTown(prompt) {
+  if (WORLD.towns.length === 1) return WORLD.towns[0];
+  const i = await UI.choose(prompt, [...WORLD.towns.map(t => t.townName), 'Cancel']);
+  return WORLD.towns[i] || null;
+}
+
+// ---------- the Cartographer: chart new lands (repos), abandon old ones ----------
+async function talkCartographer() {
+  const n = WORLD.towns.length, max = WORLD.save?.maxAreas || 5;
+  await UI.say(['CARTOGRAPHER: Ah, a traveler with an eye for maps!', `You've charted ${n} land${n === 1 ? '' : 's'} so far. My maps have room for ${max}.`]);
+  for (;;) {
+    const i = await UI.choose('CARTOGRAPHER: What shall we do?', ['Chart a new land', 'Abandon a land', 'Open the map room (settings)', 'Bye']);
+    if (i === 0) { if (await chartLand()) return; }
+    else if (i === 1) { if (await abandonLand()) return; }
+    else if (i === 2) { window.open('/settings', 'cq-settings'); await UI.say('CARTOGRAPHER: The map room is open in another tab. Changes show up here on the next scan.'); }
+    else return;
+  }
+}
+
+async function chartLand() {
+  const r = await fetch('/api/repos').then(x => x.json());
+  if (r.charted >= r.max) { await UI.say(`CARTOGRAPHER: My maps are full at ${r.max} lands. Abandon one to make room.`); return false; }
+  if (!r.repos.length) { await UI.say('CARTOGRAPHER: I see no uncharted lands. (No other git repos in ~/Repositories.)'); return false; }
+  const i = await UI.panel('Uncharted lands', r.repos.map(x => ({ label: x.name, sub: x.path.replace(/^\/Users\/[^/]+/, '~') })), { right: `${r.charted}/${r.max} charted`, hint: 'Newest first · Z chart · X back' });
+  if (i < 0) return false;
+  const repo = r.repos[i];
+  const name = await UI.ask(`Name this land (it's ${repo.name}):`, repo.name.replace(/[-_.]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+  if (!name) return false;
+  const a = await api('/api/areas', { path: repo.path, name });
+  if (a.error) { await UI.say(`CARTOGRAPHER: ${a.error}`); return false; }
+  await celebrate('NEW LAND!', `${a.name} is on the map`, '✦');
+  await UI.say([`CARTOGRAPHER: There! ${a.name} is on the map.`, 'Walk there and touch its Waystone to attune it.', WORLD.guild?.up ? '(Registered as a Paperclip project.)' : '(The Guild Hall is closed, so it registers with Paperclip once the hall opens.)']);
+  return true;
+}
+
+async function abandonLand() {
+  const i = await UI.choose('CARTOGRAPHER: Which land do you leave behind?', [...WORLD.towns.map(t => t.townName), 'None']);
+  const t = WORLD.towns[i];
+  if (!t) return false;
+  if (await UI.choose(`Abandon ${t.townName}? It leaves the map. Its repo and history stay untouched, and you can chart it again later.`, ['Abandon it', 'Keep it']) !== 0) return false;
+  const r = await api('/api/areas/update', { id: t.id, retire: true });
+  if (r.error) { await UI.say(r.error); return false; }
+  await UI.say(`CARTOGRAPHER: I'll let the grass take ${t.townName}'s roads.`);
+  return true;
+}
+
+// The map is built once, so a change in charted lands reloads the world (after any open dialog closes).
+function landsChanged(next) {
+  return next.towns.map(t => t.id).join() !== WORLD.towns.map(t => t.id).join();
+}
+async function reloadWorld() {
+  while (UI.open) await wait(300);
+  S.scene?.cameras.main.fadeOut(400, 0, 0, 0);
+  await wait(450);
+  location.reload();
+}
+
+// ---------- title screen and the new game intro ----------
+async function titleScreen() {
+  const boot = document.getElementById('boot');
+  boot.innerHTML = '<div class="title">CLAUDE QUEST<small>Lands of the Ember Well</small></div>';
+  const cont = WORLD.save?.introDone;
+  const opts = cont ? ['Continue', 'New Game'] : ['New Game'];
+  const list = document.getElementById('choices');
+  list.classList.add('title');
+  const i = await UI.choose(null, opts);
+  list.classList.remove('title');
+  if (opts[i] === 'Continue' || i < 0 && cont) return;
+  if (cont && await UI.choose('Start a new game? Your charted lands, letters and badges stay. Your footsteps and attuned Waystones reset.', ['Start over', 'Continue instead']) !== 0) return;
+  for (const k of ['cq-pos', 'cq-attuned', 'cq-seen', 'cq-camp-slots']) try { localStorage.removeItem(k); } catch {}
+  attuned.clear(); attuned.add('hub');
+  boot.innerHTML = '';
+  await intro();
+}
+
+// A big portrait of the Warden, drawn from the same pixel sprite as everyone else.
+function wardenPortrait() {
+  const sheet = Art.character({ hat: '#6a3a78', shirt: '#9a6ab8', pants: '#3a2a48' });
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  c.getContext('2d').drawImage(sheet, 0, 0, 16, 16, 0, 0, 16, 16);
+  c.className = 'warden';
+  return c;
+}
+
+async function intro() {
+  const home = WORLD.towns[0];
+  const boot = document.getElementById('boot');
+  boot.replaceChildren(wardenPortrait());
+  await UI.say([
+    'Hello there! Welcome to the lands of the Ember Well.',
+    'My name is WARDEN ASH. People call me the keeper of the Well.',
+    'Every land here is a place where work gets done. And the one who does it… is CLAUDE.',
+    'Claude is a tireless traveler. It drinks Ember from the Well to work.',
+    'When the Well runs dry, the Long Night falls. Claude sleeps, and the Waystones go dark until dawn.',
+    '(Ember is your Claude usage. The Long Night is a usage limit.)',
+    home ? `You begin in ${home.townName}. It's the very land this game is built in.` : 'You have no lands yet. Visit the Cartographer to chart your first.',
+    'In the Claude Center, the CLERK keeps the Guild Hall. Post quests there, and a guild Claude sets out.',
+    'The CARTOGRAPHER beside the Waystone charts new lands for you, one repository at a time.',
+    'And LUMI, a little spirit from beyond the Rift, will float to you whenever there is news.',
+    'Answer the riddles Claude brings you, clear the bosses that block its roads, and the lands will flourish.',
+    'Your adventure starts now!',
+  ]);
+  await api('/api/intro', {});
 }
 
 // ---------- couriers: news comes running to you ----------
@@ -1020,7 +1255,7 @@ function onEvent(ev) {
   const name = (ev.project && town(ev.project)?.townName) || 'The world';
   UI.toast(`<b style="color:${color}">${tag}</b> ${esc(name)}<br>${esc(short(ev.text, 110))}`);
   if (ev.kind === 'commit' && S.area === ev.project) fireworks();
-  if (ev.kind === 'victory') { Sound.jingle(); const e = [...S.dyn.values()].find(x => x.kind === 'boss' && x.boss === ev.bossId); if (e) fireworks(e.bx * T + 16, e.by * T + 8); }
+  if (ev.kind === 'victory') { const e = [...S.dyn.values()].find(x => x.kind === 'boss' && x.boss === ev.bossId); if (e) fireworks(e.bx * T + 16, e.by * T + 8); }
   if (ev.kind === 'step' && ev.bossId) hitFx(ev.bossId);
   if (COURIER.has(ev.kind)) { S.couriers.push(ev); pumpCouriers(); }
 }
@@ -1049,33 +1284,125 @@ async function courierVisit(batch) {
   await wait(650);
   S.playerBubble.setVisible(false);
 
-  // Find a spot a few steps away and run from there.
+  // Lumi (or Claude) steps out of a small rift a few tiles away and glides to you on a smooth curve.
   const startPath = bfs([S.px, S.py], (x, y) => Math.abs(x - S.px) + Math.abs(y - S.py) >= 6, 3000) || bfs([S.px, S.py], (x, y) => Math.abs(x - S.px) + Math.abs(y - S.py) >= 2, 600);
-  let sprite = null, route = [];
-  if (startPath) {
-    route = startPath.slice(1, -0 || undefined).reverse(); // from far spot back toward the player
-    route = route.slice(0, route.length - 0);
-    const [sx, sy] = route[0];
-    sprite = S.scene.add.sprite(sx * T, sy * T - 2, isClaude ? 'char-claude' : 'char-courier', 0).setOrigin(0).setDepth(9000);
-    for (const [x, y] of route.slice(1, -1)) {
-      const dx = x - sprite.x / T, dy = y - (sprite.y + 2) / T;
-      const dir = dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up';
-      sprite.setFrame(DIR_INDEX[dir] * 3 + 1 + (Math.round(x + y) % 2));
-      await new Promise(r => S.scene.tweens.add({ targets: sprite, x: x * T, y: y * T - 2, duration: 95, onComplete: r }));
-    }
-    const last = route[route.length - 2] || route[0];
-    const toPlayer = Object.keys(DIRS).find(d => last[0] + DIRS[d][0] === S.px && last[1] + DIRS[d][1] === S.py) || 'down';
-    sprite.setFrame(DIR_INDEX[toPlayer] * 3);
-    S.facing = OPP[toPlayer]; S.player.setFrame(DIR_INDEX[S.facing] * 3);
-  }
+  const v = startPath ? await arrive(startPath.slice().reverse(), isClaude) : null;
 
   const auto = S.auto && !urgent ? 4000 : 0;
   for (const ev of batch) await courierLine(ev, isClaude, auto);
 
-  if (sprite) {
-    for (const [x, y] of route.slice(0, -1).reverse()) await new Promise(r => S.scene.tweens.add({ targets: sprite, x: x * T, y: y * T - 2, duration: 80, onComplete: r }));
-    sprite.destroy();
-  }
+  if (v) await depart(v);
+}
+
+// The visitor's entrance: a rift opens, it fades in, and it floats along the path with a trail of motes.
+async function arrive(route, isClaude) {
+  const sc = S.scene;
+  route = route.slice(0, -1); // stop beside the player
+  const [sx, sy] = route[0];
+  const rift = sc.add.image(sx * T + 8, sy * T + 8, 'rift').setDepth(8990).setScale(0.2).setAlpha(0);
+  sc.tweens.add({ targets: rift, scale: 1.6, alpha: 0.9, angle: 180, duration: 420, ease: 'Back.out' });
+  Sound.chime();
+  await wait(380);
+  const sprite = isClaude
+    ? sc.add.sprite(sx * T, sy * T - 2, 'char-claude', 0).setOrigin(0)
+    : sc.add.image(sx * T, sy * T - 4, 'spirit0').setOrigin(0);
+  sprite.setDepth(9000).setAlpha(0).setScale(0.4);
+  const halo = sc.add.image(0, 0, 'halo').setDepth(8999).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.8);
+  const trail = sc.add.particles(0, 0, 'mote', {
+    lifespan: 700, speed: { min: 2, max: 10 }, scale: { start: 1, end: 0 }, alpha: { start: 0.9, end: 0 },
+    frequency: 45, blendMode: 'ADD', follow: sprite, followOffset: { x: 8, y: 10 },
+  }).setDepth(8998);
+  sc.tweens.add({ targets: sprite, alpha: 1, scale: 1, duration: 300, ease: 'Sine.out' });
+  sc.tweens.add({ targets: rift, alpha: 0, scale: 0.4, angle: 360, delay: 350, duration: 500, onComplete: () => rift.destroy() });
+  await wait(300);
+
+  // One eased glide along a Catmull-Rom curve through the path's tiles, instead of tile-by-tile hops.
+  const xs = route.map(([x]) => x * T), ys = route.map(([, y]) => y * T - (isClaude ? 2 : 4));
+  const prog = { t: 0 };
+  let last = performance.now();
+  await new Promise(done => sc.tweens.add({
+    targets: prog, t: 1, duration: Math.max(500, route.length * 130), ease: 'Sine.inOut',
+    onUpdate: () => {
+      const x = Phaser.Math.Interpolation.CatmullRom(xs, prog.t), y = Phaser.Math.Interpolation.CatmullRom(ys, prog.t);
+      const now = performance.now(), dx = x - sprite.x, dy = y - sprite.y;
+      if (isClaude) {
+        const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+        sprite.setFrame(DIR_INDEX[dir] * 3 + 1 + (Math.floor(now / 140) % 2));
+      } else sprite.setTexture(`spirit${Math.floor(now / 220) % 2}`).setFlipX(dx < -0.01 ? true : dx > 0.01 ? false : sprite.flipX);
+      sprite.setPosition(x, y + (isClaude ? 0 : Math.sin(now / 160) * 1.5));
+      halo.setPosition(sprite.x + 8, sprite.y + 9);
+      last = now;
+    },
+    onComplete: done,
+  }));
+
+  const end = route[route.length - 1];
+  const toPlayer = Object.keys(DIRS).find(d => end[0] + DIRS[d][0] === S.px && end[1] + DIRS[d][1] === S.py) || 'down';
+  if (isClaude) sprite.setFrame(DIR_INDEX[toPlayer] * 3);
+  S.facing = OPP[toPlayer]; S.player.setFrame(DIR_INDEX[S.facing] * 3);
+  // While it talks it keeps bobbing and blinking.
+  const idle = sc.time.addEvent({ delay: 60, loop: true, callback: () => {
+    const now = performance.now();
+    if (!isClaude) sprite.setTexture(now % 2600 < 140 ? 'spirit2' : `spirit${Math.floor(now / 420) % 2}`).setY(end[1] * T - 4 + Math.sin(now / 260) * 1.5);
+    halo.setPosition(sprite.x + 8, sprite.y + 9).setAlpha(0.6 + Math.sin(now / 300) * 0.2);
+  } });
+  trail.frequency = 160;
+  return { sprite, halo, trail, idle };
+}
+
+// The exit: it rises a little and dissolves into light.
+async function depart({ sprite, halo, trail, idle }) {
+  const sc = S.scene;
+  idle.remove();
+  trail.stop();
+  Sound.chime(true);
+  const burst = sc.add.particles(sprite.x + 8, sprite.y + 8, 'mote', {
+    speed: { min: 20, max: 60 }, lifespan: 800, scale: { start: 1.4, end: 0 }, alpha: { start: 1, end: 0 }, blendMode: 'ADD', emitting: false,
+  }).setDepth(9001);
+  burst.explode(24);
+  await new Promise(done => sc.tweens.add({ targets: [sprite, halo], y: '-=10', alpha: 0, scale: 1.4, duration: 520, ease: 'Sine.in', onComplete: done }));
+  sprite.destroy(); halo.destroy();
+  setTimeout(() => { trail.destroy(); burst.destroy(); }, 900);
+}
+
+// Answers go out the moment every menu is closed: one wake per waiting Claude, carrying all its answers.
+async function flushAnswers() {
+  if (!S.flushPending || UI.open || S.flushing) return;
+  S.flushPending = false; S.flushing = true;
+  try {
+    const r = await api('/api/flush', {});
+    if (r.night) UI.toast('<b>LETTERS</b> The Long Night holds. Your answers go out at dawn.');
+    for (const w of r.woke || []) UI.toast(`<b>SENT</b> Lumi woke Claude with ${w.answers} answer${w.answers > 1 ? 's' : ''}<br>${esc(short(w.title || 'session', 60))}`);
+    if (r.woke?.length) Sound.chime();
+  } finally { S.flushing = false; }
+}
+
+// ---------- rewards: a fanfare, light, and a card you can't miss ----------
+async function celebrate(title, sub, icon = '◆') {
+  const sc = S.scene, cam = sc.cameras.main;
+  Music.duck?.(3.2);
+  Sound.fanfare();
+  cam.flash(220, 255, 240, 200);
+  const cx = S.player.x + 8, cy = S.player.y + 6;
+  const ring = sc.add.particles(cx, cy, 'ember', {
+    speed: { min: 50, max: 120 }, angle: { min: 0, max: 360 }, lifespan: 1100, gravityY: 40,
+    scale: { start: 1.6, end: 0 }, alpha: { start: 1, end: 0 }, blendMode: 'ADD', emitting: false,
+  }).setDepth(9601);
+  ring.explode(40);
+  setTimeout(() => S.burst.explode(30, cx, cy - 20), 250);
+  setTimeout(() => S.burst.explode(30, cx - 30, cy - 10), 500);
+  setTimeout(() => S.burst.explode(30, cx + 30, cy - 10), 700);
+  setTimeout(() => ring.destroy(), 1500);
+  // Hold the trophy overhead, Pokémon style.
+  S.player.setFrame(0);
+  const card = document.getElementById('reward');
+  card.querySelector('.icon').textContent = icon;
+  card.querySelector('.title').textContent = title;
+  card.querySelector('.sub').textContent = sub || '';
+  card.classList.remove('hidden');
+  card.style.animation = 'none'; void card.offsetWidth; card.style.animation = '';
+  await wait(2600);
+  card.classList.add('hidden');
 }
 
 async function courierLine(ev, isClaude, auto) {
@@ -1086,29 +1413,29 @@ async function courierLine(ev, isClaude, auto) {
     case 'reply': {
       await say([`CLAUDE dashes over from ${tn}!`, `CLAUDE: ${ev.text}`]);
       const c = t?.claudes.find(x => x.sid === ev.session);
-      if (c && !isNight() && await UI.choose('Reply?', ['Reply', 'Nod and let it work']) === 0) {
+      while (c && !isNight() && await UI.choose('Reply?', ['Reply', 'Nod and let it work']) === 0) {
         const text = await UI.ask('Reply to Claude:');
-        if (text) await sendFlow(t, c, 'chat', text);
+        if (text) { await sendFlow(t, c, 'chat', text); break; }
       }
       return;
     }
     case 'boss': {
-      await say([`COURIER: Urgent news from ${tn}!`, ev.text]);
+      await say([`LUMI: Urgent news from ${tn}!`, ev.text]);
       if (auto) return;
       const b = t?.bosses.find(x => x.id === ev.bossId);
-      if (b && await UI.choose('COURIER: I carry a rift shard. Want to go there now?', ['Take me there', 'Later']) === 0) {
+      if (b && await UI.choose('LUMI: I carry a rift shard. Want to go there now?', ['Take me there', 'Later']) === 0) {
         const e = S.dyn.get(`boss-${b.id}`);
         if (e) { await warp(...spawnNear([e.bx, e.by + 2]), { flash: [200, 160, 255] }); S.facing = 'up'; S.player.setFrame(DIR_INDEX.up * 3); }
       }
       return;
     }
-    case 'night': return say(['COURIER: Bad news, traveler…', 'The Ember Well has run dry. The Long Night falls.', `Every Claude sleeps until dawn${WORLD.night ? `, in ${until(WORLD.night.until)}` : ''}. The Waystones go dark.`, 'Letters you write will wait for morning.']);
-    case 'dawn': return say(['COURIER: Dawn breaks over the land!', 'The Ember Well is full again. Claude wakes, and the Waystones glow.']);
-    case 'badge': Sound.jingle(); return say(['COURIER: Special delivery!', ev.text]);
-    case 'victory': return say([`COURIER: Victory in ${tn}!`, ev.text]);
-    case 'step': return say([`COURIER: Word from the front in ${tn}:`, ev.text]);
-    case 'delivered': return say([`COURIER: Your letter reached Claude in ${tn}.`]);
-    default: return say([`COURIER: News from ${tn}:`, ev.text]);
+    case 'night': return say(['LUMI: Bad news, traveler…', 'The Ember Well has run dry. The Long Night falls.', `Every Claude sleeps until dawn${WORLD.night ? `, in ${until(WORLD.night.until)}` : ''}. The Waystones go dark.`, 'Letters you write will wait for morning.']);
+    case 'dawn': return say(['LUMI: Dawn breaks over the land!', 'The Ember Well is full again. Claude wakes, and the Waystones glow.']);
+    case 'badge': await say(['LUMI: A gift from the Ember Well!']); await celebrate('BADGE GET!', ev.text.replace(/^You earned the /, '')); return;
+    case 'victory': await say([`LUMI: Victory in ${tn}!`]); await celebrate('VICTORY!', ev.text, '★'); return;
+    case 'step': return say([`LUMI: Word from the front in ${tn}:`, ev.text]);
+    case 'delivered': return say([`LUMI: Your letter reached Claude in ${tn}.`]);
+    default: return say([`LUMI: News from ${tn}:`, ev.text]);
   }
 }
 
@@ -1127,6 +1454,8 @@ window.addEventListener('keydown', e => {
   }
   if (['z', 'Z', ' '].includes(e.key)) { e.preventDefault(); interact(); }
   else if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); UI.run(startMenu); }
+  else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); UI.run(mapScreen); }
+  else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); MapView.toggleMini(); }
 });
 window.addEventListener('keyup', e => { const dir = KEY_DIR[e.key]; if (dir) S.held.delete(dir); });
 window.addEventListener('blur', () => S.held.clear());
@@ -1142,6 +1471,7 @@ function connect() {
     const next = JSON.parse(e.data);
     if (!next) return;
     if (!WORLD) { WORLD = next; return start(); }
+    if (landsChanged(next)) { WORLD = { ...WORLD, ...next, towns: WORLD.towns }; return reloadWorld(); }
     for (const t of next.towns) { const old = town(t.id); if (old) { t._cx = old._cx; t._cy = old._cy; t._camps = old._camps; } }
     WORLD = next;
     if (S.scene?.sys.isActive()) { syncDynamic(); refreshMarkers(); applyNight(); hud(); }
@@ -1149,8 +1479,11 @@ function connect() {
   es.addEventListener('event', e => { if (WORLD && S.player) onEvent(JSON.parse(e.data)); });
 }
 
-function start() {
+async function start() {
   fit();
+  Sound.on = WORLD.save?.settings.sound ?? true;
+  if (!sessionStorage.getItem('cq-played')) await titleScreen();
+  try { sessionStorage.setItem('cq-played', '1'); } catch {}
   new Phaser.Game({
     type: Phaser.CANVAS, parent: 'game', width: 240, height: 160, pixelArt: true, backgroundColor: '#000000',
     input: { keyboard: false }, fps: { target: 60, forceSetTimeOut: true }, scale: { mode: Phaser.Scale.NONE },

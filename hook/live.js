@@ -22,9 +22,8 @@ const read = (f, d) => { try { return JSON.parse(fs.readFileSync(path.join(DATA,
 const write = (f, v) => { const file = path.join(DATA, f), tmp = `${file}.${process.pid}.tmp`; fs.writeFileSync(tmp, JSON.stringify(v, null, 2)); fs.renameSync(tmp, file); };
 
 function main(ev) {
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8'));
   const cwd = ev.cwd || process.cwd();
-  const project = cfg.projects.find(p => [p.path, ...(p.extraPaths || [])].some(r => cwd === r || cwd.startsWith(r + '/')));
+  const project = require('../lib/areas').projects().find(p => [p.path, ...(p.extraPaths || [])].some(r => cwd === r || cwd.startsWith(r + '/')));
   if (!project) return;
   const automated = /^(## Paperclip|You are agent )/.test(ev.prompt || '');
 

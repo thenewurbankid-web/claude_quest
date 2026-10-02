@@ -10,6 +10,9 @@ const UI = {
 
   get open() { return this.mode !== null || this.busy > 0; },
 
+  // Buttons and clicks feed the same handlers as the keyboard.
+  press(key) { this.handler?.({ key, preventDefault() {} }); },
+
   key(e) {
     if (!this.handler) return false;
     return this.handler(e) !== false;
@@ -54,6 +57,7 @@ const UI = {
         Sound.blip();
       };
       show();
+      box.onclick = () => this.press('z');
       this.handler = e => {
         if (!['z', 'Z', ' ', 'Enter', 'x', 'X'].includes(e.key)) return;
         if (shown < pages[i].length) { shown = pages[i].length; txt.textContent = pages[i]; clearInterval(timer); more.classList.remove('hidden'); return; }
@@ -79,8 +83,9 @@ const UI = {
       }
       let sel = 0;
       const render = () => {
-        list.innerHTML = options.map((o, k) => `<div class="opt${k === sel ? ' sel' : ''}">${esc(o)}</div>`).join('');
-        list.children[sel]?.scrollIntoView({ block: 'nearest' });
+        list.innerHTML = `<button class="back" data-back>◀ Back</button>` + options.map((o, k) => `<div class="opt${k === sel ? ' sel' : ''}" data-k="${k}">${esc(o)}</div>`).join('');
+        list.onclick = e => { if (e.target.closest('[data-back]')) return finish(-1); const o = e.target.closest('[data-k]'); if (o) { Sound.blip(); finish(+o.dataset.k); } };
+        list.querySelectorAll('.opt')[sel]?.scrollIntoView({ block: 'nearest' });
       };
       list.classList.remove('hidden');
       render();
@@ -104,13 +109,15 @@ const UI = {
   panel(title, items, { right = '', hint, header = '' } = {}) {
     return new Promise(done => {
       const box = $('panel'), list = $('plist');
-      $('ptitle').innerHTML = `<span>${esc(title)}</span><span>${esc(right)}</span>`;
+      $('ptitle').innerHTML = `<span><button class="back" data-back>◀ Back</button>${esc(title)}</span><span>${esc(right)}</span>`;
+      $('ptitle').onclick = e => { if (e.target.closest('[data-back]')) finish(-1); };
+      list.onclick = e => { const o = e.target.closest('[data-k]'); if (o && items.length) { Sound.blip(); finish(+o.dataset.k); } };
       $('pheader').innerHTML = header;
       $('pheader').classList.toggle('hidden', !header);
       $('phint').textContent = hint || (items.length ? '↑↓ choose · Z open · X close' : 'X close');
       let sel = 0;
       const render = () => {
-        list.innerHTML = items.length ? items.map((it, k) => `<div class="opt${k === sel ? ' sel' : ''}">` +
+        list.innerHTML = items.length ? items.map((it, k) => `<div class="opt${k === sel ? ' sel' : ''}" data-k="${k}">` +
           (it.tag ? `<span class="tag" style="background:${it.tagColor || '#888'}">${esc(it.tag)}</span>` : '') +
           `${esc(it.label)}${it.sub ? `<div class="sub">${esc(it.sub)}</div>` : ''}</div>`).join('')
           : '<div class="sub">Nothing here yet.</div>';
@@ -196,5 +203,13 @@ const Sound = {
   alert() { [1568, 1568].forEach((f, i) => setTimeout(() => this.tone(f, 0.07), i * 120)); },
   warp() { for (let i = 0; i < 10; i++) setTimeout(() => this.tone(300 + i * 90, 0.05, 'sine', 0.05), i * 40); },
   pop() { this.tone(180 + Math.random() * 200, 0.12, 'triangle', 0.06); },
+  // A soft glassy arpeggio for the spirit's rift (rising in, falling out).
+  chime(out = false) { const n = [1319, 1568, 1976, 2637]; (out ? n.reverse() : n).forEach((f, i) => setTimeout(() => this.tone(f, 0.35, 'sine', 0.035), i * 70)); },
+  // The item-get fanfare.
+  fanfare() {
+    const notes = [[784, 0.12], [784, 0.12], [784, 0.12], [1047, 0.5], [0, 0.1], [932, 0.25], [1047, 0.25], [1175, 0.25], [1568, 0.7]];
+    let t = 0;
+    for (const [f, d] of notes) { if (f) setTimeout(() => { this.tone(f, d, 'square', 0.05); this.tone(f / 2, d, 'triangle', 0.05); }, t * 1000); t += d * 0.9; }
+  },
   jingle() { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => this.tone(f, 0.16), i * 140)); },
 };

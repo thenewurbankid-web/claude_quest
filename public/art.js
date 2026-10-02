@@ -240,6 +240,39 @@ const Art = {
     });
   },
 
+  // The courier: Lumi, a little spirit from beyond the Rift. Floats on a wisp tail; frame 0/1 sway the tail,
+  // frame 2 blinks.
+  spirit(frame = 0) {
+    return this.canvas(16, 16, p => {
+      const O = '#283058', body = '#a8f0f8', shade = '#68c0e0', glow = '#e8fcff';
+      const sway = frame === 1 ? 1 : 0;
+      // antenna with an ember tip
+      p(O, 7, 0, 1, 3); p('#f8c060', 6, 0, 3, 1); p('#fff0b0', 7, 0, 1, 1);
+      // round head-body
+      p(O, 4, 3, 8, 1); p(O, 3, 4, 10, 6); p(O, 4, 10, 8, 1);
+      p(body, 4, 4, 8, 6); p(glow, 5, 4, 3, 1); p(shade, 4, 8, 8, 2);
+      // big eyes
+      if (frame === 2) { p(O, 5, 7, 2, 1); p(O, 9, 7, 2, 1); }
+      else { p(O, 5, 6, 2, 3); p(O, 9, 6, 2, 3); p('#ffffff', 5, 6, 1, 1); p('#ffffff', 9, 6, 1, 1); p('#c878f0', 6, 8, 1, 1); p('#c878f0', 10, 8, 1, 1); }
+      // tiny cheeks
+      p('#f8a0c0', 4, 9, 1, 1); p('#f8a0c0', 11, 9, 1, 1);
+      // wisp tail, no feet: it floats
+      p(O, 5 + sway, 11, 6, 1); p(shade, 6 + sway, 11, 4, 1);
+      p(O, 6 + sway, 12, 4, 1); p(body, 7 + sway, 12, 2, 1);
+      p(O, 7 + sway * 2, 13, 2, 1); p(glow, 8 + sway * 2, 13, 1, 1);
+      p(glow, 8 + sway * 2, 14, 1, 1);
+    });
+  },
+
+  // A soft round glow for halos and motes.
+  glow(r, color) {
+    return this.canvas(r * 2, r * 2, (p, g) => {
+      const gr = g.createRadialGradient(r, r, 0, r, r, r);
+      gr.addColorStop(0, color); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, r * 2, r * 2);
+    });
+  },
+
   dot(color, w = 2, h = 2) { return this.canvas(w, h, p => p(color, 0, 0, w, h)); },
 
   bubble(ch, color) {

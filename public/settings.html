@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Quest · Map Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #303040; --muted: #686878; --paper: #f8f8f0; --line: #c8c8c0; --frame: #4878b8; --frame-dark: #284878; --accent: #d97757; --bg: #101018; --ok: #489868; --bad: #c04040; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 'Pixelify Sans', ui-monospace, monospace; }
+  main { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { color: #fff; font-weight: 600; font-size: 28px; margin: 8px 0 4px; }
+  .lead { color: #a8a8b8; margin: 0 0 24px; }
+  .box { background: var(--paper); border: 3px solid var(--frame-dark); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 6px var(--frame); border-radius: 10px; padding: 20px 22px; margin-bottom: 20px; }
+  h2 { margin: 0 0 12px; font-size: 20px; color: var(--frame-dark); display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  h2 small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .land { border-top: 2px dashed var(--line); padding: 16px 0 4px; }
+  .land:first-of-type { border-top: 0; padding-top: 4px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .sub { color: var(--muted); font-size: 13px; word-break: break-all; }
+  label { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  input[type=text], input[type=number], select, textarea { font: inherit; font-size: 15px; color: var(--ink); background: #fff; border: 2px solid var(--frame); border-radius: 4px; padding: 6px 8px; }
+  input[type=text] { flex: 1; min-width: 160px; }
+  input[type=color] { width: 40px; height: 34px; padding: 0; border: 2px solid var(--frame); border-radius: 4px; background: #fff; }
+  textarea { width: 100%; min-height: 160px; font-family: ui-monospace, monospace; font-size: 13px; resize: vertical; }
+  button { font: inherit; font-size: 15px; cursor: pointer; border: 2px solid var(--frame-dark); background: var(--frame); color: #fff; border-radius: 4px; padding: 6px 14px; }
+  button.ghost { background: #fff; color: var(--frame-dark); }
+  button.danger { background: #fff; color: var(--bad); border-color: var(--bad); }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 3px; color: #fff; background: #888; }
+  .tag.ok { background: var(--ok); } .tag.bad { background: var(--bad); }
+  .status { min-height: 1.4em; font-size: 13px; color: var(--ok); }
+  .status.err { color: var(--bad); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 20px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 2px solid var(--ink); vertical-align: -2px; }
+  a { color: var(--frame-dark); }
+</style>
+</head>
+<body>
+<main>
+  <h1>The Map Room</h1>
+  <p class="lead">Settings for Claude Quest. Changes reach the game on its next scan. <a href="/" style="color:#a8c8ff">Back to the game</a></p>
+
+  <section class="box" aria-labelledby="lands-h">
+    <h2 id="lands-h">Charted lands <small id="lands-count"></small></h2>
+    <div id="lands"></div>
+  </section>
+
+  <section class="box" aria-labelledby="chart-h">
+    <h2 id="chart-h">Chart a new land <small>git repos in ~/Repositories</small></h2>
+    <div class="row">
+      <select id="repo" aria-label="Repository"></select>
+      <input type="text" id="repo-name" placeholder="Land name" aria-label="Land name">
+      <button id="chart">Chart it</button>
+    </div>
+    <div class="status" id="chart-status" role="status"></div>
+  </section>
+
+  <section class="box" aria-labelledby="game-h">
+    <h2 id="game-h">Game</h2>
+    <div class="grid">
+      <label><input type="checkbox" id="sound"> Sound effects</label>
+      <label><input type="checkbox" id="music"> Music (follows each land's mood)</label>
+      <label>Autoplay after <input type="number" id="autoplay" min="0" max="3600" style="width:80px"> s idle (0 = off)</label>
+      <label><input type="checkbox" id="minimap"> Minimap</label>
+      <label>Minimap corner <select id="mm-corner"><option value="tl">top left</option><option value="tr">top right</option><option value="bl">bottom left</option><option value="br">bottom right</option></select></label>
+      <label>Minimap size <select id="mm-size"><option value="s">small</option><option value="m">medium</option><option value="l">large</option></select></label>
+      <label>Real-data subtext <select id="subtext"><option value="always">always</option><option value="focus">on focus</option><option value="off">off</option></select></label>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="save-game">Save</button></div>
+    <div class="status" id="game-status" role="status"></div>
+  </section>
+
+  <section class="box" aria-labelledby="guild-h">
+    <h2 id="guild-h">Guild Hall <small>Paperclip</small></h2>
+    <div id="guild"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; });
+const status = (el, text, err) => { el.textContent = text; el.classList.toggle('err', !!err); if (!err) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 3000); };
+const home = p => p.replace(/^\/Users\/[^/]+/, '~');
+
+async function load() {
+  const [world, { areas }, repos] = await Promise.all([fetch('/api/world').then(r => r.json()), fetch('/api/areas').then(r => r.json()), fetch('/api/repos').then(r => r.json())]);
+  const live = areas.filter(a => !a.retiredAt);
+  $('lands-count').textContent = `${live.length} of ${repos.max}`;
+  const notes = await Promise.all(live.map(a => fetch(`/api/notes?id=${encodeURIComponent(a.id)}`).then(r => r.json())));
+  $('lands').innerHTML = live.length ? live.map((a, i) => `
+    <div class="land" data-id="${esc(a.id)}">
+      <div class="row">
+        <input type="color" value="${esc(a.color)}" aria-label="Roof colour for ${esc(a.name)}" data-k="color">
+        <input type="text" value="${esc(a.name)}" aria-label="Name" data-k="name">
+        ${a.projectId ? '<span class="tag ok">on the guild map</span>' : '<span class="tag bad">not in Paperclip yet</span>'}
+      </div>
+      <div class="sub">${esc(home(a.path))}${a.projectId ? ` · Paperclip project ${esc(a.projectId.slice(0, 8))}` : ''} · charted ${new Date(a.claimedAt).toLocaleDateString()}</div>
+      <label style="display:block;margin-top:10px">Instructions and lore <span class="sub">(areas/${esc(a.id)}.md)</span></label>
+      <textarea data-k="notes" aria-label="Instructions for ${esc(a.name)}">${esc(notes[i].text)}</textarea>
+      <div class="row" style="margin-top:8px">
+        <button data-act="save">Save</button>
+        <button class="danger" data-act="retire">Abandon land</button>
+      </div>
+      <div class="status" role="status"></div>
+    </div>`).join('') : '<p class="sub">No lands yet. Chart one below.</p>';
+
+  $('repo').innerHTML = repos.repos.map(r => `<option value="${esc(r.path)}">${esc(r.name)}</option>`).join('') || '<option value="">No uncharted repos</option>';
+  $('chart').disabled = !repos.repos.length || live.length >= repos.max;
+  if (live.length >= repos.max) status($('chart-status'), `The map is full at ${repos.max} lands. Abandon one to make room.`, true);
+  suggestName();
+
+  const st = world.save?.settings || {};
+  $('sound').checked = st.sound !== false;
+  $('music').checked = st.music !== false;
+  $('autoplay').value = st.autoplaySec ?? 60;
+  $('subtext').value = st.subtext || 'always';
+  $('minimap').checked = st.minimap !== false;
+  $('mm-corner').value = st.minimapCorner || 'tr';
+  $('mm-size').value = st.minimapSize || 'm';
+
+  const g = world.guild || {};
+  const agent = g.agents?.[0];
+  $('guild').innerHTML = g.up
+    ? `<div class="row"><span class="tag ok">open</span> ${agent ? `${esc(agent.name)} is <b>${esc(agent.status)}</b>` : 'No guild agent yet'} · ${(g.issues || []).length} recent quest(s) · ${(g.liveRuns || []).length} running</div>
+       <p class="sub">Post and stop quests from the Guild Hall in the game (the Clerk, or Enter → Guild Hall). Paperclip's own board is at <a href="http://127.0.0.1:3100" target="_blank" rel="noopener">127.0.0.1:3100</a>.</p>`
+    : `<div class="row"><span class="tag bad">closed</span> Paperclip isn't answering at 127.0.0.1:3100.</div>`;
+}
+
+function suggestName() {
+  const p = $('repo').value;
+  $('repo-name').value = p ? p.split('/').pop().replace(/[-_.]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '';
+}
+$('repo').addEventListener('change', suggestName);
+
+$('chart').addEventListener('click', async () => {
+  try { const a = await post('/api/areas', { path: $('repo').value, name: $('repo-name').value }); await load(); status($('chart-status'), `${a.name} is on the map.`); }
+  catch (e) { status($('chart-status'), e.message, true); }
+});
+
+$('lands').addEventListener('click', async e => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  const land = btn.closest('.land'), id = land.dataset.id, out = land.querySelector('.status');
+  const val = k => land.querySelector(`[data-k=${k}]`).value;
+  try {
+    if (btn.dataset.act === 'save') {
+      await post('/api/areas/update', { id, name: val('name'), color: val('color') });
+      await post('/api/notes', { id, text: val('notes') });
+      status(out, 'Saved.');
+    } else if (btn.dataset.act === 'retire') {
+      if (!confirm(`Abandon ${val('name')}? It leaves the map. The repo and its history are untouched, and you can chart it again.`)) return;
+      await post('/api/areas/update', { id, retire: true });
+      await load();
+    }
+  } catch (err) { status(out, err.message, true); }
+});
+
+$('save-game').addEventListener('click', async () => {
+  try { await post('/api/settings', { sound: $('sound').checked, music: $('music').checked, autoplaySec: +$('autoplay').value, subtext: $('subtext').value, minimap: $('minimap').checked, minimapCorner: $('mm-corner').value, minimapSize: $('mm-size').value }); status($('game-status'), 'Saved.'); }
+  catch (e) { status($('game-status'), e.message, true); }
+});
+
+load().catch(e => { document.querySelector('main').insertAdjacentHTML('beforeend', `<p style="color:#f88">Couldn't reach the game server: ${esc(e.message)}</p>`); });
+</script>
+</body>
+</html>

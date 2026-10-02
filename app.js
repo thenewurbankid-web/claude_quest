@@ -11,6 +11,7 @@ const { collectAll, latestActivity } = require('./lib/collect');
 const { generateStory, fallbackStory, askModel, factsText, ago, clip } = require('./lib/story');
 const L = require('./lib/lore');
 const Paperclip = require('./lib/paperclip');
+const Areas = require('./lib/areas');
 
 const PORT = +process.env.PORT || cfg.port;
 const PUBLIC = path.join(__dirname, 'public');
@@ -36,7 +37,7 @@ let world = null, worldJson = '';
 const saveState = () => store.write('state.json', state);
 
 // ---------- the Guild Hall (Paperclip) ----------
-const pc = Paperclip.client(cfg.paperclip?.url || Paperclip.DEFAULT_URL);
+const pc = Paperclip.client(process.env.CQ_PAPERCLIP_URL || cfg.paperclip?.url || Paperclip.DEFAULT_URL);
 let guild = { up: false, at: null };
 async function pollGuild() {
   const save = store.read('world.json', {});
@@ -44,9 +45,23 @@ async function pollGuild() {
   if (next.up !== guild.up && guild.at) pushEvent(null, next.up ? 'guild-open' : 'guild-closed',
     next.up ? 'The Guild Hall opens its doors again.' : 'The Guild Hall is closed. Missions wait until it opens.');
   guild = next;
+  if (guild.up) await registerAreas();
   rebuild();
 }
-const projectById = id => cfg.projects.find(p => p.id === id);
+
+// Lands charted while the Guild Hall was closed get their Paperclip project once it opens.
+async function registerAreas() {
+  if (!guild.up) return;
+  const save = Areas.save();
+  if (!save.paperclip?.companyId) return;
+  for (const a of (save.areas || []).filter(x => !x.retiredAt && !x.projectId)) {
+    try { Areas.update(a.id, { projectId: await Paperclip.ensureArea(pc, save.paperclip.companyId, { name: a.name, cwd: a.path }) }); }
+    catch (e) { console.warn(`[guild] register ${a.id}: ${e.message}`); }
+  }
+}
+// Charted lands come from the save file (data/world.json), not config.json.
+let areas = Areas.projects();
+const projectById = id => areas.find(p => p.id === id);
 const sessionById = (pid, sid) => facts[pid]?.sessions.find(s => s.id === sid);
 
 function claudeBin() {
@@ -154,12 +169,13 @@ function syncBosses(p, f) {
 
 function scan() {
   prevFacts = facts;
-  facts = collectAll(cfg);
+  areas = Areas.projects();
+  facts = collectAll({ ...cfg, projects: areas });
   const wasNight = night;
   night = L.computeNight(facts, latestActivity);
   if (night && !wasNight) pushEvent(null, 'night', `The Ember Well ran dry and the Long Night falls. ${night.text}`, `night-${night.since}`);
   if (!night && wasNight) pushEvent(null, 'dawn', 'Dawn! The Ember Well is full again and Claude wakes.', `dawn-${wasNight.since}`);
-  for (const p of cfg.projects) {
+  for (const p of areas) {
     const f = facts[p.id];
     if (!f) continue;
     diffEvents(p, prevFacts[p.id], f);
@@ -289,6 +305,13 @@ const controlFile = () => store.read('control.json', { stops: {} });
 
 function startRun(p, s, text) {
   const id = hash(s.id, Date.now());
+  // CQ_NO_WAKE: a test server records the run but never starts Claude (no tokens, no real session touched).
+  if (process.env.CQ_NO_WAKE) {
+    const run = { id, project: p.id, session: s.id, title: s.title, startedAt: new Date().toISOString(), status: 'done', dry: true, text };
+    runs.set(id, run);
+    console.log(`[wake:dry] ${s.id} ${s.title}\n${text}`);
+    return run;
+  }
   const log = fs.openSync(path.join(RUNS, `${id}.log`), 'a');
   const child = spawn(CLAUDE, ['-p', '--resume', s.id, text], { cwd: s.originCwd || p.path, stdio: ['ignore', log, log], env: process.env, detached: true });
   const run = { id, project: p.id, session: s.id, title: s.title, startedAt: new Date().toISOString(), status: 'running', pid: child.pid };
@@ -372,7 +395,7 @@ function townFor(p) {
   const weekAgo = Date.now() - 7 * L.DAY;
 
   return {
-    id: p.id, name: p.name, color: p.color, ...town,
+    id: p.id, name: p.name, color: p.color, projectId: p.projectId || null, ...town,
     status, generating: generating.has(p.id), storySource: story.source, storyAt: state.stories[p.id]?.at,
     activeTitle: (working || recent)?.title || null,
     lastActivityAgo: ago(recent?.lastTs || f.commits[0]?.at),
@@ -405,7 +428,7 @@ function rebuild() {
     }
   }
   world = {
-    towns: cfg.projects.map(townFor),
+    towns: areas.map(townFor),
     events: events.slice(0, 80),
     outbox: inbox.slice(-30).reverse(),
     model: cfg.ollama.model,
@@ -414,6 +437,7 @@ function rebuild() {
     badges: state.badges,
     runs: [...runs.values()].slice(-10).reverse(),
     guild,
+    save: { introDone: !!Areas.save().introDoneAt, settings: Areas.settings(), maxAreas: Areas.MAX },
   };
   const json = JSON.stringify(world);
   if (json !== worldJson) { worldJson = json; broadcast('world', world); }
@@ -430,6 +454,7 @@ const body = req => new Promise((ok, fail) => {
   req.on('data', d => { s += d; if (s.length > 1e5) req.destroy(); });
   req.on('end', () => { try { ok(JSON.parse(s || '{}')); } catch (e) { fail(e); } });
 });
+const send302 = (res, to) => { res.writeHead(302, { location: to }); res.end(); };
 const send = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
 const findDecision = (pid, id) => world.towns.find(t => t.id === pid)?.decisions.find(d => d.id === id);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };
@@ -448,6 +473,31 @@ const routes = {
     const m = decide(project, findDecision(project, decisionId) || { id: decisionId, question }, answer);
     rebuild();
     send(res, 200, m);
+  },
+  // The player closed the menu: every answer still waiting for a resting session goes out now, one wake per
+  // session with all its answers (owner's choice: spends Claude tokens, no extra confirm). Working sessions get
+  // theirs live from the hook; nothing wakes during the Long Night.
+  'POST /api/flush': async (req, res) => {
+    if (night) return send(res, 200, { woke: [], night: true });
+    const inbox = store.read('inbox.json', []);
+    const bySession = new Map();
+    const fresh = m => Date.now() - Date.parse(m.createdAt) < L.DAY;
+    for (const m of inbox) if (m.kind === 'answer' && m.session && !m.deliveredAt && fresh(m)) (bySession.get(m.session) || bySession.set(m.session, []).get(m.session)).push(m);
+    const woke = [], live = [];
+    for (const [sid, msgs] of bySession) {
+      const p = projectById(msgs[0].project), s = p && sessionById(p.id, sid);
+      if (!s || !s.originCwd) continue;
+      if (s.status === 'working') { live.push(s.title); continue; }
+      if ([...runs.values()].some(r => r.session === sid && r.status === 'running')) continue;
+      const now = new Date().toISOString();
+      for (const m of msgs) { m.deliveredAt = now; m.deliveredTo = sid; m.via = 'wake'; }
+      store.write('inbox.json', inbox);
+      startRun(p, s, ['[Claude Quest] The user answered from the game. Treat these as the user\'s replies and continue:', ...msgs.map(m => `- ${m.text}`)].join('\n'));
+      tally('messages');
+      woke.push({ title: s.title, answers: msgs.length });
+    }
+    rebuild();
+    send(res, 200, { woke, live });
   },
   'POST /api/letter': async (req, res) => {
     const { project, text } = await body(req);
@@ -570,9 +620,59 @@ const routes = {
     pollGuild();
     send(res, 200, { ok: true });
   },
+  // ---------- the save: lands, notes, settings, the intro ----------
+  'GET /api/repos': (req, res) => send(res, 200, { repos: Areas.repos().map(r => ({ path: r.path, name: r.name })), max: Areas.MAX, charted: areas.length }),
+  'GET /api/areas': (req, res) => send(res, 200, { areas: Areas.save().areas || [], guildUp: guild.up }),
+  'POST /api/areas': async (req, res) => {
+    const { path: repo, name } = await body(req);
+    const a = Areas.claim(repo, name);
+    await registerAreas();
+    pushEvent(a.id, 'story', `You charted a new land: ${a.name}. Its Waystone waits to be attuned.`, hash('chart', a.id, Date.now()));
+    scan();
+    send(res, 200, a);
+  },
+  'POST /api/areas/update': async (req, res) => {
+    const { id, ...patch } = await body(req);
+    const a = Areas.update(id, patch);
+    if (patch.retire) {
+      if (a.projectId && guild.up) await pc.patchProject(a.projectId, { status: 'cancelled' }).catch(e => console.warn(`[guild] retire: ${e.message}`));
+      pushEvent(null, 'story', `You abandoned ${a.name}. Grass grows over its roads.`, hash('retire', id, Date.now()));
+    }
+    scan();
+    send(res, 200, a);
+  },
+  'GET /api/notes': (req, res, url) => send(res, 200, { id: url.searchParams.get('id'), text: Areas.readNotes(url.searchParams.get('id') || '') }),
+  'POST /api/notes': async (req, res) => {
+    const { id, text } = await body(req);
+    if (!projectById(id) || typeof text !== 'string') return send(res, 400, { error: 'id and text required' });
+    Areas.writeNotes(id, text);
+    send(res, 200, { ok: true });
+  },
+  'POST /api/settings': async (req, res) => {
+    const patch = await body(req);
+    const d = Areas.DEFAULT_SETTINGS;
+    Areas.patchSave(s => {
+      s.settings = { ...Areas.settings() };
+      if (typeof patch.sound === 'boolean') s.settings.sound = patch.sound;
+      if (typeof patch.music === 'boolean') s.settings.music = patch.music;
+      if (Number.isFinite(patch.autoplaySec)) s.settings.autoplaySec = Math.max(0, Math.min(3600, Math.round(patch.autoplaySec)));
+      if (['always', 'focus', 'off'].includes(patch.subtext)) s.settings.subtext = patch.subtext;
+      if (typeof patch.minimap === 'boolean') s.settings.minimap = patch.minimap;
+      if (['tl', 'tr', 'bl', 'br'].includes(patch.minimapCorner)) s.settings.minimapCorner = patch.minimapCorner;
+      if (['s', 'm', 'l'].includes(patch.minimapSize)) s.settings.minimapSize = patch.minimapSize;
+      for (const k of Object.keys(s.settings)) if (!(k in d)) delete s.settings[k];
+    });
+    rebuild();
+    send(res, 200, Areas.settings());
+  },
+  'POST /api/intro': async (req, res) => {
+    Areas.patchSave(s => { s.introDoneAt = new Date().toISOString(); });
+    rebuild();
+    send(res, 200, { ok: true });
+  },
   'POST /api/refresh': async (req, res) => {
     const { project } = await body(req);
-    for (const p of cfg.projects) if (!project || p.id === project) queueStory(p, true);
+    for (const p of areas) if (!project || p.id === project) queueStory(p, true);
     send(res, 200, { queued: true });
   },
 };
@@ -581,7 +681,8 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const route = routes[`${req.method} ${url.pathname}`];
   try {
-    if (route) return await route(req, res);
+    if (route) return await route(req, res, url);
+    if (url.pathname === '/settings') return send302(res, '/settings.html');
     if (url.pathname === '/phaser.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
       return fs.createReadStream(require.resolve('phaser/dist/phaser.min.js')).pipe(res);
@@ -591,8 +692,8 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
     fs.createReadStream(file).pipe(res);
   } catch (e) {
-    console.error(e);
-    send(res, 500, { error: e.message });
+    if (!e.status) console.error(e);
+    send(res, e.status || 500, { error: e.message });
   }
 }).listen(PORT, '127.0.0.1', () => {
   console.log(`Claude Quest on http://localhost:${PORT} · model ${cfg.ollama.model} · claude ${CLAUDE}`);
