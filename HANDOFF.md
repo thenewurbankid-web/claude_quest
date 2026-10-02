@@ -267,3 +267,22 @@ Game: https://thenewurbankid-web.github.io/claude_quest/ · guide: /guide/ (from
 - `lib/collect.js` transcripts/git/docs/worktrees, `lib/lore.js` game rules and bosses, `lib/paperclip.js` client.
 - `hook/live.js` (UserPromptSubmit/PreToolUse/PostToolUse in `~/.claude/settings.json`): inbox delivery, STOP deny.
 - v2 plan: `~/.claude/plans/deep-yawning-mountain.md`.
+
+## Asset editor (2026-10-02, steps 1 and 2 of 4 done)
+`/editor.html` (linked as "Editor" in the 3D view's nav). Files: `public/editor.html`, `public/editor/{main,sheet,model,store,zip}.js`,
+`lib/editor-assets.js` (+2 lines in app.js).
+- **Browse:** library of every pack PNG (grouped by pack and folder; friendly empty state when `public/packs/` is missing),
+  every .glb in `public/assets/3d`, and imports. Sheets open in a crisp pixel viewer: wheel zoom, right/Space/Pan-drag,
+  8–64 px grid, hover pixel and cell, drag-select (snap optional) → `[x, y, w, h]` with copy and "download selection".
+  Models open in an orbit viewer with mesh/triangle/bone stats; KayKit rig clips (manifest.animations) are offered
+  for any skinned model whose bones match, Idle_A autoplays, speed and loop controls.
+- **Import:** drag-drop or picker (.png/.glb/self-contained .gltf) into IndexedDB (`quest-editor`); optional
+  "save into the game folder" POSTs to `/api/editor/import` → `public/assets/imported/` + its `manifest.json`.
+  The endpoints live outside the `routes` table (not reachable over the hosted link), need octet-stream and a
+  same-host Origin. **The server must be restarted to get them**; until then the page falls back (main tileset +
+  manifest models only, checkbox disabled).
+- **Export:** download one asset, or "Export library" as a store-only zip (manifest.json with credits + files).
+  Licensed pack art is excluded unless ticked.
+- **Next:** step 3, place assets in the world (feed a selected rect or imported model into the 3D scene / manifest
+  roles); step 4, generation. The Generate panel is a disabled placeholder; ask the user how generation should fit
+  (saved preference: real assets first, minimal AI generation) before calling any model or paid API.
