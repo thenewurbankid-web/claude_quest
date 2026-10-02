@@ -216,6 +216,24 @@ Pages, no server) lists queued work per agent as ready-to-copy prompts. The play
 agent (e.g. Claude Code), then pastes the result back on the page, and it enters the protocol like any other
 progress report (marked as relayed by the player). Results still pass the same validation and safety rules.
 
+**LLM adapter (the game's own voice).** Separate from agents: agents do the work; the game's LLM writes NPC lines,
+recaps, plans, the Cartographer chat and lore. It is the studio's `provider` plugin (`plugins/provider/<name>/`,
+`lib/plugins.js`), extended with: `usage` (token counts per reply, for the token readout), `runs: server | browser`
+(WebLLM on the static site), and per-model capabilities (structured JSON, context size, vision). The lore rules route
+each job to a model with fallbacks: flavour lines and recaps → small local model → WebLLM → **templates** (0 tokens);
+planner → bigger local model or Claude (asks first); Cartographer and lore → the chat panel's picker; Errand Trails,
+weights and boss triggers → **plain rules, no LLM**. Guardrails: never writes or rewords decision text; structured
+output is schema-checked before saving (fall back to templates); a filter keeps real product names out of lore;
+timeouts; cached per item. Providers: Ollama (done), WebLLM, Claude via the `claude` CLI, a cloud-connector slot.
+
+**Without Paperclip.** The Local Ledger holds Marches, Halls and Works (made in game). A small **agent registry** in
+the ledger (name, role, skills, status) fills in for Paperclip's org chart; agents join by registering on the polling
+endpoint. Work runs on the **built-in local runner** (the Quest server starts Claude Code through the `claude` CLI, as
+wake does today) or on outside agents (polling, or the `/work` page). Controls become flags agents see on their next
+poll: wake = queue work, pause = resting, cancel = run stopped; the Recall Bell rests everyone. Budget is our own
+count from agents' reported usage plus the LLM adapter's `usage`, spent as Ember. Trade-offs: outside agents stop
+only on their next poll (10–30 s; the local runner stops at once), and budgets are as accurate as agents' reports.
+
 **Seeing the source in game.** A Ledger panel in the Keeper's Lodge shows the protocol view (Marches, Halls, Works,
 Riddles, agents, the Beacon) for any source. With Paperclip present, the panel can switch to Paperclip's own page in
 a frame (localhost only; it doesn't block framing).
@@ -250,7 +268,7 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - `GET /api/protocol` plus the existing SSE stream; it computes weights, the backlog score and the Beacon.
   - In both views: the Beacon chip and the in-game log (open items plus the last 5 resolved).
   - Nothing writes to Paperclip yet.
-- **M2 Lore runtime.**
+- **M2 Lore runtime.** Plus the LLM adapter additions (`usage`, `runs`, capabilities, job routing, templates).
   - inkjs in the core, after checking its licence.
   - `lore/default/` holds The Unwritten Realm: a rules file plus Ink scripts.
   - Hard-coded story text moves into lore. This covers Phase A of PLAN-settlements.
@@ -275,7 +293,7 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Speaking Stones and Lumi for delivery.
   - An interruption scheduler with tiers, frequency, quiet hours and never mid-battle.
   - Reuse the 2D `ui.js` dialog flows.
-- **M5 Starting work.**
+- **M5 Starting work.** Plus the built-in local runner and the agent registry for play without Paperclip.
   - Talking to an NPC or summoning a Keeper creates a task or project, after a confirm and with a token readout.
   - Uses the studio chat providers (`public/studio/chat.js`, `lib/plugins.js`).
 - **M6 Battle core, hybrid mode.**
