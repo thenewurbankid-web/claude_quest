@@ -106,7 +106,7 @@ const MapView = {
       const draw = () => {
         g.drawImage(base, 0, 0);
         // Region names, like the GBA Town Map.
-        g.font = `600 ${Math.round(SC * 2)}px "Pixelify Sans", monospace`; g.textAlign = 'center';
+        g.font = `600 ${Math.round(SC * 2)}px "Nunito", system-ui, sans-serif`; g.textAlign = 'center';
         for (const p of places) if (!p.a.camp) {
           const x = p.cx * SC - OX, y = (p.a.y0 - 0.6) * SC - OY;
           g.lineWidth = 4; g.strokeStyle = '#181820'; g.strokeText(p.name, x, y);

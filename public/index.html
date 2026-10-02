@@ -10,12 +10,12 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap">
 <style>
   html, body { margin: 0; height: 100%; background: #10131f; overflow: hidden; }
   #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   .hud { position: fixed; left: max(16px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top));
-    font: 600 15px 'Pixelify Sans', ui-monospace, monospace; color: #fff; letter-spacing: .02em;
+    font: 600 15px 'Nunito', system-ui, sans-serif; color: #fff; letter-spacing: .02em;
     text-shadow: 0 1px 2px rgba(0,0,0,.5); display: grid; gap: 2px; pointer-events: none; }
   .hud small { font: 400 12px system-ui, sans-serif; opacity: .75; }
   .hint { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom));
@@ -28,7 +28,7 @@
   .chip { position: fixed; right: max(16px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top));
     display: grid; gap: 1px; text-align: right; border: 0; cursor: pointer; color: #fff; padding: 7px 12px;
     background: rgba(16,19,31,.42); border-radius: 12px; backdrop-filter: blur(6px); }
-  .chip b { font: 600 14px 'Pixelify Sans', ui-monospace, monospace; letter-spacing: .02em; }
+  .chip b { font: 600 14px 'Nunito', system-ui, sans-serif; letter-spacing: .02em; }
   .chip small { font: 400 11px system-ui, sans-serif; opacity: .75; }
   .chip:hover { background: rgba(16,19,31,.6); }
   .links { position: fixed; right: max(16px, env(safe-area-inset-right)); top: calc(max(14px, env(safe-area-inset-top)) + 52px);
