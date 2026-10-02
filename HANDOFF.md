@@ -68,6 +68,29 @@ Supersedes "all art drawn in code" (`public/art.js`) and the plans' "art is your
   `art.js`, replacing an earlier imitation. Under 2.5D, the hero should become a screenshot of the 3D game, so decide
   whether to keep or drop this change.
 
+## 2.5D preview: step 1 built (f4e36ed)
+- `/3d.html` (local: `npm start` then http://localhost:4777/3d.html). Test server: the `claude-quest-3d` launch
+  config on port 4779, which uses a scratchpad copy of `data/`.
+- What's in it:
+  - the hub as a diorama on the square grid (`public/3d/grid.js`, `hub.js`, `scene.js`)
+  - lighting, sky, grass, water, Ember Well fire, fireflies
+  - day/night, with `?time=night` etc. to jump to a time
+  - tilt-shift and bloom
+  - footsteps and a touch d-pad
+- **Placeholder shapes until the KayKit packs arrive.** itch.io downloads can't be scripted (signed key), so the user
+  downloads the 4 KayKit packs + Quaternius Ultimate Monsters into ~/Downloads. Then unzip the glTF files into
+  `public/assets/3d/` and map roles in `manifest.json`:
+  - roles: player, claude, tree, house, center, board, mailbox, waystone
+  - optional `"scale": {role: n}`
+
+  Update `CREDITS.md`.
+- Downloaded and in the repo (CC0): Kenney Particle Pack subset, Kenney RPG Audio subset, Poly Haven Kloofendal sky 1k.
+- Next steps:
+  - KayKit models + animations (walk/idle clip names)
+  - the 2x2 footprint for the Claude Center
+  - real 2D-game data (towns, Claudes, bosses) feeding the 3D view
+  - then hex regions
+
 ## Live on GitHub Pages (deployed 2026-10-02)
 Game: https://thenewurbankid-web.github.io/claude_quest/ · guide: /guide/ (from `site/index.html`).
 `.github/workflows/pages.yml` redeploys on every push to main.
