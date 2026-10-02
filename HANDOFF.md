@@ -3,24 +3,37 @@
 **New session, start here.** Run with `npm start` (http://localhost:4777) or the `claude-quest` preview config.
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
-## Next up, in the order the user gave them
-1. **Hosted game, local poller (new phase, plan it first).**
-   - Hard rule from the user: **no incoming connections to the Mac.** The local server only makes outgoing requests:
-     it pushes a trimmed snapshot to the hosted game and pulls the player's actions (answers, quests, STOP, settings)
-     on each poll. The browser only talks to the hosted game, so it works from anywhere, including a phone.
-   - Open decisions for the user: where the hosted part lives (needs storage, e.g. Cloudflare Workers + KV, Supabase,
-     a small Node app); what data leaves the Mac (suggest lore text + short subtext, not raw transcripts); login for the
-     page and a secret token for the poller.
-   - A claude.ai Artifact probably can't be the host for a localhost bridge; with this outgoing-only design it might, if
-     the poller can reach its data API. Check before choosing.
-2. **Editable names + project-aware lore.** Rename towns, Claudes, NPCs and events in game and on `/settings` (player
-   names win). The storyteller (Ollama qwen3:4b) generates names and lines for each Claude, boss, NPC and event from the
-   real project and situation, cached by id so they stay stable, with the real fact as grey subtext (the plan's
-   cross-cutting "standalone game, real data as subtext" item). No Claude tokens.
-3. **Settlements (Phase 6, planned 2026-10-02):** an Age of Empires and tycoon layer on top of the overworld. Each land's
-   repo type sets its economy, and real stats become game stats. The game itself costs 0 Claude tokens.
-   See `PLAN-settlements.md`. Start after the hosted-link work is committed.
-4. Older backlog: battles phase (proposed), spread Claudes out (Phase 3), parallax/RS feel (3b), mounts (5), plugin.
+## Next up
+**Read `PLAN-settlements.md` first.** It's the current plan, in phases A–F, and it supersedes the older items below.
+1. **Phase A, lore foundation:** move today's story text into `lore/` with no visible change, then the lore loader,
+   then the WebLLM storyteller (Ollama/Off as fallbacks). This also covers the old "editable names + project-aware lore".
+2. Then Phases B (Studio + saves), C (Settlements), D (GitHub), E (Android), F (multiplayer), in the plan's order.
+3. Older backlog: battles phase (proposed), parallax/RS feel (3b), mounts (5), plugin.
+
+Decisions made 2026-10-02 (details in the plan):
+- In game the name is **Quest** / **Quest Marketplace**. On GitHub and in code it stays `claude-quest`.
+- GitHub repos are owned by `thenewurbankid-web`: `claude-quest-marketplace`, plus a private `claude-quest-saves` per
+  player. Neither is created yet.
+- Paperclip is optional.
+- The game itself costs 0 Claude tokens.
+- Lore files hold lore and settings; the save file holds state.
+- Multiplayer is invite-only over WebRTC with an MQTT relay fallback, never through git.
+
+Still open: the licence for shared lore and art in the marketplace.
+
+## Hosted game link: built, committed in e5ee096
+- `public/net.js` has three modes:
+  - **local**, served by `app.js`
+  - **linked**, a hosted page (GitHub Pages build via `scripts/build-pages.sh`) paired with the Mac over an outgoing-only,
+    E2E-encrypted MQTT link (`lib/link.js`, `public/linkcrypto.js`). The pairing code is in `data/link.json`.
+  - **browser**, which plays on the last world saved in IndexedDB, with export/import and checkpoints. Actions wait in a
+    queue until there's a link.
+- `public/touch.js` has phone touch controls. `/settings` shows the mode and manages saves.
+- **Not verified:** it was committed as found, without a run in that session. Before relying on it, check:
+  - a real linked session end to end (world arrives, an action round-trips)
+  - the Pages build deploying
+  - play on a phone
+  - a save export/import round trip
 
 ## What changed today (Phase 2 + polish)
 - **Areas come from `data/world.json`** via `lib/areas.js`, not `config.json`. Server, storyteller and `hook/live.js`
