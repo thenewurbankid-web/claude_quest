@@ -150,6 +150,38 @@ Keepers, Lumi, the Ember Well and the Long Night.
 | Stale question | the Riddle "fades" with a note |
 | Usage limit hit | **the Long Night** (already in the game) |
 
+## Sources, schema and agents (2026-10-03)
+**Three sources behind one protocol** (`source` plugins); the game never knows which one is running:
+1. **Local Ledger** (default, free, offline, no account): tasks, milestones and questions stored in the browser
+   (IndexedDB, as `public/net.js` already does for saves). Teammates sync with **Yjs** over WebRTC (multiplayer
+   plan); **isomorphic-git** gives history and an optional push to any git host. Halls, Works and Riddles are made
+   in game, through conversations and the planner NPC.
+2. **GitHub** (free): org = world, Project or repo = March, milestone = Sealed Hall, issues = Works, `needs-answer`
+   comments = Riddles, `blocked` label = blockers. Project custom fields (Size, Weight, Priority, Risk) are typed, so
+   GitHub enforces the schema; branch protection enforces "merging needs a human".
+3. **Paperclip** (optional): company = world, project = March, goals = Halls, issues = Works (see Design).
+
+**Schema enforcement.** Native fields first (goals/milestones, priority, status, parent). Then a small fixed label
+set (`size:S|M|L`, `weight:<n>`, `risk:high`, `quest:council`) where the source has no field. The adapter validates
+every snapshot against the protocol and never guesses: a task with no milestone or a milestone with no tasks
+becomes a **repair quest** ("this Work belongs to no Hall, where should it go?"), answered as a sealed decision that
+fixes it at the source. The schema goes into agent instructions, and an audit routine can check for gaps. Sizes
+and weights are soft (derived when missing); only the structure (task → milestone → project) is required.
+
+**Agents are external workers** (user): an agent can run anywhere (the local server's `claude` CLI, a cloud
+runner, a teammate's machine). Each one **registers** with the protocol (name, skills, a **webhook** for invoking
+it, a poll interval) and **polls** the source for work assigned to it. The game invokes an agent by calling its
+webhook; polling is the fallback when the webhook is unreachable. Calls are signed with a shared secret per agent,
+and only registered webhooks are ever called. Agent controls in game (summon = wake, rest = pause, call back =
+resume, recall one run = cancel, the Recall Bell = pause all) are protocol actions, so every source offers them;
+each one is a sealed decision with a token readout. Caveat: a browser-only Local Ledger can't be polled by an
+outside agent until it syncs somewhere reachable (the local server, a Yjs relay or a git remote); with nothing
+reachable, the game is planning-only.
+
+**Seeing the source in game.** A Ledger panel in the Keeper's Lodge shows the protocol view (Marches, Halls, Works,
+Riddles, agents, the Beacon) for any source. With Paperclip present, the panel can switch to Paperclip's own page in
+a frame (localhost only; it doesn't block framing).
+
 ## Safety (all accepted)
 1. Only sealed choices reach the project.
 2. True Sight shows the real text, verbatim.
@@ -173,7 +205,8 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Move these out of `world.js` (`blocked`, `bfs`) and `3d/scene.js` (`free`, `tryMove`, the key map).
   - Both views import the core, and the 2D page moves to modules.
   - Done when both views play exactly as before.
-- **M1 Protocol + Paperclip source (read-only).**
+- **M1 Protocol + sources (read-only).** Local Ledger, GitHub and Paperclip adapters; schema validation and
+  repair-quest detection; agent registry (read-only); the Ledger panel and the Paperclip frame.
   - `lib/protocol.js` (types and marks) and a `source` plugin kind in `lib/plugins.js`.
   - `plugins/source/paperclip`, built on `lib/paperclip.js` (`snapshot`, goals, issues).
   - `GET /api/protocol` plus the existing SSE stream; it computes weights, the backlog score and the Beacon.
@@ -191,7 +224,8 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Fallen Bridges for cross-project dependencies.
   - Keepers shown free or busy.
   - 3D first, using `3d/scene.js` and `hub.js`; 2D reads the same core.
-- **M4 Questions, decisions, safety.**
+- **M4 Questions, decisions, safety.** Plus agent invocation (signed webhooks, polling fallback) and the in-game
+  agent controls.
   - Seal UI, True Sight and the outbox with recall.
   - Risk tiers and the never-in-game list.
   - Paperclip write-back (`comment`, `patchIssue`).
@@ -233,18 +267,18 @@ In working sessions like today's (one focused build-and-test session each). Roug
 | Milestone | Sessions | Main risk |
 |---|---|---|
 | M0 Shared core | 1–2 | `world.js` is 1,527 lines of globals; moving it to modules without breaking 2D |
-| M1 Protocol + Paperclip | 1–2 | Paperclip's data is messy (goals vs issues vs projects) |
+| M1 Protocol + three sources | 3–4 | three adapters (Local Ledger, GitHub, Paperclip) mapping cleanly onto one schema |
 | M2 Lore runtime (Ink) | 2 | moving all hard-coded text without changing what players see |
 | M3 Map from protocol | 2–3 | laying out regions that grow and unfog nicely |
-| M4 Questions + safety | 3–4 | the largest: many flows, write-back, scheduler; must be bulletproof |
+| M4 Questions + safety + agents | 4–5 | the largest: many flows, write-back, scheduler, signed webhooks; must be bulletproof |
 | M5 Starting work | 1 | small; reuses the studio chat |
 | M6 Battle core, hybrid | 3–4 | combat feel needs tuning; boss and foe art (Blender plugin helps) |
 | M7 Sealed Halls as dungeons | 3–4 | generating puzzles that are actually fun |
 | M8 Progression | 2 | balancing difficulty against real work pace |
 | M9 More modes + 2D parity | 2–3 | doing everything twice in 2D |
-| **Total** | **~20–27** | |
+| **Total** | **~23–31** | |
 
-The first playable version of the full loop (work → questions → boss → hall) is M0–M6: about 13–18 sessions.
+The first playable version of the full loop (work → questions → boss → hall) is M0–M6: about 16–22 sessions.
 Art for bosses and halls, and how much tuning the fun needs, are the biggest unknowns; feel tuning can add 20–30%.
 
 ## Open questions (ask when their milestone comes up)
