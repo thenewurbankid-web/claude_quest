@@ -12,6 +12,8 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { SquareGrid } from './grid.js';
 import { HUB, SOLID } from './hub.js';
+import { dayPhase, clockLabel } from './clock.js';
+import { createAtmosphere } from './atmosphere.js';
 
 const A = 'assets/';
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -30,8 +32,11 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xcfe0ea, 30, 60);
-const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 200);
-const camOffset = new THREE.Vector3(0, 17, 15); // a tilted top-down view, like the 3D-remake Pokémon towns
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 200);
+// Lower and closer than a classic top-down view, like the newer Pokémon games: the forest edge and the sky's haze
+// show at the top of the frame, which is what gives the depth layers room to move.
+const CAM = new THREE.Vector3(0, 10.5, 13.5);
+const camOffset = CAM.clone();
 
 // ---------- sky + lighting ----------
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -284,7 +289,9 @@ function updateActor(a, dt) {
 const held = new Set();
 let tapped = null; // a quick tap still takes one step, even if the key is up before the next frame
 const KEY = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right' };
-addEventListener('keydown', e => { const k = KEY[e.key]; if (k) { e.preventDefault(); held.add(k); tapped = k; } if (e.key === 't' || e.key === 'T') fastTime = !fastTime; audio.unlock(); });
+addEventListener('keydown', e => { const k = KEY[e.key]; if (k) { e.preventDefault(); held.add(k); tapped = k; } if (e.key === 't' || e.key === 'T') { fastTime = !fastTime; if (!fastTime && pinned == null) skyClock = 0; }
+  if (e.key === 'r' || e.key === 'R') atmos.cycle(e.shiftKey ? -1 : 1);
+  audio.unlock(); });
 addEventListener('keyup', e => { const k = KEY[e.key]; if (k) held.delete(k); });
 for (const b of document.querySelectorAll('[data-dir]')) {
   const d = b.dataset.dir;
@@ -299,6 +306,7 @@ const audio = {
     if (this.ctx) return;
     try {
       this.ctx = new AudioContext();
+      atmos.startSound(this.ctx);
       this.bufs = await Promise.all([0, 1, 2, 3].map(async n => this.ctx.decodeAudioData(await (await fetch(`${A}sfx/footstep0${n}.ogg`)).arrayBuffer())));
     } catch { this.bufs = []; }
   },
@@ -342,34 +350,50 @@ function resize() {
   renderer.setSize(w, h, false); composer.setSize(w, h); bloom.setSize(w, h);
   camera.aspect = w / h;
   // Phones in portrait see less width, so pull the camera back a little.
-  camOffset.set(0, 17, 15).multiplyScalar(w / h < 0.8 ? 1.45 : 1);
+  camOffset.copy(CAM).multiplyScalar(w / h < 0.8 ? 1.45 : 1);
+  atmos.resize(renderer.getDrawingBufferSize(new THREE.Vector2()).y);
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
 
+// ---------- weather and the depth layers (atmosphere.js) ----------
+const atmos = createAtmosphere({ scene, grid, at, renderer, camera });
+const weatherChip = document.getElementById('weather');
+atmos.onChange(i => { if (weatherChip) weatherChip.innerHTML = `<b>${i.icon} ${i.label}</b><small>${i.modeLabel}${i.note ? ' · ' + i.note : ''}</small>`; });
+weatherChip?.addEventListener('click', e => { atmos.cycle(e.shiftKey ? -1 : 1); audio.unlock(); });
+
 // ---------- day and night ----------
-let fastTime = false, dayT = 0.3; // 0 = midnight, 0.5 = noon
-{ const q = new URLSearchParams(location.search).get('time'); const preset = { dawn: 0.26, day: 0.45, dusk: 0.74, night: 0.95 }[q]; if (preset != null) dayT = preset; }
-const DAY_SECONDS = 240;
+// The sky follows the player's real local time. ?time=dawn|day|dusk|night pins a time; T runs a fast preview day.
+let fastTime = false, dayT = dayPhase(); // 0 = midnight, 0.25 sunrise, 0.5 noon, 0.75 sunset
+const pinned = { dawn: 0.26, day: 0.45, dusk: 0.74, night: 0.95 }[new URLSearchParams(location.search).get('time')];
+if (pinned != null) dayT = pinned;
 const hud = document.getElementById('time');
+let skyClock = 0;
 function updateSky(dt) {
-  dayT = (dayT + dt / (fastTime ? 20 : DAY_SECONDS)) % 1;
+  if (fastTime) dayT = (dayT + dt / 20) % 1;
+  else if (pinned == null && (skyClock -= dt) <= 0) { dayT = dayPhase(); skyClock = 5; }
   const ang = (dayT - 0.25) * Math.PI * 2;            // sunrise at 0.25, sunset at 0.75
   const height = Math.sin(ang);
   const day = THREE.MathUtils.smoothstep(height, -0.15, 0.25);
   sun.position.set(Math.cos(ang) * 18, Math.max(2, height * 22), 8);
-  sun.intensity = 0.1 + day * 1.7;
-  sun.color.setHSL(0.09, 0.6, 0.55 + day * 0.35);
-  hemi.intensity = 0.12 + day * 0.3;
-  renderer.toneMappingExposure = 0.6 + day * 0.25;
-  scene.backgroundIntensity = 0.12 + day * 0.88;
+  const w = atmos.state, flash = atmos.flash;
+  sun.intensity = (0.1 + day * 1.7) * (0.25 + 0.75 * w.sun);
+  sun.color.setHSL(0.09, 0.6 * w.sun, 0.55 + day * 0.35);
+  hemi.intensity = 0.12 + day * 0.3 + flash * 1.6;
+  renderer.toneMappingExposure = (0.6 + day * 0.25) * (0.85 + 0.15 * w.sun) + flash * 0.5;
+  scene.backgroundIntensity = (0.12 + day * 0.88) * (0.55 + 0.45 * w.sun);
   scene.environmentIntensity = 0.12 + day * 0.4;
-  scene.fog.color.setRGB(0.2 + day * 0.61, 0.24 + day * 0.64, 0.38 + day * 0.54);
-  wellLight.intensity = 3 + (1 - day) * 9;
+  // Overcast skies grey the haze out; fog pulls it in close.
+  const grey = (1 - w.sun) * 0.5;
+  scene.fog.color.setRGB(0.2 + day * 0.61, 0.24 + day * 0.64, 0.38 + day * 0.54).lerp(new THREE.Color(0.32 + day * 0.4, 0.34 + day * 0.4, 0.38 + day * 0.4), grey);
+  scene.fog.near = 26 - w.fog * 18; scene.fog.far = 58 - w.fog * 34;
+  wellLight.intensity = 3 + (1 - day * w.sun) * 9;
   fireflies.mat.opacity = (1 - day) * 0.9;
   bloom.strength = 0.3 + (1 - day) * 0.45;
-  const hr = Math.floor(dayT * 24), label = day > 0.6 ? 'Day' : day > 0.15 ? (dayT < 0.5 ? 'Dawn' : 'Dusk') : 'Night';
-  if (hud) hud.textContent = `Ember Hollow · ${label} · ${String(hr).padStart(2, '0')}:00`;
+  const label = day > 0.6 ? 'Day' : day > 0.15 ? (dayT < 0.5 ? 'Dawn' : 'Dusk') : 'Night';
+  const when = fastTime || pinned != null ? 'preview' : clockLabel();
+  if (hud) hud.textContent = `Ember Hollow · ${label} · ${when}`;
+  return day;
 }
 
 // ---------- build the hub ----------
@@ -416,7 +440,7 @@ function loop() {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.05), t = timer.getElapsed();
   wind.value = reduceMotion ? 0 : t;
-  updateSky(dt);
+  const day = updateSky(dt);
   if (player) {
     if (player.k >= 1 && (held.size || tapped)) {
       const dir = held.size ? [...held].pop() : tapped;
@@ -442,6 +466,7 @@ function loop() {
   if (!reduceMotion) { fire(t); sparks(t); fireflies.tick(t); }
   wellLight.intensity *= reduceMotion ? 1 : 0.9 + Math.sin(t * 11) * 0.05 + Math.sin(t * 23) * 0.05;
   water.opacity = 0.8 + Math.sin(t * 1.2) * 0.05;
+  if (player) atmos.update(dt, t, look, day, reduceMotion);
   composer.render();
   requestAnimationFrame(loop);
 }

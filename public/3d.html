@@ -21,6 +21,12 @@
   .pad button { border: 0; border-radius: 12px; background: rgba(255,255,255,.18); color: #fff; font: 600 20px system-ui;
     backdrop-filter: blur(6px); touch-action: none; }
   @media (pointer: coarse) { .pad { display: grid; } .hint { display: none; } }
+  .chip { position: fixed; right: max(16px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top));
+    display: grid; gap: 1px; text-align: right; border: 0; cursor: pointer; color: #fff; padding: 7px 12px;
+    background: rgba(16,19,31,.42); border-radius: 12px; backdrop-filter: blur(6px); }
+  .chip b { font: 600 14px 'Pixelify Sans', ui-monospace, monospace; letter-spacing: .02em; }
+  .chip small { font: 400 11px system-ui, sans-serif; opacity: .75; }
+  .chip:hover { background: rgba(16,19,31,.6); }
   .veil { position: fixed; inset: 0; background: #10131f; transition: opacity .8s ease; pointer-events: none; }
   body.ready .veil { opacity: 0; }
 </style>
@@ -31,7 +37,8 @@
 <body>
 <canvas id="view"></canvas>
 <div class="hud"><span id="time">Ember Hollow</span><small id="models">Loading…</small></div>
-<div class="hint">Arrows or WASD to walk · T speeds up time</div>
+<button id="weather" class="chip" title="Weather (R) · Shift-click goes back">Weather</button>
+<div class="hint">Arrows or WASD to walk · R weather · T preview a day</div>
 <div class="pad" aria-label="Movement">
   <span></span><button data-dir="up" aria-label="Up">▲</button><span></span>
   <button data-dir="left" aria-label="Left">◀</button><span></span><button data-dir="right" aria-label="Right">▶</button>
