@@ -22,6 +22,10 @@ Decisions made 2026-10-02 (details in the plan):
 
 Still open: the licence for shared lore and art in the marketplace.
 
+## North star (user, 2026-10-02)
+*"This should be the way people work with agents."* Aim for mindblowing and clean: a living, classy diorama of your
+agents at work, not a dashboard with a game skin.
+
 ## Art direction: 2.5D (user, 2026-10-02)
 Supersedes "all art drawn in code" (`public/art.js`) and the plans' "art is yours or procedural".
 - **Look:** like Pokémon Brilliant Diamond/Shining Pearl and Let's Go: chibi low-poly 3D characters on the existing
@@ -35,6 +39,30 @@ Supersedes "all art drawn in code" (`public/art.js`) and the plans' "art is your
 - The user wants it to feel like a delight for players. Be honest about "AAA": the target is polished indie, cohesive and lively.
 - `art.js` stays as a fallback while the swap happens, through the asset registry (`PLAN-settlements.md` §13).
 - Parallax (old Phase 3b) is dropped, because the 3D camera gives real depth.
+- **Pack picks (licences checked on their pages 2026-10-02; NOT downloaded, because the user dismissed the download question):**
+  - KayKit (kaylousberg.itch.io, CC0, glTF, free tiers):
+    - Adventurers: player, Claudes, NPCs
+    - Character Animations
+    - Medieval Hexagon: 200+ buildings and props (blacksmith, lumbermill, market, mine, windmill, barracks, tavern, well) that fit the settlement kinds
+    - Forest Nature: trees, bushes, grass, rocks
+  - To check at download:
+    - Quaternius Ultimate Monsters (Sprites and bosses)
+    - one Poly Haven sky (HDRI)
+    - Kenney Particle Pack
+    - Kenney RPG Audio
+  - Optional paid EXTRA tiers ($8–10) add units, horses, seasons and modular terrain.
+- **Grid: hybrid, incremental, starting with the square grid** (user). Step 1: the existing square grid, with KayKit
+  buildings and props placed on square tiles and flat-shaded terrain under Forest Nature grass. Later steps add hex
+  regions where they suit play (e.g. the settlement/region map, using Medieval Hexagon's hex tiles), with clean
+  transitions between square and hex areas. Keep movement and layout code grid-agnostic, as a grid interface with
+  square and hex implementations, so hex can be added without rewriting.
+- **Classy look comes from rendering:**
+  - soft shadows and ambient occlusion
+  - warm colour grading
+  - bloom only on magic and embers
+  - tilt-shift miniature depth of field
+  - slow day/night
+  - a minimal UI
 - Open: whether music and SFX also come from free packs, or stay generated in `music.js`.
 - Uncommitted on purpose: `site/index.html` and `scripts/build-pages.sh` draw the landing hero with the game's 2D
   `art.js`, replacing an earlier imitation. Under 2.5D, the hero should become a screenshot of the 3D game, so decide
