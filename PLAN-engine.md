@@ -43,6 +43,9 @@ milestone's dungeon.**
   outcomes) replaces whatever the save had; play state (position, items, settings) comes from the save. With no
   source, it plays as saved. Play state is protected by atomic writes (temp file + rename), a checksum, the previous
   save kept as a fallback, and a schema version with migrations; a signature detects edits.
+  **The save carries the full ledger** (user): every March, Hall, Work, Riddle, decision and mark, plus play state.
+  So a save is a complete, portable backup: it restores a whole Local Ledger on any device, and with a live source it
+  is refreshed from that source on load (the source wins for work state).
   **A save is optional:** with the save deleted, or on a new device, the player can connect to an existing project
   and the world rebuilds from the source (Marches, Halls, open questions, outcomes, and the Sigils and standings
   recomputed from outcomes). Only play state starts fresh. Built with saves in M8.
@@ -64,8 +67,8 @@ Title screen: **Start game → New Game or Load.**
   (the Beacon, the log, the Recall Bell); then free play.
 - **Load:** load the save file, then look for its source: the Paperclip it came from, or its Local Ledger in this
   browser. If found, the world is refreshed from it and Lumi opens with a recap ("While you were away: 3 Works
-  done, 2 Riddles waiting"). If not found, offer to **start a new Local Ledger** (seeded from the save's last known
-  Marches, Halls and Works) or **connect a Paperclip**; until then the save plays as saved.
+  done, 2 Riddles waiting"). If not found, offer to **start a new Local Ledger** (restored in full from the ledger
+  inside the save) or **connect a Paperclip**; until then the save plays as saved.
 
 ## Design (all confirmed by the user)
 
