@@ -7,13 +7,13 @@ Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is 
 The user wants it polished "like a Zelda or Pokémon game", with readable text that isn't pixelated.
 - **"Not pixelated" means the text only** (user: "no just text"). The world stays Sunnyside pixel art, and the people
   stay 3D (KayKit). Do NOT move the world to 3D. That was proposed and declined.
-- Readable text: replace the pixel font in the HUD, dialogue and menus with a clean, rounded game font and proper,
-  polished text boxes (modern Pokémon style).
+- ~~Readable text~~ **done (b3ed7fb):** Nunito everywhere (3D HUD, 2D game, settings, map labels), and the 2D boxes
+  are rounder with a soft shadow, a smooth "more" arrow and an accent cursor.
 - Improve the ground, trees, well and buildings within the pixel world: Sunnyside's modular houses instead of boxes, a
   proper well, richer ground (paths, edges, flowers), and more tree variety.
 - Voice (optional, 0 Claude tokens): Keepers and townsfolk speak their lines. Choose between the browser's built-in
   speech (free, robotic) and a small in-browser voice model (~80 MB download, better). Add a mute setting.
-- Night is too dark in the 3D view (found in testing): Keepers are hard to see at 10 pm.
+- ~~Night too dark~~ **done (4d43d2d):** cool moonlight at night, tunable with `LOOK.light.moon` (0 = old night).
 - Then the 2D→3D port, step by step: real Keepers, talking, towns and camps, game systems, then autoplay, minimap and save.
 
 ## Characters + feel (user, 2026-10-02 night)
