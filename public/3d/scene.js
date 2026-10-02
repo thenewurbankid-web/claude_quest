@@ -400,6 +400,7 @@ const pinned = { dawn: 0.26, day: 0.45, dusk: 0.74, night: 0.95 }[new URLSearchP
 if (pinned != null) dayT = pinned;
 const hud = document.getElementById('time');
 let skyClock = 0;
+const MOONLIGHT = new THREE.Color(0.62, 0.72, 1);
 function updateSky(dt) {
   if (fastTime) dayT = (dayT + dt / 20) % 1;
   else if (pinned == null && (skyClock -= dt) <= 0) { dayT = dayPhase(); skyClock = 5; }
@@ -408,13 +409,15 @@ function updateSky(dt) {
   const day = THREE.MathUtils.smoothstep(height, -0.15, 0.25);
   // LOOK.light.sunAz turns the sun's path around the vertical axis.
   const az = THREE.MathUtils.degToRad(LOOK.light.sunAz), sx = Math.cos(ang) * 18;
-  sun.position.set(sx * Math.cos(az) - 8 * Math.sin(az), Math.max(2, height * 22), sx * Math.sin(az) + 8 * Math.cos(az));
+  // At night the same light stands in for the moon: high, cool and soft, so people stay readable after dark.
+  sun.position.set(sx * Math.cos(az) - 8 * Math.sin(az), Math.max(2, Math.abs(height) * 22), sx * Math.sin(az) + 8 * Math.cos(az));
   sun.shadow.radius = LOOK.light.shadowSoft;
   const w = atmos.state, flash = atmos.flash;
-  sun.intensity = (0.1 + day * 1.7) * (0.25 + 0.75 * w.sun) * LOOK.light.sun;
-  sun.color.setHSL(0.09, 0.6 * w.sun, 0.55 + day * 0.35);
-  hemi.intensity = (0.12 + day * 0.3) * LOOK.light.sky + flash * 1.6;
-  renderer.toneMappingExposure = (0.6 + day * 0.25) * (0.85 + 0.15 * w.sun) * LOOK.light.exposure + flash * 0.5;
+  const moon = (1 - day) * LOOK.light.moon * (0.4 + 0.6 * w.sun);
+  sun.intensity = (0.1 + day * 1.7) * (0.25 + 0.75 * w.sun) * LOOK.light.sun + moon * 0.4;
+  sun.color.setHSL(0.09, 0.6 * w.sun, 0.55 + day * 0.35).lerp(MOONLIGHT, 1 - day);
+  hemi.intensity = (0.12 + day * 0.3) * LOOK.light.sky + moon * 0.22 + flash * 1.6;
+  renderer.toneMappingExposure = (0.6 + day * 0.25) * (0.85 + 0.15 * w.sun) * LOOK.light.exposure + moon * 0.05 + flash * 0.5;
   scene.backgroundIntensity = (0.12 + day * 0.88) * (0.55 + 0.45 * w.sun);
   scene.environmentIntensity = (0.12 + day * 0.4) * LOOK.light.sky;
   // Overcast skies grey the haze out; fog pulls it in close.
