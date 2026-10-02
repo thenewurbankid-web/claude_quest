@@ -169,20 +169,19 @@ fixes it at the source. The schema goes into agent instructions, and an audit ro
 and weights are soft (derived when missing); only the structure (task → milestone → project) is required.
 
 **Agents are external workers** (user): an agent can run anywhere (the local server's `claude` CLI, a cloud
-runner, a teammate's machine). Each one **registers** with the protocol (name, skills, how to reach it) through the outgoing-only handshake
-below; the game then invokes it over that link. Polling the source stays as the last fallback. Messages are signed
+runner, a teammate's machine). Each one **registers** with the protocol (name, skills) and polls the Quest server for its work (below); the game
+invokes an agent by queueing work for it. Messages are signed
 with a key per agent, and only registered agents are ever invoked. Agent controls in game (summon = wake, rest = pause, call back =
 resume, recall one run = cancel, the Recall Bell = pause all) are protocol actions, so every source offers them;
-each one is a sealed decision with a token readout. Because the link is outgoing-only, agents reach a browser-only Local Ledger too.
+each one is a sealed decision with a token readout. 
 
-**Handshake, then WebRTC** (user). Webhooks don't work for local agents: a browser tab can't host one, an agent on a
-laptop behind a router can't be reached from outside, and Chrome blocks hosted pages from calling `localhost`. So
-**every connection is outgoing-only**, like the existing phone link: the agent and the game both connect *out* to the
-E2E-encrypted MQTT relay (`lib/link.js`, `public/linkcrypto.js`), pair with a code, swap WebRTC offers there, then
-keep a direct encrypted **data channel**. The game pushes work and decisions over it; the agent streams progress
-back; no polling. If the direct link fails (strict NATs), traffic stays on the relay. **Webhooks are optional**, only
-for agents on a reachable server (cloud runners). Node agents need a WebRTC library (e.g. werift or
-node-datachannel; check licences). Same transport as the planned multiplayer, so it's built once.
+**How agents connect: a polling endpoint, nothing to install** (user, 2026-10-03). The Quest server exposes
+`GET /api/agents/work?agent=<id>` (pending tasks and sealed decisions) and `POST /api/agents/progress` (progress,
+results, new questions). Each agent gets a token when it registers. Any script, `curl` or agent framework can use it;
+connections are outgoing-only, so it works behind routers. No connector package, no webhooks, no WebRTC for agents.
+Work waits for the next poll (10–30 s), which is fine for agent work. Limit: a browser-only Local Ledger has no
+endpoint, so agents need the local server running (or the ledger synced to GitHub, which agents can poll instead).
+Push delivery (Socket.IO or WebRTC) can be added later behind the same endpoints if polling ever feels slow.
 
 **Seeing the source in game.** A Ledger panel in the Keeper's Lodge shows the protocol view (Marches, Halls, Works,
 Riddles, agents, the Beacon) for any source. With Paperclip present, the panel can switch to Paperclip's own page in
@@ -230,7 +229,7 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Fallen Bridges for cross-project dependencies.
   - Keepers shown free or busy.
   - 3D first, using `3d/scene.js` and `hub.js`; 2D reads the same core.
-- **M4 Questions, decisions, safety.** Plus agent invocation (relay handshake, WebRTC channel, polling fallback) and the in-game
+- **M4 Questions, decisions, safety.** Plus the agent polling endpoint (register, work, progress) and the in-game
   agent controls.
   - Seal UI, True Sight and the outbox with recall.
   - Risk tiers and the never-in-game list.
