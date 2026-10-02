@@ -56,6 +56,28 @@ A session can be 5 minutes (collect from your town, do one quest) or an hour (a 
   Lumi, the Sphinx, the Golem, the Wyrm and the Fog become story characters instead of status signals.
 - Player-made campaigns are packs (marketplace §15) and are edited in the Lore Studio (a Campaign tab gets added).
 
+## 3b. Never-ending lore (user, 2026-10-02)
+The story never ends. The authored chapters are the opening. After them, the **Chronicle** keeps generating new
+chapters forever:
+- **Arcs from templates:** `lore/arcs/*.md` defines arc shapes, for example:
+  - a Rift opens → a land falls → rescue its people → face the Rift lord
+  - a rival guild rises
+  - a lost Sprite species returns
+  - the Long Night deepens
+
+  Each arc has 3–5 beats, and each beat is a scene built from the same step vocabulary as §3.
+- **Seeded and remembered:** the Chronicle picks the next arc from the world's state (your lands, ages, party, unresolved
+  threads, defeated foes). It reuses named characters and places, and stores every generated chapter in the save. That
+  way the story stays consistent, and old villains and allies come back.
+- **Escalation without a wall:** new arcs open new procedural lands, Sprites, bosses (variants with new behaviour-tree
+  phases) and higher ages. Difficulty follows party level, so a casual player is never blocked.
+- **A chapter log:** the Chronicle book in the start menu lists every chapter so far (authored and generated). Each
+  chapter ends with a card that teases the next one instead of a game-over ending.
+- **Living World (WebLLM, opt-in)** writes richer prose and new names for generated chapters. Without it, chapters are
+  made from lore-file lines and templates, and still never run out.
+- **Player and pack arcs:** new arc templates from the Lore Studio or marketplace packs join the Chronicle's pool. More
+  lore means more variety.
+
 ## 4. Quests (procedural + authored)
 - **Authored quests** sit in the campaign files.
 - **Procedural quests** come from templates per land kind in `lore/quests/*.md`:
@@ -131,7 +153,7 @@ Target a vertical slice that a stranger can finish:
   - touch-first controls
   - sound and music (exists)
   - a settings page
-  - an ending card
+  - chapter-end cards. There is no final ending; the Chronicle continues (§3b).
 
 ## 10. Build order
 Do **Phase A (lore foundation)** from `PLAN-settlements.md` first: Adventure needs every line in lore files. Then:
@@ -140,7 +162,7 @@ Do **Phase A (lore foundation)** from `PLAN-settlements.md` first: Adventure nee
 3. Battles + 4 Sprites + the first boss. Chapter 1 complete.
 4. Settlement simulation (economy tick, buildings, utility-AI villagers) + offline progress.
 5. Procedural quests + director.
-6. Chapters 2–3, gyms, riddles and puzzles, 12 Sprites. First release.
+6. Chapters 2–3, gyms, riddles and puzzles, 12 Sprites, plus the Chronicle with 4 arc templates (§3b). First release.
 7. Living World (WebLLM opt-in). Campaign tab in the Studio.
 
 ## Verification
