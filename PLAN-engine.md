@@ -46,6 +46,13 @@ milestone's dungeon.**
   **The save carries the full ledger** (user): every March, Hall, Work, Riddle, decision and mark, plus play state.
   So a save is a complete, portable backup: it restores a whole Local Ledger on any device, and with a live source it
   is refreshed from that source on load (the source wins for work state).
+  **Split save** (user): a save is a bundle of parts, not one blob, so memory stays manageable:
+  `manifest.json` (version, checksums, signature, part list), `play.json` (position, items, settings, Sigils,
+  standings), one part per March (its Halls, Works, open Riddles, recent marks), and `archive/<season>.json` for
+  resolved history. The game loads the manifest and play state, then only the March you're in; other Marches load on
+  demand and archives only when opened. Packed as one file with the store-only zip writer the asset editor already
+  has (`public/editor/zip.js`), so players still handle a single save. Parts make sharing easy too: **export without
+  the ledger** is just the manifest and play state.
   **A save is optional:** with the save deleted, or on a new device, the player can connect to an existing project
   and the world rebuilds from the source (Marches, Halls, open questions, outcomes, and the Sigils and standings
   recomputed from outcomes). Only play state starts fresh. Built with saves in M8.
