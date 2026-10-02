@@ -38,11 +38,10 @@ milestone's dungeon.**
   size, so the league can't be climbed with busywork. Cross-Realm leagues can come later with multiplayer.
   Sigils, trophies, league standings and season history live in the **save file** (state), not the lore files
   (lore and settings only).
-- **Save file safety** (user asked about encryption, 2026-10-03). Encryption doesn't stop corruption, so:
-  atomic writes (temp file + rename), a checksum, the last few saves kept as backups (load the newest good one),
-  and a schema version with migrations. A **signature** detects edits (standings can also be re-checked against
-  Paperclip outcomes). **Encryption only when a save leaves the Mac** (cloud saves, exports), reusing
-  `public/linkcrypto.js`. Built with saves in M8.
+- **Save file safety** (user, 2026-10-03). **No encryption.** Every save file is loaded as a new copy: loading never
+  touches the original, so a bad session can't corrupt it. On top of that: atomic writes (temp file + rename), a
+  checksum, a schema version with migrations, and a signature so edits are detected (standings can also be
+  re-checked against Paperclip outcomes). Built with saves in M8.
 - **In real life:** projects ship with the human in the loop at the right moments. Agents spend less time blocked,
   questions get answered in batches instead of one ping at a time, nothing risky happens without a sealed decision,
   and the whole team sees one shared status.
