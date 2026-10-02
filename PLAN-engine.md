@@ -53,6 +53,14 @@ milestone's dungeon.**
   demand and archives only when opened. Packed as one file with the store-only zip writer the asset editor already
   has (`public/editor/zip.js`), so players still handle a single save. Parts make sharing easy too: **export without
   the ledger** is just the manifest and play state.
+  **Archiving** (user): keeps the live parts small without losing anything.
+  - *Live* holds every open item, anything an open item depends on, and items resolved in the current season.
+  - *Archived* at each season end, or when a March part passes a size limit, or by hand ("archive now"): resolved
+    Works and Riddles, closed Halls' details and their marks, compacted to a summary plus outcomes.
+  - A *won campaign's* March moves to the archive whole; the map keeps it as a finished land from a small summary.
+  - Archives are read-only and never deleted. Sigils, standings, Embertales and the Hall of Champions read from them,
+    and they can always be recomputed. Sealed decisions keep their full audit text in the archive.
+  - Season length and size limit live in the lore rules.
   **A save is optional:** with the save deleted, or on a new device, the player can connect to an existing project
   and the world rebuilds from the source (Marches, Halls, open questions, outcomes, and the Sigils and standings
   recomputed from outcomes). Only play state starts fresh. Built with saves in M8.
