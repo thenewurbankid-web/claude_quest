@@ -169,22 +169,20 @@ fixes it at the source. The schema goes into agent instructions, and an audit ro
 and weights are soft (derived when missing); only the structure (task → milestone → project) is required.
 
 **Agents are external workers** (user): an agent can run anywhere (the local server's `claude` CLI, a cloud
-runner, a teammate's machine). Each one **registers** with the protocol (name, skills, a **webhook** for invoking
-it, a poll interval) and **polls** the source for work assigned to it. The game invokes an agent by calling its
-webhook; polling is the fallback when the webhook is unreachable. Calls are signed with a shared secret per agent,
-and only registered webhooks are ever called. Agent controls in game (summon = wake, rest = pause, call back =
+runner, a teammate's machine). Each one **registers** with the protocol (name, skills, how to reach it) through the outgoing-only handshake
+below; the game then invokes it over that link. Polling the source stays as the last fallback. Messages are signed
+with a key per agent, and only registered agents are ever invoked. Agent controls in game (summon = wake, rest = pause, call back =
 resume, recall one run = cancel, the Recall Bell = pause all) are protocol actions, so every source offers them;
-each one is a sealed decision with a token readout. Caveat: a browser-only Local Ledger can't be polled by an
-outside agent until it syncs somewhere reachable (the local server, a Yjs relay or a git remote); with nothing
-reachable, the game is planning-only.
+each one is a sealed decision with a token readout. Because the link is outgoing-only, agents reach a browser-only Local Ledger too.
 
-**Handshake, then WebRTC** (user): registration is the first handshake. The agent and the game swap WebRTC offers
-over a signalling path (the agent's webhook, or the existing E2E MQTT relay from `lib/link.js` / `public/linkcrypto.js`)
-and then keep a direct, encrypted **data channel**. Over it the game pushes work and decisions and the agent streams
-progress back, with no polling. This also fixes the browser-only case: an agent can reach a Local Ledger that lives
-in a browser tab. Fallbacks when the direct link fails (strict NATs): the MQTT relay, then webhook plus polling.
-Node agents need a WebRTC library (e.g. werift or node-datachannel; check licences). Same transport as the planned
-multiplayer, so it's built once.
+**Handshake, then WebRTC** (user). Webhooks don't work for local agents: a browser tab can't host one, an agent on a
+laptop behind a router can't be reached from outside, and Chrome blocks hosted pages from calling `localhost`. So
+**every connection is outgoing-only**, like the existing phone link: the agent and the game both connect *out* to the
+E2E-encrypted MQTT relay (`lib/link.js`, `public/linkcrypto.js`), pair with a code, swap WebRTC offers there, then
+keep a direct encrypted **data channel**. The game pushes work and decisions over it; the agent streams progress
+back; no polling. If the direct link fails (strict NATs), traffic stays on the relay. **Webhooks are optional**, only
+for agents on a reachable server (cloud runners). Node agents need a WebRTC library (e.g. werift or
+node-datachannel; check licences). Same transport as the planned multiplayer, so it's built once.
 
 **Seeing the source in game.** A Ledger panel in the Keeper's Lodge shows the protocol view (Marches, Halls, Works,
 Riddles, agents, the Beacon) for any source. With Paperclip present, the panel can switch to Paperclip's own page in
@@ -232,7 +230,7 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Fallen Bridges for cross-project dependencies.
   - Keepers shown free or busy.
   - 3D first, using `3d/scene.js` and `hub.js`; 2D reads the same core.
-- **M4 Questions, decisions, safety.** Plus agent invocation (signed webhooks, polling fallback) and the in-game
+- **M4 Questions, decisions, safety.** Plus agent invocation (relay handshake, WebRTC channel, polling fallback) and the in-game
   agent controls.
   - Seal UI, True Sight and the outbox with recall.
   - Risk tiers and the never-in-game list.
