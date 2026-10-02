@@ -39,7 +39,9 @@ milestone's dungeon.**
   Sigils, trophies, league standings and season history live in the **save file** (state), not the lore files
   (lore and settings only).
 - **Save file safety** (user, 2026-10-03). **No encryption.** Every save file is loaded as a new copy: loading never
-  touches the original, so a bad session can't corrupt it. On top of that: atomic writes (temp file + rename), a
+  touches the original, so a bad session can't corrupt it. The new copy is then **updated from the source if it's present**
+  (Paperclip reachable): live work state (tasks, milestones, questions, outcomes) replaces whatever the save had,
+  while play state (position, items, settings) comes from the save. With no source, the copy plays as saved. On top of that: atomic writes (temp file + rename), a
   checksum, a schema version with migrations, and a signature so edits are detected (standings can also be
   re-checked against Paperclip outcomes). Built with saves in M8.
 - **In real life:** projects ship with the human in the loop at the right moments. Agents spend less time blocked,
