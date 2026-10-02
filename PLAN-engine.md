@@ -65,7 +65,7 @@ milestone's dungeon.**
 
 **Our own protocol.** The engine never talks to Paperclip directly. It speaks a Quest protocol (worlds, regions,
 halls, tasks, agents, questions, decisions, budgets, events). Paperclip is the first adapter, a new `source` plugin
-kind beside `provider`/`tool3d`/`tool2d` in `lib/plugins.js`; GitHub, Linear and Orbit can follow.
+kind beside `provider`/`tool3d`/`tool2d` in `lib/plugins.js`; other adapters (e.g. Linear, Orbit) can follow.
 - Every action and response carries a **mark**: status (sent → seen → working → answered → done / failed) and
   source (project, task, agent or player; real work or game-only).
 - One **unified status** for all projects (the Beacon: gold / amber / red), rolled up from per-region status.
@@ -151,15 +151,12 @@ Keepers, Lumi, the Ember Well and the Long Night.
 | Usage limit hit | **the Long Night** (already in the game) |
 
 ## Sources, schema and agents (2026-10-03)
-**Three sources behind one protocol** (`source` plugins); the game never knows which one is running:
+**Two sources behind one protocol** (no GitHub, user 2026-10-03) (`source` plugins); the game never knows which one is running:
 1. **Local Ledger** (default, free, offline, no account): tasks, milestones and questions stored in the browser
    (IndexedDB, as `public/net.js` already does for saves). Teammates sync with **Yjs** over WebRTC (multiplayer
    plan); **isomorphic-git** gives history and an optional push to any git host. Halls, Works and Riddles are made
    in game, through conversations and the planner NPC.
-2. **GitHub** (free): org = world, Project or repo = March, milestone = Sealed Hall, issues = Works, `needs-answer`
-   comments = Riddles, `blocked` label = blockers. Project custom fields (Size, Weight, Priority, Risk) are typed, so
-   GitHub enforces the schema; branch protection enforces "merging needs a human".
-3. **Paperclip** (optional): company = world, project = March, goals = Halls, issues = Works (see Design).
+2. **Paperclip** (optional): company = world, project = March, goals = Halls, issues = Works (see Design).
 
 **Schema enforcement.** Native fields first (goals/milestones, priority, status, parent). Then a small fixed label
 set (`size:S|M|L`, `weight:<n>`, `risk:high`, `quest:council`) where the source has no field. The adapter validates
@@ -179,7 +176,7 @@ each one is a sealed decision with a token readout.
 `GET /api/agents/work?agent=<id>` (pending tasks and sealed decisions) and `POST /api/agents/progress` (progress,
 results, new questions). Each agent gets a token when it registers. Any script, `curl` or agent framework can use it;
 connections are outgoing-only, so it works behind routers. No connector package, no webhooks, no WebRTC for agents.
-Work waits for the next poll (10–30 s), which is fine for agent work. Without the server, agents poll GitHub issues (the GitHub source as the queue), or the player relays work by hand
+Work waits for the next poll (10–30 s), which is fine for agent work. Without the server, the player relays work by hand
 through the `/work` page below.
 Push delivery (Socket.IO or WebRTC) can be added later behind the same endpoints if polling ever feels slow.
 **Manual relay page for browser-only play** (user, 2026-10-03): a `/work` route on the game site (works on GitHub
@@ -214,7 +211,7 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Move these out of `world.js` (`blocked`, `bfs`) and `3d/scene.js` (`free`, `tryMove`, the key map).
   - Both views import the core, and the 2D page moves to modules.
   - Done when both views play exactly as before.
-- **M1 Protocol + sources (read-only).** Local Ledger, GitHub and Paperclip adapters; schema validation and
+- **M1 Protocol + sources (read-only).** Local Ledger and Paperclip adapters; schema validation and
   repair-quest detection; agent registry (read-only); the Ledger panel and the Paperclip frame.
   - `lib/protocol.js` (types and marks) and a `source` plugin kind in `lib/plugins.js`.
   - `plugins/source/paperclip`, built on `lib/paperclip.js` (`snapshot`, goals, issues).
@@ -266,7 +263,7 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Pure real-time and pure turn-based as settings.
   - 2D parity for everything above.
 - **Later.**
-  - GitHub, Linear and Orbit sources.
+  - More sources (e.g. Linear, Orbit), if wanted.
   - Multiplayer with shared team state (PLAN-settlements Phase F).
   - Task sizing by agents.
 
@@ -276,7 +273,7 @@ In working sessions like today's (one focused build-and-test session each). Roug
 | Milestone | Sessions | Main risk |
 |---|---|---|
 | M0 Shared core | 1–2 | `world.js` is 1,527 lines of globals; moving it to modules without breaking 2D |
-| M1 Protocol + three sources | 3–4 | three adapters (Local Ledger, GitHub, Paperclip) mapping cleanly onto one schema |
+| M1 Protocol + two sources | 2–3 | two adapters (Local Ledger, Paperclip) mapping cleanly onto one schema |
 | M2 Lore runtime (Ink) | 2 | moving all hard-coded text without changing what players see |
 | M3 Map from protocol | 2–3 | laying out regions that grow and unfog nicely |
 | M4 Questions + safety + agents | 4–5 | the largest: many flows, write-back, scheduler, agent link; must be bulletproof |
@@ -285,9 +282,9 @@ In working sessions like today's (one focused build-and-test session each). Roug
 | M7 Sealed Halls as dungeons | 3–4 | generating puzzles that are actually fun |
 | M8 Progression | 2 | balancing difficulty against real work pace |
 | M9 More modes + 2D parity | 2–3 | doing everything twice in 2D |
-| **Total** | **~23–31** | |
+| **Total** | **~22–30** | |
 
-The first playable version of the full loop (work → questions → boss → hall) is M0–M6: about 16–22 sessions.
+The first playable version of the full loop (work → questions → boss → hall) is M0–M6: about 15–21 sessions.
 Art for bosses and halls, and how much tuning the fun needs, are the biggest unknowns; feel tuning can add 20–30%.
 
 ## Open questions (ask when their milestone comes up)
