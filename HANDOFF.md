@@ -4,7 +4,8 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## Next up
-**Read `PLAN-settlements.md` first.** It's the current plan, in phases A–F, and it supersedes the older items below.
+**Read `PLAN-settlements.md` and `PLAN-adventure.md` first.** Settlements is phases A–F. Adventure is the casual-player
+mode: a real game with no Claude Code needed, traditional game AI by default and WebLLM opt-in. Phase A comes first for both.
 1. **Phase A, lore foundation:** move today's story text into `lore/` with no visible change, then the lore loader,
    then the WebLLM storyteller (Ollama/Off as fallbacks). This also covers the old "editable names + project-aware lore".
 2. Then Phases B (Studio + saves), C (Settlements), D (GitHub), E (Android), F (multiplayer), in the plan's order.
@@ -20,6 +21,10 @@ Decisions made 2026-10-02 (details in the plan):
 - Multiplayer is invite-only over WebRTC with an MQTT relay fallback, never through git.
 
 Still open: the licence for shared lore and art in the marketplace.
+
+## Live on GitHub Pages (deployed 2026-10-02)
+Game: https://thenewurbankid-web.github.io/claude_quest/ · guide: /guide/ (from `site/index.html`).
+`.github/workflows/pages.yml` redeploys on every push to main.
 
 ## Hosted game link: built, committed in e5ee096
 - `public/net.js` has three modes:
