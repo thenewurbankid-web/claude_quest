@@ -70,13 +70,13 @@ Stars and Eastward for lighting). It keeps the Pokémon-GBA soul and looks premi
   - day/night, with `?time=night` etc. to jump to a time
   - tilt-shift and bloom
   - footsteps and a touch d-pad
-- **Placeholder shapes until the Ninja Adventure sprites arrive** (KayKit plan dropped, see Art direction). itch.io downloads can't be scripted (signed key), so the user
-  downloads the 4 KayKit packs + Quaternius Ultimate Monsters into ~/Downloads. Then unzip the glTF files into
-  `public/assets/3d/` and map roles in `manifest.json`:
-  - roles: player, claude, tree, house, center, board, mailbox, waystone
-  - optional `"scale": {role: n}`
+- **Placeholder shapes until the Ninja Adventure sprites arrive** (KayKit plan dropped, see Art direction). The user
+  downloads the pack into ~/Downloads, since itch.io downloads can't be scripted. Then:
+  - copy the sheets and tilesets the scene uses into `public/assets/`
+  - swap the placeholders for sprites
+  - credit the pack in `CREDITS.md`
 
-  Update `CREDITS.md`.
+  `public/assets/3d/manifest.json` was for glTF models. Replace it with a sprite map when sprites go in.
 - Downloaded and in the repo (CC0): Kenney Particle Pack subset, Kenney RPG Audio subset, Poly Haven Kloofendal sky 1k.
 - Next steps:
   - Ninja Adventure sprites and tiles (HD-2D)
