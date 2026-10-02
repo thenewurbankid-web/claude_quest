@@ -1,0 +1,430 @@
+<title>Quest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a handbook for a GBA-era fantasy game. Pixel display face for names only, a readable body face,
+   a live pixel overworld as the hero, then Guide → Docs → Roadmap as plain, scannable sections. */
+:root {
+  --bg: #eef2e4;        /* meadow at noon */
+  --surface: #fbfcf6;
+  --ink: #1f2a24;
+  --muted: #56665b;
+  --line: #d3dbc5;
+  --ember: #b9532f;     /* the Ember Well */
+  --waystone: #2f62a6;
+  --ok: #3b7d3f;
+  --plan: #8a6d1c;
+  --box: #ffffff;
+  --box-ink: #262630;
+  --box-sub: #7a7a8a;
+  --display: "Silkscreen", ui-monospace, monospace;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12162a; --surface: #1a1f37; --ink: #e9e7f3; --muted: #a2a7c2; --line: #2b3253;
+    --ember: #f08a5d; --waystone: #93b6f2; --ok: #7fcf83; --plan: #e2c36a;
+    --box: #f4f4f8; --box-ink: #262630; --box-sub: #6e6e80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12162a; --surface: #1a1f37; --ink: #e9e7f3; --muted: #a2a7c2; --line: #2b3253;
+  --ember: #f08a5d; --waystone: #93b6f2; --ok: #7fcf83; --plan: #e2c36a;
+  --box: #f4f4f8; --box-ink: #262630; --box-sub: #6e6e80;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body); }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 20px; }
+a { color: var(--waystone); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--ember); outline-offset: 2px; border-radius: 2px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; }
+h2 { font: 400 26px/1.2 var(--display); letter-spacing: .02em; margin: 0 0 8px; }
+h3 { font: 700 19px/1.3 var(--body); margin: 0 0 6px; }
+p { margin: 0; max-width: 65ch; }
+code, kbd, pre { font-family: var(--mono); font-size: .86em; }
+code { background: var(--surface); border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px; }
+kbd { display: inline-block; min-width: 1.9em; text-align: center; padding: 1px 6px; border: 1px solid var(--line);
+  border-bottom-width: 3px; border-radius: 4px; background: var(--surface); font-weight: 600; }
+.lede { color: var(--muted); }
+.eyebrow { font: 400 12px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--ember); }
+
+/* nav */
+nav.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  border-bottom: 1px solid var(--line); }
+nav.top .wrap { display: flex; align-items: center; gap: 20px; padding-block: 10px; flex-wrap: wrap; }
+nav.top .brand { font: 400 20px var(--display); color: var(--ink); text-decoration: none; margin-right: auto; }
+nav.top .brand span { color: var(--ember); }
+nav.top a.l { color: var(--muted); text-decoration: none; font-weight: 700; font-size: 15px; }
+nav.top a.l:hover { color: var(--ink); }
+
+/* hero */
+header.hero { padding-block: 40px 28px; display: grid; grid-template-columns: 1.05fr 1fr; gap: 36px; align-items: center; }
+header.hero > div { min-width: 0; display: grid; gap: 16px; }
+header.hero h1 { font: 400 clamp(44px, 8vw, 72px)/1 var(--display); margin: 0; letter-spacing: .01em; }
+header.hero h1 span { color: var(--ember); }
+.tagline { font-size: 21px; line-height: 1.45; }
+.status { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1.5px solid currentColor; }
+.chip.ok { color: var(--ok); } .chip.plan { color: var(--plan); }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; font: 700 15px var(--body);
+  border-radius: 6px; text-decoration: none; border: 2px solid var(--ink); color: var(--ink); background: transparent; }
+.btn.primary { background: var(--ink); color: var(--bg); }
+.screen { position: relative; border: 4px solid var(--ink); border-radius: 10px; background: #0d1020; padding: 10px;
+  box-shadow: 0 0 0 4px var(--bg), 0 0 0 6px var(--line); }
+.screen canvas { display: block; width: 100%; aspect-ratio: 240 / 160; image-rendering: pixelated; border-radius: 3px; }
+.screen .cap { font: 400 10px var(--display); color: #9aa0bd; letter-spacing: .1em; text-align: center; margin-top: 8px; }
+
+section { padding-block: 44px; border-top: 1px solid var(--line); display: grid; gap: 22px; }
+section > header { display: grid; gap: 6px; }
+
+/* the dialog box, as the game draws it */
+.dlg { background: var(--box); color: var(--box-ink); border: 3px solid #4a4a5a; border-radius: 6px;
+  box-shadow: inset 0 0 0 2px #d0d0dc; padding: 14px 18px; font: 400 15px/1.55 var(--display); max-width: 560px; }
+.dlg .sub { display: block; margin-top: 6px; font: 400 13px/1.4 var(--mono); color: var(--box-sub); }
+.dlgs { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+
+/* tables */
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font: 400 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+td.lore { font-weight: 700; white-space: nowrap; }
+
+/* guide steps: a real sequence, so numbered */
+ol.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; counter-reset: s; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 40px 1fr; gap: 14px; }
+ol.steps > li::before { content: counter(s); font: 400 16px var(--display); color: var(--bg); background: var(--ember);
+  width: 34px; height: 34px; display: grid; place-items: center; border-radius: 4px; }
+ol.steps > li > div { min-width: 0; display: grid; gap: 6px; }
+pre { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px;
+  overflow-x: auto; position: relative; }
+.copy { position: absolute; top: 6px; right: 6px; font: 700 12px var(--body); padding: 3px 9px; border-radius: 4px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted); cursor: pointer; }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 26px 32px; }
+.cols > div { min-width: 0; display: grid; gap: 6px; align-content: start; }
+.cols ul { margin: 0; padding-left: 20px; color: var(--muted); }
+.note { border-left: 4px solid var(--waystone); padding: 10px 14px; background: var(--surface); border-radius: 0 6px 6px 0; max-width: 72ch; }
+.rules { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.rules li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; }
+.rules li::before { content: "◆"; color: var(--ember); }
+
+/* roadmap */
+.phases { display: grid; gap: 10px; }
+.phase { display: grid; grid-template-columns: 54px 1fr auto; gap: 14px; align-items: start; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.phase .k { font: 400 22px var(--display); color: var(--ember); }
+.phase > div { min-width: 0; }
+.phase p { color: var(--muted); font-size: 15px; }
+
+footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var(--muted); font-size: 14px; display: grid; gap: 6px; }
+
+@media (max-width: 760px) {
+  header.hero { grid-template-columns: 1fr; padding-block: 24px; }
+  nav.top .wrap { gap: 14px; }
+  .phase { grid-template-columns: 40px 1fr; }
+  .phase .chip { grid-column: 2; justify-self: start; }
+  td.lore { white-space: normal; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<nav class="top" aria-label="Sections">
+  <div class="wrap">
+    <a class="brand" href="#top">Que<span>s</span>t</a>
+    <a class="l" href="#how">How it works</a>
+    <a class="l" href="#guide">Guide</a>
+    <a class="l" href="#docs">Docs</a>
+    <a class="l" href="#roadmap">Roadmap</a>
+  </div>
+</nav>
+
+<main class="wrap" id="top">
+  <header class="hero">
+    <div>
+      <span class="eyebrow">A game for Claude Code</span>
+      <h1>Que<span>s</span>t</h1>
+      <p class="tagline">Your projects become towns. Your Claude sessions walk their streets. Blockers become bosses, and
+        questions arrive as riddles you answer in game.</p>
+      <div class="status">
+        <span class="chip ok">Playable on your Mac</span>
+        <span class="chip plan">Hosted &amp; phone play: coming</span>
+      </div>
+      <div class="cta">
+        <a class="btn primary" href="#guide">Start playing</a>
+        <a class="btn" href="https://github.com/thenewurbankid-web/claude_quest">Source on GitHub</a>
+      </div>
+    </div>
+    <div class="screen" aria-label="An animated overworld: three town houses around the Ember Well, Claudes walking the road, and a Sphinx waiting with a riddle.">
+      <canvas id="world" width="240" height="160"></canvas>
+      <div class="cap">240 × 160 · drawn in code</div>
+    </div>
+  </header>
+
+  <section id="how">
+    <header>
+      <span class="eyebrow">How it works</span>
+      <h2>A fantasy world on top of real work</h2>
+      <p class="lede">Quest reads what your Claude Code sessions are doing from files on your Mac: transcripts, git and
+        project docs. It turns that into a world. Every line reads like a standalone game, and the real fact sits
+        underneath in grey.</p>
+    </header>
+    <div class="dlgs">
+      <div class="dlg">The Red Golem grows stronger. Three trials have failed!
+        <span class="sub">npm test failed 3× · claude-quest</span></div>
+      <div class="dlg">The Waiting Sphinx asks: shall the old bridge be rebuilt, or a new one raised?
+        <span class="sub">Claude: "fresh session or /compact?"</span></div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>In the world</th><th>What it really is</th></tr></thead>
+        <tbody>
+          <tr><td class="lore">Lands &amp; towns</td><td>A git repo under <code>~/Repositories</code> that you chart, up to five</td></tr>
+          <tr><td class="lore">Claudes</td><td>Your Claude Code sessions. Worktrees appear as camps outside town</td></tr>
+          <tr><td class="lore">The Waiting Sphinx</td><td>A session waiting on your answer</td></tr>
+          <tr><td class="lore">The Red Golem</td><td>The same check failing twice or more in a row</td></tr>
+          <tr><td class="lore">The Ouroboros Wyrm</td><td>A session repeating itself</td></tr>
+          <tr><td class="lore">The Stalling Fog</td><td>A session that went silent mid-step</td></tr>
+          <tr><td class="lore">The Long Night</td><td>A usage limit. Dawn is its reset time</td></tr>
+          <tr><td class="lore">Lumi, the courier</td><td>New events and finished work arriving</td></tr>
+          <tr><td class="lore">The Guild Hall</td><td>Paperclip, if you run it: quests become issues assigned to agents</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="guide">
+    <header>
+      <span class="eyebrow">Guide</span>
+      <h2>Start playing</h2>
+      <p class="lede">You need macOS, Node.js and Claude Code. Ollama is optional; it writes the story. Without it, Quest
+        uses built-in lines.</p>
+    </header>
+    <ol class="steps">
+      <li><div>
+        <h3>Get the game</h3>
+        <pre><button class="copy" type="button">Copy</button>git clone https://github.com/thenewurbankid-web/claude_quest.git ~/Repositories/claude-quest
+cd ~/Repositories/claude-quest &amp;&amp; npm install</pre>
+      </div></li>
+      <li><div>
+        <h3>Make your config</h3>
+        <pre><button class="copy" type="button">Copy</button>cp config.example.json config.json</pre>
+        <p class="lede">It holds the server, story-model and scan settings. Your lands are charted in game, not here.</p>
+      </div></li>
+      <li><div>
+        <h3>Connect it to Claude Code (once)</h3>
+        <pre><button class="copy" type="button">Copy</button>npm run install-hook</pre>
+        <p class="lede">This adds Quest's hooks to <code>~/.claude/settings.json</code> and keeps a backup first. The hooks
+          deliver your answers to a working session and make STOP work.</p>
+      </div></li>
+      <li><div>
+        <h3>Start the world</h3>
+        <pre><button class="copy" type="button">Copy</button>npm start</pre>
+        <p class="lede">Open <a href="http://localhost:4777">localhost:4777</a>. Choose New Game and Warden Ash
+          will meet you. Your first land is the game itself.</p>
+      </div></li>
+      <li><div>
+        <h3>Chart your projects</h3>
+        <p class="lede">Talk to the Cartographer in the hub and pick a repo. It appears as a new town on the map. You can
+          rename it, recolour it and give it notes in the Map Room (<code>/settings</code>).</p>
+      </div></li>
+    </ol>
+
+    <h3>Controls</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Key</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Walk. Tap once to turn</td></tr>
+          <tr><td><kbd>Z</kbd> or <kbd>Space</kbd></td><td>Talk, read, open</td></tr>
+          <tr><td><kbd>Enter</kbd> or <kbd>Esc</kbd></td><td>Start menu. In a text box: Enter sends, Esc goes back</td></tr>
+          <tr><td><kbd>M</kbd></td><td>Town Map. Arrows jump between places, <kbd>Z</kbd> warps to an attuned Waystone</td></tr>
+          <tr><td><kbd>N</kbd></td><td>Minimap on or off</td></tr>
+          <tr><td><kbd>L</kbd></td><td>Letters and events</td></tr>
+          <tr><td>Touch</td><td>On-screen d-pad and buttons. Tap a choice to pick it</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Your first riddle</h3>
+    <p>When a Claude asks you something, a Sphinx appears in its town and the courier brings word. Walk up, press
+      <kbd>Z</kbd> and choose an answer or write your own. Quest never answers for you. Your answer is sent to Claude as
+      the original option text, not the story version.</p>
+  </section>
+
+  <section id="docs">
+    <header>
+      <span class="eyebrow">Docs</span>
+      <h2>Reference</h2>
+    </header>
+    <div class="cols">
+      <div>
+        <h3>Three ways to play</h3>
+        <ul>
+          <li><b>Local:</b> <code>npm start</code> on your Mac, then play at <code>localhost:4777</code>. Everything is live.</li>
+          <li><b>Linked:</b> a hosted copy of the game paired with your Mac over an end-to-end encrypted link. Turn it on with
+            <code>CQ_LINK=1 npm start</code>, then open the pairing link it prints. <i>The hosted page isn't published yet.</i></li>
+          <li><b>Browser:</b> nothing linked. You play on your last saved world in this browser. Actions wait until a link exists.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>The Map Room (<code>/settings</code>)</h3>
+        <ul>
+          <li>Each land's name, colour and notes. The storyteller reads your notes.</li>
+          <li>Sound, music, autoplay delay, subtext on or off</li>
+          <li>Minimap position and size</li>
+          <li>Pairing, saves, export and import, checkpoints</li>
+        </ul>
+      </div>
+      <div>
+        <h3>The Guild Hall</h3>
+        <ul>
+          <li>Post a quest, send word, call off a quest, send the guild home</li>
+          <li>Runs on <a href="https://github.com/paperclipai">Paperclip</a> at <code>127.0.0.1:3100</code> when it's up</li>
+          <li>When it's down, the hall shows "closed" and the rest of the world still plays</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Where your data lives</h3>
+        <ul>
+          <li><code>data/</code>: your save, inbox and events. Git-ignored. Never reset it, because the inbox holds your real answers.</li>
+          <li><code>config.json</code>: local settings, git-ignored</li>
+          <li><code>areas/&lt;id&gt;.md</code>: your notes for each land</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>What costs tokens</h3>
+    <div class="note">
+      <p>The world itself costs nothing. It's built from files and narrated by a local model. Claude tokens are spent only on
+        work you send: delivering answers to a session that has stopped, posting a Guild quest, or sending word to an agent.
+        The game asks before each of these.</p>
+    </div>
+
+    <h3>House rules</h3>
+    <ul class="rules">
+      <li>Quest never answers a question on your behalf, even on autoplay.</li>
+      <li>Your Mac never accepts incoming connections. The link only connects outward.</li>
+      <li>What leaves the Mac in linked mode is what the game shows, without document contents or run prompts.</li>
+      <li>The storyteller turns facts into lore. It never invents progress.</li>
+    </ul>
+  </section>
+
+  <section id="roadmap">
+    <header>
+      <span class="eyebrow">Roadmap</span>
+      <h2>What's coming</h2>
+      <p class="lede">These are planned, not built yet. Each phase ships on its own.</p>
+    </header>
+    <div class="phases">
+      <div class="phase"><span class="k">A</span><div><h3>Lore files</h3><p>All story moves into markdown lore files you can edit. A storyteller runs in your browser by default, with Ollama or none as options.</p></div><span class="chip plan">Next</span></div>
+      <div class="phase"><span class="k">B</span><div><h3>Lore Studio</h3><p>One page to edit the world, characters and bosses. Download and replace pixel art one asset or one sheet at a time. Manage save slots and backups.</p></div><span class="chip plan">Planned</span></div>
+      <div class="phase"><span class="k">C</span><div><h3>Settlements</h3><p>Each land grows by its project type: artisan cities, trade ports, mining valleys, forge holds. Resources, ages, a tech tree and a treasury ledger. Gold comes from finished work, never from spending tokens.</p></div><span class="chip plan">Planned</span></div>
+      <div class="phase"><span class="k">D</span><div><h3>GitHub</h3><p>Private cloud saves, the Quest Marketplace for sharing lore packs, and shared quest boards.</p></div><span class="chip plan">Planned</span></div>
+      <div class="phase"><span class="k">E</span><div><h3>Android</h3><p>Phone layout, install to home screen, notifications when a riddle or boss appears.</p></div><span class="chip plan">Planned</span></div>
+      <div class="phase"><span class="k">F</span><div><h3>Play together</h3><p>Invite teammates to a shared land over a direct connection (QR invite), with an encrypted relay as fallback. Nobody can spend another player's tokens.</p></div><span class="chip plan">Planned</span></div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>Quest is an independent project for Claude Code users. Source: <a href="https://github.com/thenewurbankid-web/claude_quest">thenewurbankid-web/claude_quest</a>.</span>
+  <span>Fantasy lore: the Ember Well, Waystones, Rifts and the Long Night.</span>
+</footer>
+
+<script>
+// Copy buttons
+document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
+  const pre = b.parentElement, text = [...pre.childNodes].filter(n => n !== b).map(n => n.textContent).join('').trim();
+  const done = ok => { b.textContent = ok ? 'Copied' : 'Select'; setTimeout(() => b.textContent = 'Copy', 1400); };
+  try { navigator.clipboard.writeText(text).then(() => done(true), () => { selectIn(pre); done(false); }); }
+  catch { selectIn(pre); done(false); }
+}));
+function selectIn(el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+
+// The hero overworld, 240×160 like a GBA screen, drawn with rectangles as the game does.
+(() => {
+  const c = document.getElementById('world'), g = c.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const p = (col, x, y, w = 1, h = 1) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(7);
+  const tufts = Array.from({ length: 70 }, () => [rnd() * 240 | 0, rnd() * 160 | 0]);
+  const flowers = Array.from({ length: 22 }, () => [rnd() * 240 | 0, rnd() * 160 | 0, rnd() < .5 ? '#e05050' : '#f0d040']);
+
+  function ground() {
+    p('#88d070', 0, 0, 240, 160);
+    for (const [x, y] of tufts) { p('#68b850', x, y, 1, 2); p('#68b850', x + 2, y + 1); }
+    // roads (2 tiles wide) to the well
+    p('#d8c088', 0, 88, 240, 16); p('#d8c088', 112, 0, 16, 160);
+    p('#c8b078', 0, 103, 240, 1); p('#c8b078', 127, 0, 1, 160);
+    for (const [x, y, col] of flowers) if (!(y > 84 && y < 106) && !(x > 108 && x < 130)) { p(col, x, y, 2, 2); p('#fff8c0', x, y); }
+    // trees along the top edge
+    for (let x = 0; x < 240; x += 16) if (x < 104 || x > 128) tree(x, 0);
+  }
+  function tree(x, y) { p('#2f7a3a', x + 2, y + 1, 12, 10); p('#3f9a48', x + 3, y + 2, 9, 6); p('#245f2d', x + 2, y + 9, 12, 2); p('#7a5230', x + 7, y + 11, 3, 4); }
+  function house(x, y, roof, sign) {
+    p('#00000030', x + 2, y + 30, 36, 3);
+    p(roof, x, y, 40, 12); p(shade(roof, .75), x, y + 10, 40, 2); p(shade(roof, 1.2), x + 2, y + 2, 36, 2);
+    p('#f0e8d8', x + 3, y + 12, 34, 18); p('#d8ccb8', x + 3, y + 28, 34, 2);
+    p('#7a5230', x + 16, y + 19, 8, 11); p('#e8c040', x + 22, y + 24);
+    p('#78a8d8', x + 6, y + 16, 6, 5); p('#78a8d8', x + 28, y + 16, 6, 5);
+    if (sign) { p('#5a4030', x + 13, y + 13, 14, 5); }
+  }
+  function shade(hex, k) { const n = parseInt(hex.slice(1), 16), ch = s => Math.max(0, Math.min(255, ((n >> s) & 255) * k | 0)); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; }
+  function well(t) {
+    const glow = reduce ? .5 : .5 + .5 * Math.sin(t / 380);
+    g.fillStyle = `rgba(255,170,80,${.18 + .2 * glow})`; g.beginPath(); g.arc(120, 96, 15 + 3 * glow, 0, 7); g.fill();
+    p('#8a8a9a', 110, 90, 20, 12); p('#a8a8b8', 110, 90, 20, 3); p('#6a6a7a', 110, 100, 20, 2);
+    p('#ff9a40', 114, 92, 12, 6); p('#ffd070', 117, 93, 6, 3);
+    if (!reduce) for (let i = 0; i < 3; i++) { const k = ((t / 900 + i / 3) % 1); p(`rgba(255,200,110,${1 - k})`, 116 + i * 4, 90 - k * 16, 1, 1); }
+  }
+  function claude(x, y, step, col) {
+    const b = step ? 1 : 0;
+    p('#00000030', x + 3, y + 15, 10, 2);
+    p(col, x + 3, y + 6 + b, 10, 7); p(shade(col, .8), x + 3, y + 12 + b, 10, 1);
+    p('#f0c8a0', x + 4, y + 1 + b, 8, 6); p('#3a2a20', x + 4, y + b, 8, 2);
+    p('#202020', x + 6, y + 3 + b); p('#202020', x + 9, y + 3 + b);
+    p('#404050', x + 4 + (step ? 0 : 1), y + 13, 3, 2); p('#404050', x + 9 - (step ? 0 : 1), y + 13, 3, 2);
+  }
+  function sphinx(x, y, t) {
+    p('#00000030', x + 1, y + 17, 22, 3);
+    p('#c8a048', x + 2, y + 8, 20, 9); p('#e0b858', x + 14, y + 2, 9, 9); p('#3a2a1a', x + 17, y + 5); p('#3a2a1a', x + 20, y + 5);
+    p('#5878c8', x + 13, y + 1, 11, 3); p('#a08038', x + 2, y + 15, 20, 2);
+    const bob = reduce ? 0 : Math.round(Math.sin(t / 260) * 1.5);
+    p('#ffffff', x + 6, y - 11 + bob, 9, 10); p('#262630', x + 6, y - 11 + bob, 9, 1); p('#262630', x + 6, y - 2 + bob, 9, 1);
+    p('#262630', x + 5, y - 10 + bob, 1, 8); p('#262630', x + 15, y - 10 + bob, 1, 8);
+    p('#e05050', x + 9, y - 9 + bob, 3, 1); p('#e05050', x + 11, y - 8 + bob, 1, 2); p('#e05050', x + 10, y - 6 + bob, 1, 1); p('#e05050', x + 10, y - 4 + bob, 1, 1);
+  }
+  const walkers = [
+    { path: [[-16, 88], [104, 88], [104, 140], [104, 88], [-16, 88]], col: '#d97757', s: 0 },
+    { path: [[248, 88], [140, 88], [112, 88], [112, 24], [112, 88], [248, 88]], col: '#5878c8', s: .35 },
+    { path: [[112, 168], [112, 110], [60, 110], [112, 110], [112, 168]], col: '#58a868', s: .6 },
+  ];
+  function at(w, t) {
+    const pts = w.path, seg = [];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(d); total += d; }
+    let d = ((t / 40 + w.s * total) % total);
+    for (let i = 0; i < seg.length; i++) { if (d <= seg[i]) { const k = d / seg[i]; return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k]; } d -= seg[i]; }
+    return pts[0];
+  }
+  function frame(t) {
+    ground();
+    house(20, 44, '#e0a84f', true); house(170, 44, '#7a8fd0', true); house(160, 118, '#c05050', false); house(30, 120, '#58a868', false);
+    well(t);
+    sphinx(196, 130, t);
+    const ws = walkers.map(w => { const [x, y] = at(w, reduce ? 900 : t); return { x: Math.round(x), y: Math.round(y), col: w.col }; }).sort((a, b) => a.y - b.y);
+    for (const w of ws) claude(w.x, w.y - 4, !reduce && Math.floor(t / 180) % 2, w.col);
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
