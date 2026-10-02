@@ -275,6 +275,9 @@ pauses, "ask me later" always available, answers never affect combat power); sco
 release); prompt injection from task text and pasted results (treat as data, NPC LLM gets no tools); Local Ledger
 loss when browser data is cleared (autosave plus a "download your save" nudge); missing art (Tanglers, Gloamwyrm,
 Wardens, dungeon kits); 2D + 3D doubles view work; Paperclip API drift (read only the fields we need).
+**"Ask me later" counts as an answer** (user): in a boss fight or a Riddle, deferring is a valid response; it lands
+the hit and clears the item for now, marked `deferred`. The item returns after a delay set in the lore rules, and its
+weight keeps growing with age, so deferring everything can't dodge the next boss.
 Gaps to design: agents claiming work (a renewable claim that lapses when an agent goes quiet); who accepts a
 milestone without Paperclip (a sealed decision that breaks the Hall's seal); team conflicts (sealed decisions need
 one authority, the shared ledger only merges); notifications when the game is closed; local counters for the success
