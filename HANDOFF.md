@@ -3,7 +3,22 @@
 **New session, start here.** Run with `npm start` (http://localhost:4777) or the `claude-quest` preview config.
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
-## NEXT SESSION START HERE: polish (user, 2026-10-02 night)
+## NEXT SESSION START HERE: smooth buildings + an asset editor (user, 2026-10-02 late night)
+- Done this session (on `3d-world`, not pushed): Nunito text (b3ed7fb), moonlight (4d43d2d), Sunnyside pixel houses
+  folded like cards + the Lodge as the big orange house (d1b5b39), the Sunnyside stone well (6a39309).
+- **Then the user changed direction:** the pixel houses "don't match other assets". Buildings should be **smooth
+  stylized 3D** to match the KayKit people; the ground and trees stay pixel art. This replaces the pixel houses and
+  well above, but keep `folded()` in sunnyside.js as the fallback.
+- **Uncommitted, untested:** a richer ground painter in `public/3d/sunnyside.js` `ground()` (grass variants, ragged
+  road fringe, flower/tuft decals; `LOOK.ground.flowers/tufts`). It has two unused leftover variables (`px`,
+  `grassRGB`). Run it and check it, then commit or drop it.
+- **Asked for: an asset editor** in the game. It should show the full sprite sheet and all 3D assets, get assets
+  from packs (e.g. KayKit Medieval Hexagon, CC0, 33 MB, kaylousberg.itch.io; not downloaded, needs the user's yes),
+  generate assets locally or in the cloud through connectors, and import and export. Scope it into steps first
+  (viewer → import/export → place in world → generation). It could grow out of the existing Sprite Lab artifact.
+  The saved preference is real assets first and minimal AI generation, so ask how generation should fit.
+
+## polish (user, 2026-10-02 night)
 The user wants it polished "like a Zelda or Pokémon game", with readable text that isn't pixelated.
 - **"Not pixelated" means the text only** (user: "no just text"). The world stays Sunnyside pixel art, and the people
   stay 3D (KayKit). Do NOT move the world to 3D. That was proposed and declined.
