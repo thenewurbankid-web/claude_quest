@@ -12,5 +12,10 @@ mkdir -p dist/guide
 { printf '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n'
   cat site/index.html
   printf '\n</body>\n</html>\n'; } > dist/guide/index.html
+cp public/art.js dist/guide/art.js
+# Three.js for the 2.5D preview (3d.html): the core build plus the addons it imports.
+mkdir -p dist/vendor/three/build dist/vendor/three/examples/jsm
+cp node_modules/three/build/three.module.js node_modules/three/build/three.core.js dist/vendor/three/build/
+for d in loaders postprocessing shaders utils; do cp -R node_modules/three/examples/jsm/$d dist/vendor/three/examples/jsm/; done
 touch dist/.nojekyll
 echo "built dist/ ($(ls dist | wc -l | tr -d ' ') files)"

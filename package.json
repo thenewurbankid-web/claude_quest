@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "mqtt": "^5.16.0",
-    "phaser": "^3.90.0"
+    "phaser": "^3.90.0",
+    "three": "^0.186.1"
   },
   "main": "app.js"
 }

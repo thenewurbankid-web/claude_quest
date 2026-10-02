@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quest · 2.5D preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; background: #10131f; overflow: hidden; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .hud { position: fixed; left: max(16px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top));
+    font: 600 15px 'Pixelify Sans', ui-monospace, monospace; color: #fff; letter-spacing: .02em;
+    text-shadow: 0 1px 2px rgba(0,0,0,.5); display: grid; gap: 2px; pointer-events: none; }
+  .hud small { font: 400 12px system-ui, sans-serif; opacity: .75; }
+  .hint { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom));
+    font: 400 13px system-ui, sans-serif; color: #fff; background: rgba(16,19,31,.45); padding: 6px 12px;
+    border-radius: 999px; backdrop-filter: blur(6px); pointer-events: none; white-space: nowrap; }
+  .pad { position: fixed; right: 20px; bottom: 56px; display: none; grid-template: repeat(3, 52px) / repeat(3, 52px); gap: 4px; }
+  .pad button { border: 0; border-radius: 12px; background: rgba(255,255,255,.18); color: #fff; font: 600 20px system-ui;
+    backdrop-filter: blur(6px); touch-action: none; }
+  @media (pointer: coarse) { .pad { display: grid; } .hint { display: none; } }
+  .veil { position: fixed; inset: 0; background: #10131f; transition: opacity .8s ease; pointer-events: none; }
+  body.ready .veil { opacity: 0; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/build/three.module.js", "three/addons/": "./vendor/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div class="hud"><span id="time">Ember Hollow</span><small id="models">Loading…</small></div>
+<div class="hint">Arrows or WASD to walk · T speeds up time</div>
+<div class="pad" aria-label="Movement">
+  <span></span><button data-dir="up" aria-label="Up">▲</button><span></span>
+  <button data-dir="left" aria-label="Left">◀</button><span></span><button data-dir="right" aria-label="Right">▶</button>
+  <span></span><button data-dir="down" aria-label="Down">▼</button><span></span>
+</div>
+<div class="veil"></div>
+<script type="module" src="3d/scene.js"></script>
+</body>
+</html>

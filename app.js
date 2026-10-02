@@ -458,7 +458,10 @@ const body = req => new Promise((ok, fail) => {
 const send302 = (res, to) => { res.writeHead(302, { location: to }); res.end(); };
 const send = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
 const findDecision = (pid, id) => world.towns.find(t => t.id === pid)?.decisions.find(d => d.id === id);
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json',
+  '.hdr': 'application/octet-stream', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream',
+  '.ogg': 'audio/ogg', '.jpg': 'image/jpeg', '.md': 'text/markdown' };
+const THREE_DIR = path.join(__dirname, 'node_modules', 'three');
 
 const routes = {
   'GET /api/world': (req, res) => send(res, 200, world),
@@ -722,6 +725,14 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/phaser.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
       return fs.createReadStream(require.resolve('phaser/dist/phaser.min.js')).pipe(res);
+    }
+    // Three.js for the 2.5D view: /vendor/three/build/* and /vendor/three/examples/jsm/* straight from node_modules.
+    if (url.pathname.startsWith('/vendor/three/')) {
+      const f = path.join(THREE_DIR, path.normalize(url.pathname.slice('/vendor/three/'.length)));
+      if (!f.startsWith(path.join(THREE_DIR, 'build')) && !f.startsWith(path.join(THREE_DIR, 'examples', 'jsm'))) return send(res, 404, { error: 'not found' });
+      if (!fs.existsSync(f)) return send(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      return fs.createReadStream(f).pipe(res);
     }
     const file = path.join(PUBLIC, url.pathname === '/' ? 'index.html' : path.normalize(url.pathname));
     if (!file.startsWith(PUBLIC) || !fs.existsSync(file)) return send(res, 404, { error: 'not found' });
