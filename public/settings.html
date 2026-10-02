@@ -42,7 +42,7 @@
 <body>
 <main>
   <h1>The Map Room</h1>
-  <p class="lead">Settings for Claude Quest. Changes reach the game on its next scan. <a href="/" style="color:#a8c8ff">Back to the game</a></p>
+  <p class="lead">Settings for Claude Quest. Changes reach the lands on the next scan. <a href="./" style="color:#a8c8ff">Back to the lands</a></p>
 
   <section class="box" aria-labelledby="lands-h">
     <h2 id="lands-h">Charted lands <small id="lands-count"></small></h2>
@@ -60,7 +60,7 @@
   </section>
 
   <section class="box" aria-labelledby="game-h">
-    <h2 id="game-h">Game</h2>
+    <h2 id="game-h">Journey</h2>
     <div class="grid">
       <label><input type="checkbox" id="sound"> Sound effects</label>
       <label><input type="checkbox" id="music"> Music (follows each land's mood)</label>
@@ -74,23 +74,48 @@
     <div class="status" id="game-status" role="status"></div>
   </section>
 
+  <section class="box" aria-labelledby="save-h">
+    <h2 id="save-h">Your save <small>kept in this browser</small></h2>
+    <div class="row" id="mode"></div>
+    <div class="row">
+      <button id="export">Export save file</button>
+      <label class="ghost" style="cursor:pointer"><input type="file" id="import" accept=".json,application/json" hidden><span class="tag" style="background:var(--frame);font-size:15px;padding:6px 14px">Import save file</span></label>
+    </div>
+    <div class="row"><input type="text" id="cp-name" placeholder="Checkpoint name (optional)" aria-label="Checkpoint name"><button id="checkpoint">Save checkpoint</button></div>
+    <div id="cps"></div>
+    <div class="status" id="save-status" role="status"></div>
+  </section>
+
+  <section class="box" aria-labelledby="link-h">
+    <h2 id="link-h">Link to your Mac <small>end-to-end encrypted, outgoing only</small></h2>
+    <p class="sub">Run <code>npm start</code> in claude-quest with the link on; it prints a pairing link. Open it here, or paste it below. The key stays in this browser.</p>
+    <div class="row"><input type="text" id="code" placeholder="Pairing link or code" aria-label="Pairing link or code"><button id="pair">Pair</button><button class="danger" id="unlink" hidden>Unlink</button></div>
+    <div class="status" id="link-status" role="status"></div>
+  </section>
+
   <section class="box" aria-labelledby="guild-h">
     <h2 id="guild-h">Guild Hall <small>Paperclip</small></h2>
     <div id="guild"></div>
   </section>
 </main>
+<script src="mqtt.min.js"></script>
+<script src="linkcrypto.js"></script>
+<script src="net.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; });
+const post = (url, body) => Net.post(url, body).then(j => { if (j?.error) throw new Error(j.error); return j; });
+const get = url => Net.get(url);
 const status = (el, text, err) => { el.textContent = text; el.classList.toggle('err', !!err); if (!err) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 3000); };
 const home = p => p.replace(/^\/Users\/[^/]+/, '~');
 
 async function load() {
-  const [world, { areas }, repos] = await Promise.all([fetch('/api/world').then(r => r.json()), fetch('/api/areas').then(r => r.json()), fetch('/api/repos').then(r => r.json())]);
+  await saves();
+  const world = Net.world;
+  const [{ areas = [] }, repos] = await Promise.all([get('/api/areas'), get('/api/repos')]);
   const live = areas.filter(a => !a.retiredAt);
   $('lands-count').textContent = `${live.length} of ${repos.max}`;
-  const notes = await Promise.all(live.map(a => fetch(`/api/notes?id=${encodeURIComponent(a.id)}`).then(r => r.json())));
+  const notes = await Promise.all(live.map(a => get(`/api/notes?id=${encodeURIComponent(a.id)}`)));
   $('lands').innerHTML = live.length ? live.map((a, i) => `
     <div class="land" data-id="${esc(a.id)}">
       <div class="row">
@@ -126,7 +151,7 @@ async function load() {
   const agent = g.agents?.[0];
   $('guild').innerHTML = g.up
     ? `<div class="row"><span class="tag ok">open</span> ${agent ? `${esc(agent.name)} is <b>${esc(agent.status)}</b>` : 'No guild agent yet'} · ${(g.issues || []).length} recent quest(s) · ${(g.liveRuns || []).length} running</div>
-       <p class="sub">Post and stop quests from the Guild Hall in the game (the Clerk, or Enter → Guild Hall). Paperclip's own board is at <a href="http://127.0.0.1:3100" target="_blank" rel="noopener">127.0.0.1:3100</a>.</p>`
+       <p class="sub">Post and stop quests from the Guild Hall in the Claude Center (the Clerk, or Enter → Guild Hall). Paperclip's own board is at <a href="http://127.0.0.1:3100" target="_blank" rel="noopener">127.0.0.1:3100</a>.</p>`
     : `<div class="row"><span class="tag bad">closed</span> Paperclip isn't answering at 127.0.0.1:3100.</div>`;
 }
 
@@ -163,7 +188,33 @@ $('save-game').addEventListener('click', async () => {
   catch (e) { status($('game-status'), e.message, true); }
 });
 
-load().catch(e => { document.querySelector('main').insertAdjacentHTML('beforeend', `<p style="color:#f88">Couldn't reach the game server: ${esc(e.message)}</p>`); });
+// ---------- the save and the link ----------
+async function saves() {
+  const mode = Net.mode, cps = await Saves.checkpoints();
+  $('mode').innerHTML = { local: '<span class="tag ok">local</span> Served by Claude Quest on this Mac.', linked: `<span class="tag ok">linked</span> Paired with your Mac over an encrypted link · ${esc(Link.status)}`, browser: '<span class="tag">browser only</span> Playing on the save in this browser. Link your Mac for live Claude data.' }[mode];
+  $('unlink').hidden = mode !== 'linked';
+  $('cps').innerHTML = cps.length ? cps.map((c, i) => `<div class="row"><span style="flex:1">${esc(c.name)} <span class="sub">${new Date(c.at).toLocaleString()}</span></span><button class="ghost" data-cp="load" data-i="${i}">Load</button><button class="danger" data-cp="del" data-i="${i}">Delete</button></div>`).join('') : '<p class="sub">No checkpoints yet.</p>';
+}
+$('export').onclick = () => Saves.exportFile();
+$('import').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { await Saves.importFile(f); status($('save-status'), 'Save loaded. Reload Claude Quest to continue from it.'); } catch (err) { status($('save-status'), err.message, true); }
+  e.target.value = '';
+};
+$('checkpoint').onclick = async () => { await Saves.checkpoint($('cp-name').value.trim()); $('cp-name').value = ''; saves(); status($('save-status'), 'Checkpoint saved.'); };
+$('cps').onclick = async e => {
+  const b = e.target.closest('[data-cp]'); if (!b) return;
+  if (b.dataset.cp === 'load') { if (!confirm('Load this checkpoint? Your current progress in this browser is replaced (export it first if you want to keep it).')) return; await Saves.loadCheckpoint(+b.dataset.i); status($('save-status'), 'Checkpoint loaded. Reload Claude Quest.'); }
+  else { await Saves.deleteCheckpoint(+b.dataset.i); }
+  saves();
+};
+$('pair').onclick = () => {
+  const v = $('code').value.trim(), m = /link=([\w-]+\.[\w-]+)/.exec(v), code = m ? m[1] : v;
+  try { LinkCrypto.parse(code); Link.code = code; location.reload(); } catch (e) { status($('link-status'), e.message, true); }
+};
+$('unlink').onclick = () => { if (confirm('Unlink this browser from your Mac? Your save stays.')) { Link.code = null; location.reload(); } };
+
+Net.subscribe(() => {}, () => {}).then(() => new Promise(r => setTimeout(r, Net.mode === 'linked' ? 2500 : 0))).then(load).catch(e => { document.querySelector('main').insertAdjacentHTML('beforeend', `<p style="color:#f88">Couldn't reach Claude Quest: ${esc(e.message)}</p>`); });
 </script>
 </body>
 </html>

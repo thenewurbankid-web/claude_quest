@@ -8,6 +8,7 @@
     "install-hook": "node hook/install.js"
   },
   "dependencies": {
+    "mqtt": "^5.16.0",
     "phaser": "^3.90.0"
   },
   "main": "app.js"

@@ -79,6 +79,7 @@ function pushEvent(project, kind, text, id = hash(project, kind, text), extra = 
   events = events.slice(0, 200);
   store.write('events.json', events);
   broadcast('event', e);
+  link?.event(e);
 }
 
 function tally(key, n = 1) {
@@ -440,7 +441,7 @@ function rebuild() {
     save: { introDone: !!Areas.save().introDoneAt, settings: Areas.settings(), maxAreas: Areas.MAX },
   };
   const json = JSON.stringify(world);
-  if (json !== worldJson) { worldJson = json; broadcast('world', world); }
+  if (json !== worldJson) { worldJson = json; broadcast('world', world); link?.world(world); }
 }
 
 function broadcast(type, data) {
@@ -461,6 +462,7 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
 
 const routes = {
   'GET /api/world': (req, res) => send(res, 200, world),
+  'GET /api/link': (req, res) => send(res, 200, { on: !!link, url: link?.url || null }),
   'GET /api/stream': (req, res) => {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(`event: world\ndata: ${worldJson}\n\n`);
@@ -655,6 +657,12 @@ const routes = {
       s.settings = { ...Areas.settings() };
       if (typeof patch.sound === 'boolean') s.settings.sound = patch.sound;
       if (typeof patch.music === 'boolean') s.settings.music = patch.music;
+      for (const k of ['playerName', 'claudeName']) if (typeof patch[k] === 'string' && patch[k].trim()) s.settings[k] = patch[k].trim().slice(0, 16);
+      // Names the player gave to lands, characters and places: { id: name }. They win over generated ones.
+      if (patch.names && typeof patch.names === 'object') {
+        s.settings.names = { ...s.settings.names };
+        for (const [k, v] of Object.entries(patch.names).slice(0, 200)) if (typeof v === 'string') { if (v.trim()) s.settings.names[String(k).slice(0, 80)] = v.trim().slice(0, 24); else delete s.settings.names[k]; }
+      }
       if (Number.isFinite(patch.autoplaySec)) s.settings.autoplaySec = Math.max(0, Math.min(3600, Math.round(patch.autoplaySec)));
       if (['always', 'focus', 'off'].includes(patch.subtext)) s.settings.subtext = patch.subtext;
       if (typeof patch.minimap === 'boolean') s.settings.minimap = patch.minimap;
@@ -677,12 +685,40 @@ const routes = {
   },
 };
 
+// ---------- the hosted-page link (outgoing MQTT, end-to-end encrypted) ----------
+// Runs the same routes for actions that arrive from a linked page.
+function dispatch(method, url, payload) {
+  const u = new URL(url, 'http://x');
+  const route = routes[`${method} ${u.pathname}`];
+  if (!route || u.pathname === '/api/stream') return Promise.resolve({ error: `unknown action ${method} ${u.pathname}` });
+  const { EventEmitter } = require('events');
+  const req = new EventEmitter();
+  setImmediate(() => { req.emit('data', JSON.stringify(payload || {})); req.emit('end'); });
+  return new Promise(ok => {
+    const res = { writeHead() {}, end(s) { try { ok(JSON.parse(s)); } catch { ok({ ok: true }); } } };
+    Promise.resolve(route(req, res, u)).catch(e => ok({ error: e.message }));
+  });
+}
+// What leaves the Mac (owner's choice "trimmed"): what the game shows, without document contents or run prompts.
+const trimForLink = w => ({
+  ...w, runs: w.runs.map(({ text, pid, ...r }) => r),
+  towns: w.towns.map(t => ({ ...t, journal: t.journal ? { name: t.journal.name, lines: [] } : null })),
+});
+const linkCfg = cfg.link || {};
+const link = (process.env.CQ_LINK ?? (linkCfg.enabled ? '1' : '')) === '1'
+  ? require('./lib/link').start({ broker: linkCfg.broker || require('./public/linkcrypto').DEFAULT_BROKER, pagesUrl: process.env.CQ_PAGES_URL || linkCfg.pagesUrl || 'https://thenewurbankid-web.github.io/claude_quest', dispatch, trim: trimForLink })
+  : null;
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const route = routes[`${req.method} ${url.pathname}`];
   try {
     if (route) return await route(req, res, url);
     if (url.pathname === '/settings') return send302(res, '/settings.html');
+    if (url.pathname === '/mqtt.min.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      return fs.createReadStream(path.join(__dirname, 'node_modules', 'mqtt', 'dist', 'mqtt.min.js')).pipe(res);
+    }
     if (url.pathname === '/phaser.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
       return fs.createReadStream(require.resolve('phaser/dist/phaser.min.js')).pipe(res);
@@ -693,6 +729,7 @@ http.createServer(async (req, res) => {
     fs.createReadStream(file).pipe(res);
   } catch (e) {
     if (!e.status) console.error(e);
+    if (res.headersSent) return res.end();
     send(res, e.status || 500, { error: e.message });
   }
 }).listen(PORT, '127.0.0.1', () => {

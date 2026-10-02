@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101018">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Claude Quest</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
@@ -87,6 +89,41 @@
   @keyframes hover { 0%, 100% { translate: 0 0; opacity: .6; } 50% { translate: 0 calc(var(--px) * -2); opacity: 1; } }
   #hud { position: absolute; left: calc(var(--px) * 3); bottom: calc(var(--px) * 3); font-size: calc(var(--px) * 5); color: #fff; text-shadow: 0 calc(var(--px) * .5) 0 #000; pointer-events: none; }
   .box { z-index: 2; }
+  /* ---------- touch: a handheld layout ---------- */
+  html.touch, html.touch body { overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  html.touch body { touch-action: none; }
+  #pad { display: none; }
+  html.touch #pad { display: grid; grid-template-columns: auto auto auto; justify-content: space-between; align-items: center; padding: 12px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); gap: 8px; touch-action: none; }
+  #pad .dpad { position: relative; width: 126px; height: 126px; justify-self: start; }
+  #pad .dpad b { position: absolute; width: 42px; height: 42px; background: #2a2a38; border: 2px solid #4a4a60; box-shadow: 0 3px 0 #0a0a10; }
+  #pad .dpad b::after { content: ''; position: absolute; inset: 0; margin: auto; width: 0; height: 0; border: 8px solid transparent; }
+  #pad .dpad .up { left: 42px; top: 0; border-radius: 8px 8px 0 0; } #pad .dpad .up::after { border-bottom-color: #9898b0; margin-top: 8px; }
+  #pad .dpad .down { left: 42px; bottom: 0; border-radius: 0 0 8px 8px; } #pad .dpad .down::after { border-top-color: #9898b0; margin-bottom: 8px; }
+  #pad .dpad .left { left: 0; top: 42px; border-radius: 8px 0 0 8px; } #pad .dpad .left::after { border-right-color: #9898b0; margin-left: 8px; }
+  #pad .dpad .right { right: 0; top: 42px; border-radius: 0 8px 8px 0; } #pad .dpad .right::after { border-left-color: #9898b0; margin-right: 8px; }
+  #pad .dpad i { position: absolute; left: 42px; top: 42px; width: 42px; height: 42px; background: #2a2a38; }
+  #pad .dpad b.on { background: #3a3a50; transform: translateY(2px); box-shadow: 0 1px 0 #0a0a10; }
+  #pad .mid { display: flex; flex-direction: column; gap: 10px; }
+  #pad .mid button { font: 600 11px 'Pixelify Sans', monospace; letter-spacing: 1px; color: #c8c8d8; background: #2a2a38; border: 2px solid #4a4a60; border-radius: 999px; padding: 6px 10px; }
+  #pad .ab { justify-self: end; display: flex; gap: 8px; align-items: center; transform: rotate(-18deg); }
+  #pad .ab button { width: 56px; height: 56px; border-radius: 50%; font: 600 22px 'Pixelify Sans', monospace; color: #fff; border: 3px solid #0a0a10; box-shadow: 0 4px 0 #0a0a10; }
+  #pad .ab .a { background: #d97757; margin-top: -28px; } #pad .ab .b { background: #4878b8; margin-top: 28px; }
+  #pad button.on { transform: translateY(3px); box-shadow: 0 1px 0 #0a0a10; filter: brightness(1.15); }
+  /* Portrait: the screen on top, the controls below it, like a handheld. */
+  @media (orientation: portrait) {
+    html.touch body { display: flex; flex-direction: column; justify-content: flex-start; padding-top: env(safe-area-inset-top); }
+    html.touch #screen { width: 100vw; }
+    html.touch #pad { flex: 1; }
+  }
+  /* Landscape: the screen fills the height and the controls sit over its sides. */
+  @media (orientation: landscape) {
+    html.touch #screen { width: min(100vw, 150vh); }
+    html.touch #pad { position: fixed; inset: 0; pointer-events: none; grid-template-rows: 1fr auto; }
+    html.touch #pad > * { pointer-events: auto; grid-row: 2; opacity: .8; }
+    html.touch #pad .mid { flex-direction: row; align-self: end; }
+  }
+  html.touch #hud { display: none; }
+  html.touch #itext { font-size: 16px; } /* 16px stops iOS zooming into the text box */
   button.back, button.send { font: inherit; font-size: calc(var(--px) * 5); cursor: pointer; border: calc(var(--px) * .5) solid var(--frame-dark); border-radius: calc(var(--px) * 1); background: #fff; color: var(--frame-dark); padding: 0 calc(var(--px) * 2.5); }
   button.send { background: var(--frame); color: #fff; }
   button.back:hover, button.send:hover { filter: brightness(1.1); }
@@ -148,11 +185,15 @@
   <div id="reward" class="box hidden"><div class="icon"></div><div class="title"></div><div class="sub"></div></div>
   <div id="boot">CLAUDE QUEST<small>Loading the world…</small></div>
 </div>
-<script src="/phaser.js"></script>
-<script src="/ui.js"></script>
-<script src="/art.js"></script>
-<script src="/world.js"></script>
-<script src="/map.js"></script>
-<script src="/music.js"></script>
+<script src="phaser.js"></script>
+<script src="mqtt.min.js"></script>
+<script src="linkcrypto.js"></script>
+<script src="net.js"></script>
+<script src="ui.js"></script>
+<script src="art.js"></script>
+<script src="world.js"></script>
+<script src="map.js"></script>
+<script src="music.js"></script>
+<script src="touch.js"></script>
 </body>
 </html>

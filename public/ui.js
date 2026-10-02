@@ -10,6 +10,17 @@ const UI = {
 
   get open() { return this.mode !== null || this.busy > 0; },
 
+  // The companion goes by the name the player gave it. Real-cost and proper names (Claude tokens, Claude Quest,
+  // the Claude Center, Claude Code) keep the real word.
+  name(s) {
+    const n = (typeof WORLD !== 'undefined' && WORLD?.save?.settings.claudeName) || '';
+    if (!n || s == null) return s;
+    return String(s)
+      .replace(/\bClaudes\b/g, `${n}s`)
+      .replace(/\bClaude\b(?! (Center|Quest|tokens|Code))/g, n)
+      .replace(/\bCLAUDE\b(?! QUEST)/g, n.toUpperCase());
+  },
+
   // Buttons and clicks feed the same handlers as the keyboard.
   press(key) { this.handler?.({ key, preventDefault() {} }); },
 
@@ -34,7 +45,7 @@ const UI = {
 
   // opts.auto: ms after a page finishes typing before it advances by itself (autoplay).
   say(lines, { auto = 0 } = {}) {
-    const pages = [].concat(lines).filter(Boolean).flatMap(l => this.paginate(l));
+    const pages = [].concat(lines).filter(Boolean).flatMap(l => this.paginate(this.name(l)));
     return new Promise(done => {
       if (!pages.length) return done();
       const box = $('dialog'), txt = $('dtext'), more = $('dmore');
@@ -78,12 +89,12 @@ const UI = {
       if (prompt) {
         box.classList.remove('hidden');
         txt.classList.toggle('small', prompt.length > 110);
-        txt.textContent = prompt;
+        txt.textContent = this.name(prompt);
         $('dmore').classList.add('hidden');
       }
       let sel = 0;
       const render = () => {
-        list.innerHTML = `<button class="back" data-back>◀ Back</button>` + options.map((o, k) => `<div class="opt${k === sel ? ' sel' : ''}" data-k="${k}">${esc(o)}</div>`).join('');
+        list.innerHTML = `<button class="back" data-back>◀ Back</button>` + options.map((o, k) => `<div class="opt${k === sel ? ' sel' : ''}" data-k="${k}">${esc(this.name(o))}</div>`).join('');
         list.onclick = e => { if (e.target.closest('[data-back]')) return finish(-1); const o = e.target.closest('[data-k]'); if (o) { Sound.blip(); finish(+o.dataset.k); } };
         list.querySelectorAll('.opt')[sel]?.scrollIntoView({ block: 'nearest' });
       };
@@ -119,7 +130,7 @@ const UI = {
       const render = () => {
         list.innerHTML = items.length ? items.map((it, k) => `<div class="opt${k === sel ? ' sel' : ''}" data-k="${k}">` +
           (it.tag ? `<span class="tag" style="background:${it.tagColor || '#888'}">${esc(it.tag)}</span>` : '') +
-          `${esc(it.label)}${it.sub ? `<div class="sub">${esc(it.sub)}</div>` : ''}</div>`).join('')
+          `${esc(this.name(it.label))}${it.sub ? `<div class="sub">${esc(this.name(it.sub))}</div>` : ''}</div>`).join('')
           : '<div class="sub">Nothing here yet.</div>';
         list.children[sel]?.scrollIntoView({ block: 'nearest' });
       };
@@ -140,7 +151,7 @@ const UI = {
   ask(label, initial = '') {
     return new Promise(done => {
       const box = $('input'), ta = $('itext');
-      $('ilabel').textContent = label;
+      $('ilabel').textContent = this.name(label);
       ta.value = initial;
       box.classList.remove('hidden');
       this.mode = 'input';
@@ -157,7 +168,7 @@ const UI = {
   toast(html) {
     const el = document.createElement('div');
     el.className = 'box toast';
-    el.innerHTML = html;
+    el.innerHTML = this.name(html);
     $('toasts').prepend(el);
     setTimeout(() => el.remove(), 6200);
     while ($('toasts').children.length > 3) $('toasts').lastChild.remove();
@@ -165,7 +176,7 @@ const UI = {
 
   banner(text) {
     const b = $('banner');
-    b.textContent = text;
+    b.textContent = this.name(text);
     b.classList.remove('hidden');
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
     clearTimeout(this._bt);

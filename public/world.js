@@ -57,7 +57,7 @@ const ago = iso => {
   return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 2880 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
 };
 const until = iso => { const m = Math.max(0, Math.round((Date.parse(iso) - Date.now()) / 60e3)); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
-const api = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+const api = (url, body) => Net.post(url, body); // local server, encrypted link, or the browser save (public/net.js)
 const short = (s, n = 70) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));
 const key = (x, y) => `${x},${y}`;
 const isNight = () => !!WORLD.night;
@@ -589,7 +589,7 @@ function guide() {
   if (n.x !== null) {
     const dx = n.x - S.px, dy = n.y - S.py, dist = Math.abs(dx) + Math.abs(dy);
     const arrows = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
-    where = dist <= 1 ? ' · right here, press Z' : ` · ${arrows[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8]} ${dist} steps`;
+    where = dist <= 1 ? ` · right here, press ${document.documentElement.classList.contains('touch') ? 'A' : 'Z'}` : ` · ${arrows[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8]} ${dist} steps`;
   }
   const text = `NEXT ▸ ${n.text}${where}`;
   // The line fades back once read; it brightens again when the goal changes.
@@ -1041,7 +1041,7 @@ async function startMenu() {
     const i = await UI.choose(null, ['Map', 'Quest log', 'Mail', `Questions${q ? ` (${q})` : ''}`, 'Trainer card', 'Outbox', `Sound: ${Sound.on ? 'on' : 'off'}`, `Music: ${Music.on ? 'on' : 'off'}`, 'Guild Hall', 'Settings', 'Close'], { menu: true });
     if (i === 7) { Music.toggle(); continue; }
     if (i === 8) { await guildHall(); continue; }
-    if (i === 9) { window.open('/settings', 'cq-settings'); continue; }
+    if (i === 9) { window.open('settings.html', 'cq-settings'); continue; }
     if (i === 0) return mapScreen();
     if (i === 1) await questLog();
     else if (i === 2) await mailPanel();
@@ -1154,13 +1154,14 @@ async function talkCartographer() {
     const i = await UI.choose('CARTOGRAPHER: What shall we do?', ['Chart a new land', 'Abandon a land', 'Open the map room (settings)', 'Bye']);
     if (i === 0) { if (await chartLand()) return; }
     else if (i === 1) { if (await abandonLand()) return; }
-    else if (i === 2) { window.open('/settings', 'cq-settings'); await UI.say('CARTOGRAPHER: The map room is open in another tab. Changes show up here on the next scan.'); }
+    else if (i === 2) { window.open('settings.html', 'cq-settings'); await UI.say('CARTOGRAPHER: The map room is open in another tab. Changes show up here on the next scan.'); }
     else return;
   }
 }
 
 async function chartLand() {
-  const r = await fetch('/api/repos').then(x => x.json());
+  const r = await Net.get('/api/repos');
+  if (r.error) { await UI.say(`CARTOGRAPHER: ${r.error}`); return false; }
   if (r.charted >= r.max) { await UI.say(`CARTOGRAPHER: My maps are full at ${r.max} lands. Abandon one to make room.`); return false; }
   if (!r.repos.length) { await UI.say('CARTOGRAPHER: I see no uncharted lands. (No other git repos in ~/Repositories.)'); return false; }
   const i = await UI.panel('Uncharted lands', r.repos.map(x => ({ label: x.name, sub: x.path.replace(/^\/Users\/[^/]+/, '~') })), { right: `${r.charted}/${r.max} charted`, hint: 'Newest first · Z chart · X back' });
@@ -1202,13 +1203,13 @@ async function titleScreen() {
   const boot = document.getElementById('boot');
   boot.innerHTML = '<div class="title">CLAUDE QUEST<small>Lands of the Ember Well</small></div>';
   const cont = WORLD.save?.introDone;
-  const opts = cont ? ['Continue', 'New Game'] : ['New Game'];
+  const opts = cont ? ['Continue', 'New Journey'] : ['New Journey'];
   const list = document.getElementById('choices');
   list.classList.add('title');
   const i = await UI.choose(null, opts);
   list.classList.remove('title');
   if (opts[i] === 'Continue' || i < 0 && cont) return;
-  if (cont && await UI.choose('Start a new game? Your charted lands, letters and badges stay. Your footsteps and attuned Waystones reset.', ['Start over', 'Continue instead']) !== 0) return;
+  if (cont && await UI.choose('Begin a new journey? Your charted lands, letters and badges stay. Your footsteps and attuned Waystones reset.', ['Start over', 'Continue instead']) !== 0) return;
   for (const k of ['cq-pos', 'cq-attuned', 'cq-seen', 'cq-camp-slots']) try { localStorage.removeItem(k); } catch {}
   attuned.clear(); attuned.add('hub');
   boot.innerHTML = '';
@@ -1236,13 +1237,25 @@ async function intro() {
     'Claude is a tireless traveler. It drinks Ember from the Well to work.',
     'When the Well runs dry, the Long Night falls. Claude sleeps, and the Waystones go dark until dawn.',
     '(Ember is your Claude usage. The Long Night is a usage limit.)',
-    home ? `You begin in ${home.townName}. It's the very land this game is built in.` : 'You have no lands yet. Visit the Cartographer to chart your first.',
+    home ? `You begin in ${home.townName}, the land where these very roads are laid.` : 'You have no lands yet. Visit the Cartographer to chart your first.',
     'In the Claude Center, the CLERK keeps the Guild Hall. Post quests there, and a guild Claude sets out.',
     'The CARTOGRAPHER beside the Waystone charts new lands for you, one repository at a time.',
     'And LUMI, a little spirit from beyond the Rift, will float to you whenever there is news.',
     'Answer the riddles Claude brings you, clear the bosses that block its roads, and the lands will flourish.',
-    'Your adventure starts now!',
   ]);
+  // The player names everything that's theirs, Pokémon style.
+  await UI.say('But first, tell me a little about yourself.');
+  const me = (await UI.ask('What is your name?', WORLD.save?.settings.playerName || '')) || 'Traveler';
+  await UI.say(`${me}! A fine name.`);
+  await UI.say('And the tireless traveler who works these lands with you… what shall we call it?');
+  const friend = (await UI.ask('Name your companion:', WORLD.save?.settings.claudeName || 'Claude')) || 'Claude';
+  await api('/api/settings', { playerName: me, claudeName: friend });
+  if (home) {
+    await UI.say(`Every land needs a name. Your first one is where these roads are laid (${home.name}).`);
+    const land = await UI.ask('Name your home land:', home.townName);
+    if (land && land !== home.townName) await rename(home.id, land);
+  }
+  await UI.say([`${friend.toUpperCase()}, then. It is waiting for you in ${home?.townName || 'the lands'}.`, `${me}, your adventure starts now!`]);
   await api('/api/intro', {});
 }
 
@@ -1456,6 +1469,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); UI.run(startMenu); }
   else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); UI.run(mapScreen); }
   else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); MapView.toggleMini(); }
+  else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); UI.run(() => mailPanel()); }
 });
 window.addEventListener('keyup', e => { const dir = KEY_DIR[e.key]; if (dir) S.held.delete(dir); });
 window.addEventListener('blur', () => S.held.clear());
@@ -1465,18 +1479,27 @@ function fit() { document.documentElement.style.setProperty('--px', `${document.
 window.addEventListener('resize', fit);
 
 // ---------- live data ----------
+// Names the player chose win over anything generated. Keyed by id: a land's id today; characters and places next.
+const chosenName = id => WORLD?.save?.settings.names?.[id];
+function applyNames(w) { for (const t of w.towns || []) { const n = w.save?.settings.names?.[t.id]; if (n) t.townName = n; } return w; }
+async function rename(id, name) {
+  name = String(name).trim().slice(0, 24);
+  await api('/api/settings', { names: { [id]: name } });
+  WORLD.save.settings.names = { ...WORLD.save.settings.names, [id]: name };
+  applyNames(WORLD);
+  const a = S.areas.find(x => x.id === id); if (a) a.name = name;
+}
+
 function connect() {
-  const es = new EventSource('/api/stream');
-  es.addEventListener('world', e => {
-    const next = JSON.parse(e.data);
+  Net.subscribe(next => {
     if (!next) return;
+    applyNames(next);
     if (!WORLD) { WORLD = next; return start(); }
     if (landsChanged(next)) { WORLD = { ...WORLD, ...next, towns: WORLD.towns }; return reloadWorld(); }
     for (const t of next.towns) { const old = town(t.id); if (old) { t._cx = old._cx; t._cy = old._cy; t._camps = old._camps; } }
     WORLD = next;
     if (S.scene?.sys.isActive()) { syncDynamic(); refreshMarkers(); applyNight(); hud(); }
-  });
-  es.addEventListener('event', e => { if (WORLD && S.player) onEvent(JSON.parse(e.data)); });
+  }, ev => { if (WORLD && S.player) onEvent(ev); });
 }
 
 async function start() {
