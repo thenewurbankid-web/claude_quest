@@ -14,6 +14,7 @@ import { SquareGrid } from './grid.js';
 import { HUB, SOLID } from './hub.js';
 import { dayPhase, clockLabel } from './clock.js';
 import { createAtmosphere } from './atmosphere.js';
+import { LOOK } from './look.js';
 
 const A = 'assets/';
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -32,10 +33,10 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xcfe0ea, 30, 60);
-const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 200);
+const camera = new THREE.PerspectiveCamera(LOOK.camera.fov, 1, 0.1, 200);
 // Lower and closer than a classic top-down view, like the newer Pokémon games: the forest edge and the sky's haze
 // show at the top of the frame, which is what gives the depth layers room to move.
-const CAM = new THREE.Vector3(0, 10.5, 13.5);
+const CAM = new THREE.Vector3(0, LOOK.camera.height, LOOK.camera.back);
 const camOffset = CAM.clone();
 
 // ---------- sky + lighting ----------
@@ -214,7 +215,7 @@ function emitter({ map, count, color, size, origin, spread, rise, life }) {
 }
 const wellCell = (() => { for (let r = 0; r < grid.rows; r++) { const c = rows[r].indexOf('W'); if (c >= 0) return [c, r]; } return [10, 8]; })();
 const wellPos = grid.toWorld(...wellCell);
-const wellLight = new THREE.PointLight(0xffa04a, 6, 7, 1.6);
+const wellLight = new THREE.PointLight(0xffa04a, 6, LOOK.light.fireReach, 1.6);
 wellLight.position.set(wellPos.x, 0.9, wellPos.z);
 wellLight.castShadow = true;
 wellLight.shadow.mapSize.set(512, 512);
@@ -324,7 +325,7 @@ composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.4, 2.2);
 composer.addPass(bloom);
 const tiltShift = (axis) => new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, amount: { value: 0.9 / 1000 }, focus: { value: 0.52 }, axis: { value: axis } },
+  uniforms: { tDiffuse: { value: null }, amount: { value: 0.9 / 1000 * LOOK.lens.tilt }, focus: { value: LOOK.lens.focus }, axis: { value: axis } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: `uniform sampler2D tDiffuse; uniform float amount; uniform float focus; uniform vec2 axis; varying vec2 vUv;
     void main(){
@@ -337,7 +338,7 @@ const tiltShift = (axis) => new ShaderPass({
 const tsH = tiltShift(new THREE.Vector2(1, 0)), tsV = tiltShift(new THREE.Vector2(0, 1));
 composer.addPass(tsH); composer.addPass(tsV);
 composer.addPass(new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, warmth: { value: 0.015 }, vig: { value: 0.32 } },
+  uniforms: { tDiffuse: { value: null }, warmth: { value: LOOK.lens.warmth }, vig: { value: LOOK.lens.vignette } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: `uniform sampler2D tDiffuse; uniform float warmth; uniform float vig; varying vec2 vUv;
     void main(){ vec4 c = texture2D(tDiffuse, vUv); c.rgb += vec3(warmth, warmth*0.4, -warmth*0.6);
@@ -377,19 +378,19 @@ function updateSky(dt) {
   const day = THREE.MathUtils.smoothstep(height, -0.15, 0.25);
   sun.position.set(Math.cos(ang) * 18, Math.max(2, height * 22), 8);
   const w = atmos.state, flash = atmos.flash;
-  sun.intensity = (0.1 + day * 1.7) * (0.25 + 0.75 * w.sun);
+  sun.intensity = (0.1 + day * 1.7) * (0.25 + 0.75 * w.sun) * LOOK.light.sun;
   sun.color.setHSL(0.09, 0.6 * w.sun, 0.55 + day * 0.35);
-  hemi.intensity = 0.12 + day * 0.3 + flash * 1.6;
-  renderer.toneMappingExposure = (0.6 + day * 0.25) * (0.85 + 0.15 * w.sun) + flash * 0.5;
+  hemi.intensity = (0.12 + day * 0.3) * LOOK.light.sky + flash * 1.6;
+  renderer.toneMappingExposure = (0.6 + day * 0.25) * (0.85 + 0.15 * w.sun) * LOOK.light.exposure + flash * 0.5;
   scene.backgroundIntensity = (0.12 + day * 0.88) * (0.55 + 0.45 * w.sun);
-  scene.environmentIntensity = 0.12 + day * 0.4;
+  scene.environmentIntensity = (0.12 + day * 0.4) * LOOK.light.sky;
   // Overcast skies grey the haze out; fog pulls it in close.
   const grey = (1 - w.sun) * 0.5;
   scene.fog.color.setRGB(0.2 + day * 0.61, 0.24 + day * 0.64, 0.38 + day * 0.54).lerp(new THREE.Color(0.32 + day * 0.4, 0.34 + day * 0.4, 0.38 + day * 0.4), grey);
   scene.fog.near = 26 - w.fog * 18; scene.fog.far = 58 - w.fog * 34;
-  wellLight.intensity = 3 + (1 - day * w.sun) * 9;
+  wellLight.intensity = (3 + (1 - day * w.sun) * 9) * LOOK.light.fire;
   fireflies.mat.opacity = (1 - day) * 0.9;
-  bloom.strength = 0.3 + (1 - day) * 0.45;
+  bloom.strength = (0.3 + (1 - day) * 0.45) * LOOK.lens.bloom;
   const label = day > 0.6 ? 'Day' : day > 0.15 ? (dayT < 0.5 ? 'Dawn' : 'Dusk') : 'Night';
   const when = fastTime || pinned != null ? 'preview' : clockLabel();
   if (hud) hud.textContent = `Ember Hollow · ${label} · ${when}`;
@@ -420,11 +421,11 @@ async function build() {
   }
   await Promise.all(jobs);
   const p = await place('player', 'person', 11, 9, { color: 0x3050c0 });
-  player = makeActor(p.obj, p.clips, 11, 9, 5.2);
+  player = makeActor(p.obj, p.clips, 11, 9, LOOK.move.walk);
   const claudeSpots = [[4, 7], [17, 8], [11, 13], [6, 4]];
   for (const [c, r] of claudeSpots) {
     const m = await place('claude', 'person', c, r, { color: 0xd97757 });
-    const a = makeActor(m.obj, m.clips, c, r, 2.6);
+    const a = makeActor(m.obj, m.clips, c, r, 2.6 * LOOK.move.npcPace);
     a.npc = true; a.wait = Math.random() * 2;
   }
   resize();
@@ -448,7 +449,7 @@ function loop() {
       if (tryMove(player, dir)) { lastStepK = 0; audio.step(); }
     }
     for (const a of actors) {
-      if (a.npc && a.k >= 1 && (a.wait -= dt) <= 0) {
+      if (a.npc && a.k >= 1 && (a.wait -= dt * LOOK.move.npcPace) <= 0) {
         const dirs = ['up', 'down', 'left', 'right'].sort(() => Math.random() - 0.5);
         for (const d of dirs) if (tryMove(a, d)) break;
         a.wait = 0.8 + Math.random() * 2.5;
@@ -457,7 +458,7 @@ function loop() {
     }
     look.set(player.obj.position.x, 0, player.obj.position.z);
     camPos.copy(look).add(camOffset);
-    camera.position.lerp(camPos, reduceMotion || !snapped ? 1 : Math.min(1, dt * 4));
+    camera.position.lerp(camPos, reduceMotion || !snapped ? 1 : Math.min(1, dt * LOOK.camera.follow));
     snapped = true;
     camera.lookAt(camera.position.x - camOffset.x, 0, camera.position.z - camOffset.z);
     sun.target.position.copy(look);

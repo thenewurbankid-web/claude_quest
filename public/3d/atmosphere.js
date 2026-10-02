@@ -216,9 +216,14 @@ export function createAtmosphere({ scene, grid, at, renderer, camera }) {
     const mat = new THREE.PointsMaterial({ size: 0.38, map: sheet, transparent: true, depthWrite: false, alphaTest: 0.5, opacity: 0 });
     sheet.repeat.set(1 / 3, 1);
     const p = new THREE.Points(geo, mat); p.frustumCulled = false; scene.add(p);
+    // Each splash picks its world spot when its cycle starts and keeps it, so splashes stay put as the camera moves.
+    const cycOf = new Int32Array(n).fill(-1);
     return { mat, tick(t, center) {
       for (let i = 0; i < n; i++) {
-        const cyc = Math.floor(t * 2.2 + seed[i] * 7), h = Math.sin(seed[i] * 91.7 + cyc * 12.9898) * 43758.5453;
+        const cyc = Math.floor(t * 2.2 + seed[i] * 7);
+        if (cyc === cycOf[i]) continue;
+        cycOf[i] = cyc;
+        const h = Math.sin(seed[i] * 91.7 + cyc * 12.9898) * 43758.5453;
         const fx = h - Math.floor(h), fz = (h * 7.13) - Math.floor(h * 7.13);
         pos[i * 3] = center.x + (fx - 0.5) * 26; pos[i * 3 + 1] = 0.05; pos[i * 3 + 2] = center.z + (fz - 0.5) * 20;
       }
