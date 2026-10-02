@@ -178,6 +178,14 @@ each one is a sealed decision with a token readout. Caveat: a browser-only Local
 outside agent until it syncs somewhere reachable (the local server, a Yjs relay or a git remote); with nothing
 reachable, the game is planning-only.
 
+**Handshake, then WebRTC** (user): registration is the first handshake. The agent and the game swap WebRTC offers
+over a signalling path (the agent's webhook, or the existing E2E MQTT relay from `lib/link.js` / `public/linkcrypto.js`)
+and then keep a direct, encrypted **data channel**. Over it the game pushes work and decisions and the agent streams
+progress back, with no polling. This also fixes the browser-only case: an agent can reach a Local Ledger that lives
+in a browser tab. Fallbacks when the direct link fails (strict NATs): the MQTT relay, then webhook plus polling.
+Node agents need a WebRTC library (e.g. werift or node-datachannel; check licences). Same transport as the planned
+multiplayer, so it's built once.
+
 **Seeing the source in game.** A Ledger panel in the Keeper's Lodge shows the protocol view (Marches, Halls, Works,
 Riddles, agents, the Beacon) for any source. With Paperclip present, the panel can switch to Paperclip's own page in
 a frame (localhost only; it doesn't block framing).
