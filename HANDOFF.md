@@ -3,7 +3,39 @@
 **New session, start here.** Run with `npm start` (http://localhost:4777) or the `claude-quest` preview config.
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
-## NEXT SESSION START HERE: smooth buildings + an asset editor (user, 2026-10-02 late night)
+## NEXT SESSION START HERE: game studio as plugins (user, 2026-10-02, latest)
+Goal: players can **fully customize their game** (art and lore) from inside it, through inline chats. The whole
+thing is **open source and user-customizable**: every tool and every AI provider is a **plugin**, so users can bring
+Blender or any other 3D tool, any 2D/tile editor, and any model.
+- **Plugin kinds** (one folder each, e.g. `plugins/<kind>/<name>/` with a small manifest + JS module; the core only
+  knows the interface):
+  - `tool3d`: a request becomes a model file (.glb). First plugin: **Blender** (installed at
+    /Applications/Blender.app/Contents/MacOS/Blender, not on PATH). The server runs it headless
+    (`Blender -b --python <script>`); the AI writes the bpy script; the output goes into public/assets/imported and
+    shows in the 3D viewer. Aim for KayKit's style: low poly, flat colours or a gradient atlas.
+  - `tool2d`: sprites **and tiles**. First plugin: a **pixel editor built into the asset editor** (pencil, fill,
+    palette, layers, frames, 16 px tile grid; works on the real sheets; the chat can draw and edit directly). Later
+    plugins: Aseprite, LibreSprite, Pixelorama.
+  - `provider`: chat models. Ship **all three** and let the user pick per chat, with a model dropdown: **Ollama**
+    (local, free; list models from /api/tags; installed: qwen3:4b, qwen2.5-coder:7b/1.5b, qwen2.5vl), **in-browser
+    WebLLM** (free), and **Claude via the `claude` CLI** (Opus/Sonnet/Haiku; spends the user's usage, so it asks
+    before each request). Leave a slot for cloud connectors.
+  - **Lore generator** (asked 2026-10-02): a chat that writes and edits the lore files (`areas/<id>.md`, `lore/`),
+    using the same provider picker. It shows a preview or diff before saving. Fantasy tone; no real product names.
+- **Chat panel** (shared): inline beside the canvas, viewer or lore text, with the provider + model picker. A reply
+  can produce an asset or lore, refine it ("taller chimney"), keep it, or place it in the world.
+- **Build order:** plugin interface + chat panel + Ollama provider → Blender plugin until one house comes out end to
+  end → Claude + WebLLM providers → lore generator → built-in pixel/tile editor with chat drawing → placing assets
+  in the world. Scope each step before building it; the user adds ideas quickly, so re-scope instead of building
+  everything at once.
+- **Installs:** the user said "you can install whatever you want" (2026-10-02). That covers the KayKit Medieval
+  Hexagon Pack (free, CC0, 33 MB, kaylousberg.itch.io) for the smooth houses, Lodge and well.
+- **Licence conflict to raise:** open source vs the Sunnyside / zedpxl / ToffeeCraft / Humble Pixel licences, which
+  forbid redistribution. Packs as user-installed plugins (git-ignored, like public/packs today) fit this; CC0
+  KayKit can ship. Confirm with the user before publishing.
+- Server note: the editor's "Save into the game folder" needs the server restarted (another session runs it on 4777).
+
+## smooth buildings + an asset editor (user, 2026-10-02 late night)
 - Done this session (on `3d-world`, not pushed): Nunito text (b3ed7fb), moonlight (4d43d2d), Sunnyside pixel houses
   folded like cards + the Lodge as the big orange house (d1b5b39), the Sunnyside stone well (6a39309).
 - **Then the user changed direction:** the pixel houses "don't match other assets". Buildings should be **smooth
