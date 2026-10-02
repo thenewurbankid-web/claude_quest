@@ -1,5 +1,5 @@
 // Quest in 2.5D: the hub as a lit miniature diorama. Three.js, square grid, tilt-shift + bloom, day/night, Ember Well
-// fire, wandering Claudes. Models come from assets/3d/manifest.json (KayKit, CC0) when present; until then plain
+// fire, wandering Keepers. Models come from assets/3d/manifest.json (KayKit, CC0) when present; until then plain
 // placeholder shapes stand in so the scene still runs.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -15,6 +15,7 @@ import { HUB, SOLID } from './hub.js';
 import { dayPhase, clockLabel } from './clock.js';
 import { createAtmosphere } from './atmosphere.js';
 import { LOOK } from './look.js';
+import { load as loadSunnyside } from './sunnyside.js';
 
 const A = 'assets/';
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -57,7 +58,8 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
 
-// ---------- ground: flat-shaded tiles with gentle colour variation ----------
+// ---------- ground: flat-shaded tiles with gentle colour variation (Sunnyside paints over them in build) ----------
+let tiles, meadow, blades;
 const COLORS = {
   grass: [0x80bf5b, 0x84c25e, 0x7dbc58], tall: [0x5fa646], road: [0xd8c594, 0xd5c290, 0xdac796], water: [0x4f9fd1],
 };
@@ -72,7 +74,7 @@ function tileColor(ch, c, r) {
 {
   const geo = new THREE.BoxGeometry(1, 0.4, 1);
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
-  const tiles = new THREE.InstancedMesh(geo, mat, grid.cols * grid.rows);
+  tiles = new THREE.InstancedMesh(geo, mat, grid.cols * grid.rows);
   tiles.receiveShadow = true;
   const m = new THREE.Matrix4(), col = new THREE.Color();
   let i = 0;
@@ -88,7 +90,7 @@ function tileColor(ch, c, r) {
 }
 // The world goes on past the map: a wide meadow fading into the fog, with a ring of forest just outside the edge.
 {
-  const meadow = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshStandardMaterial({ color: 0x6aa84c, roughness: 1 }));
+  meadow = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshStandardMaterial({ color: 0x6aa84c, roughness: 1 }));
   meadow.rotation.x = -Math.PI / 2; meadow.position.y = -0.02 - 0.4; meadow.receiveShadow = true;
   scene.add(meadow);
 }
@@ -98,8 +100,11 @@ const water = (() => {
   const group = new THREE.Group();
   for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) if (at(c, r) === '~') {
     const { x, z } = grid.toWorld(c, r);
-    const q = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-    q.rotation.x = -Math.PI / 2; q.position.set(x, -0.33, z); group.add(q);
+    // UVs in cells (world space), so a tiling texture runs across neighbouring water cells without seams.
+    const geo = new THREE.PlaneGeometry(1, 1), uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, c + uv.getX(i), grid.rows - 1 - r + uv.getY(i));
+    const q = new THREE.Mesh(geo, mat);
+    q.rotation.x = -Math.PI / 2; q.position.set(x, -0.28, z); group.add(q); // just above the water tile tops (-0.3)
   }
   scene.add(group);
   return mat;
@@ -124,7 +129,7 @@ const wind = { value: 0 };
     const n = ch === ',' ? 26 : ch === '.' || ch === 'F' ? 5 : 0;
     for (let k = 0; k < n; k++) spots.push([c, r]);
   }
-  const mesh = new THREE.InstancedMesh(blade, mat, spots.length);
+  const mesh = blades = new THREE.InstancedMesh(blade, mat, spots.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   let seed = 1;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -148,15 +153,24 @@ const cache = new Map();
 async function loadManifest() {
   try { const r = await fetch(A + '3d/manifest.json', { cache: 'no-cache' }); if (r.ok) manifest = await r.json(); } catch {}
 }
-async function model(role) {
-  const file = manifest[role];
+// KayKit characters share one rig, and their clips live in separate files (manifest.animations): load those once and
+// give every character the same clips. A role can list several files; `variant` picks one, so the Keepers differ.
+let sharedClips = null;
+async function animationClips() {
+  if (!sharedClips) sharedClips = Promise.all((manifest.animations || []).map(f => loader.loadAsync(A + '3d/' + f).then(g => g.animations).catch(() => [])))
+    .then(sets => sets.flat().filter(c => c.name !== 'T-Pose'));
+  return sharedClips;
+}
+async function model(role, variant = 0) {
+  const entry = manifest[role];
+  const file = Array.isArray(entry) ? entry[variant % entry.length] : entry;
   if (!file) return null;
   if (!cache.has(file)) cache.set(file, loader.loadAsync(A + '3d/' + file).catch(() => null));
   const g = await cache.get(file);
   if (!g) return null;
   const obj = SkeletonUtils.clone(g.scene);
   obj.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  return { obj, clips: g.animations };
+  return { obj, clips: [...g.animations, ...(await animationClips())] };
 }
 const shadowed = o => { o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); return o; };
 // Placeholder shapes, plainly marked as stand-ins (no drawn art): box houses, cone trees, capsule people.
@@ -181,13 +195,15 @@ function placeholder(kind, color = 0xd97757) {
   }
   return shadowed(g);
 }
-async function place(role, fallbackKind, c, r, { color, rot = 0, scale = 1, offset = [0, 0] } = {}) {
-  const m = await model(role);
+async function place(role, fallbackKind, c, r, { color, rot = 0, scale = 1, offset = [0, 0], variant = 0 } = {}) {
+  const m = await model(role, variant);
   const obj = m ? m.obj : placeholder(fallbackKind, color);
   const { x, z } = grid.toWorld(c, r);
   obj.position.set(x + offset[0], 0, z + offset[1]);
   obj.rotation.y = rot;
-  obj.scale.setScalar(m ? (manifest.scale?.[role] ?? 1) * scale : scale);
+  // manifest.height sizes a model to a height in tiles, whatever units the file uses.
+  const fit = m && manifest.height?.[role] ? manifest.height[role] / Math.max(0.01, new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).y) : 1;
+  obj.scale.setScalar(m ? fit * (manifest.scale?.[role] ?? 1) * scale : scale);
   scene.add(obj);
   return { obj, clips: m?.clips || [] };
 }
@@ -245,76 +261,89 @@ const fireflies = (() => {
 
 // ---------- characters on the grid ----------
 const actors = [];
-function makeActor(obj, clips, c, r, speed) {
-  const a = { obj, c, r, from: grid.toWorld(c, r), to: grid.toWorld(c, r), k: 1, speed, dir: 'down', mixer: null, actions: {} };
+function makeActor(obj, clips, c, r, speed, sprite = null) {
+  const a = { obj, c, r, from: grid.toWorld(c, r), to: grid.toWorld(c, r), k: 1, speed, dir: 'down', mixer: null, actions: {}, sprite };
   if (clips.length) {
     a.mixer = new THREE.AnimationMixer(obj);
     for (const clip of clips) a.actions[clip.name.toLowerCase()] = a.mixer.clipAction(clip);
   }
-  obj.position.set(a.from.x, 0, a.from.z);
+  obj.position.set(a.from.x, obj.position.y, a.from.z); // keeps a set height (ducks sit in the water)
   actors.push(a);
   return a;
 }
+// KayKit clip names; the player moves at running pace, so it runs where the Keepers walk.
+const CLIP = { idle: ['idle_a'], walk: ['walking_a'], run: ['running_a', 'walking_a'] };
 function play(a, name) {
   if (!a.mixer) return;
-  const want = Object.keys(a.actions).find(k => k.includes(name)) || Object.keys(a.actions)[0];
+  const keys = Object.keys(a.actions);
+  const want = (CLIP[name] || []).find(k => a.actions[k]) || keys.find(k => k.includes(name)) || keys[0];
   if (!want || a.current === want) return;
-  a.actions[a.current]?.fadeOut(0.2);
-  a.actions[want].reset().fadeIn(0.2).play();
+  a.actions[a.current]?.fadeOut(LOOK.people.blend);
+  a.actions[want].reset().fadeIn(LOOK.people.blend).play();
   a.current = want;
 }
-const free = (c, r) => !SOLID.has(at(c, r)) && !actors.some(o => (o.c === c && o.r === r));
+// Ducks keep to the water; everyone else keeps off water, solid cells and the trees standing inside the map.
+const treeCells = new Set();
+const free = (c, r, a) => (a?.swims ? at(c, r) === '~' : !SOLID.has(at(c, r)) && !treeCells.has(c + ',' + r)) && !actors.some(o => (o.c === c && o.r === r));
 function tryMove(a, dir) {
   a.dir = dir;
   const [c, r] = grid.step(a.c, a.r, dir);
-  if (!free(c, r)) return false;
+  if (!free(c, r, a)) return false;
   a.from = grid.toWorld(a.c, a.r); a.to = grid.toWorld(c, r); a.c = c; a.r = r; a.k = 0;
   return true;
 }
 function updateActor(a, dt) {
-  const target = grid.heading(a.dir);
-  let d = target - a.obj.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
-  a.obj.rotation.y += d * Math.min(1, dt * 14);
+  if (!a.sprite) {
+    const target = grid.heading(a.dir);
+    let d = target - a.obj.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
+    a.obj.rotation.y += d * Math.min(1, dt * LOOK.people.turn);
+  }
+  // Sprites keep walking frames through back-to-back steps instead of flicking to idle between cells.
+  a.sprite?.tick(dt, a.k < 1 || (a === player && held.size > 0), a.dir);
   if (a.k < 1) {
-    a.k = Math.min(1, a.k + dt * a.speed);
-    const e = a.k < 0.5 ? 2 * a.k * a.k : 1 - Math.pow(-2 * a.k + 2, 2) / 2;
+    a.k += dt * a.speed;
+    // The player glides at a steady speed: when a key is still held at the end of a cell, the next step starts with
+    // the leftover progress, so there is no stop or ease between cells. NPCs ease in and out of single steps.
+    if (a === player && a.k >= 1 && held.size) { const over = a.k - 1; if (tryMove(a, newestHeld())) a.k = over; }
+    a.k = Math.min(1, a.k);
+    const e = a === player ? a.k : a.k < 0.5 ? 2 * a.k * a.k : 1 - Math.pow(-2 * a.k + 2, 2) / 2;
     a.obj.position.x = a.from.x + (a.to.x - a.from.x) * e;
     a.obj.position.z = a.from.z + (a.to.z - a.from.z) * e;
-    if (!a.mixer) a.obj.position.y = Math.abs(Math.sin(a.k * Math.PI)) * 0.06; // a small hop for placeholders
-    play(a, 'walk');
-  } else play(a, 'idle');
-  a.mixer?.update(dt);
+    if (!a.mixer && !a.sprite) a.obj.position.y = Math.abs(Math.sin(a.k * Math.PI)) * 0.06; // a small hop for placeholders
+    play(a, a === player ? 'run' : 'walk');
+    a.still = 0;
+  } else {
+    play(a, 'idle');
+    // Hold the idle clip's first pose until they've stood still a while, so nobody breathes the instant they stop.
+    a.still = (a.still || 0) + dt;
+    const idle = a.actions[a.current];
+    if (idle) idle.paused = a.still < LOOK.people.idleAfter;
+  }
+  a.mixer?.update(dt * LOOK.people.animSpeed);
 }
 
 // ---------- player input ----------
 const held = new Set();
+const order = []; // held directions, newest last, so the latest key wins when two are down
+const newestHeld = () => order.filter(d => held.has(d)).pop();
 let tapped = null; // a quick tap still takes one step, even if the key is up before the next frame
 const KEY = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right' };
-addEventListener('keydown', e => { const k = KEY[e.key]; if (k) { e.preventDefault(); held.add(k); tapped = k; } if (e.key === 't' || e.key === 'T') { fastTime = !fastTime; if (!fastTime && pinned == null) skyClock = 0; }
+addEventListener('keydown', e => { const k = KEY[e.key]; if (k) { e.preventDefault(); if (!held.has(k)) order.push(k); held.add(k); tapped = k; } if (e.key === 't' || e.key === 'T') { fastTime = !fastTime; if (!fastTime && pinned == null) skyClock = 0; }
   if (e.key === 'r' || e.key === 'R') atmos.cycle(e.shiftKey ? -1 : 1);
   audio.unlock(); });
-addEventListener('keyup', e => { const k = KEY[e.key]; if (k) held.delete(k); });
+addEventListener('keyup', e => { const k = KEY[e.key]; if (k) { held.delete(k); order.splice(0, order.length, ...order.filter(d => d !== k)); } });
 for (const b of document.querySelectorAll('[data-dir]')) {
   const d = b.dataset.dir;
-  b.addEventListener('pointerdown', e => { e.preventDefault(); held.add(d); tapped = d; audio.unlock(); });
+  b.addEventListener('pointerdown', e => { e.preventDefault(); order.push(d); held.add(d); tapped = d; audio.unlock(); });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => held.delete(d));
 }
 
-// ---------- sound: footsteps (Kenney RPG Audio), started by the first key or tap ----------
+// ---------- sound: weather ambience, started by the first key or tap (no footsteps; the user didn't like them) ----------
 const audio = {
-  ctx: null, bufs: [], i: 0,
-  async unlock() {
+  ctx: null,
+  unlock() {
     if (this.ctx) return;
-    try {
-      this.ctx = new AudioContext();
-      atmos.startSound(this.ctx);
-      this.bufs = await Promise.all([0, 1, 2, 3].map(async n => this.ctx.decodeAudioData(await (await fetch(`${A}sfx/footstep0${n}.ogg`)).arrayBuffer())));
-    } catch { this.bufs = []; }
-  },
-  step() {
-    if (!this.ctx || !this.bufs.length) return;
-    const s = this.ctx.createBufferSource(), g = this.ctx.createGain();
-    s.buffer = this.bufs[this.i++ % this.bufs.length]; g.gain.value = 0.25; s.connect(g).connect(this.ctx.destination); s.start();
+    try { this.ctx = new AudioContext(); atmos.startSound(this.ctx); } catch {}
   },
 };
 
@@ -338,10 +367,11 @@ const tiltShift = (axis) => new ShaderPass({
 const tsH = tiltShift(new THREE.Vector2(1, 0)), tsV = tiltShift(new THREE.Vector2(0, 1));
 composer.addPass(tsH); composer.addPass(tsV);
 composer.addPass(new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, warmth: { value: LOOK.lens.warmth }, vig: { value: LOOK.lens.vignette } },
+  uniforms: { tDiffuse: { value: null }, warmth: { value: LOOK.lens.warmth }, vig: { value: LOOK.lens.vignette }, sat: { value: LOOK.lens.saturation }, contrast: { value: LOOK.lens.contrast } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float warmth; uniform float vig; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float warmth; uniform float vig; uniform float sat; uniform float contrast; varying vec2 vUv;
     void main(){ vec4 c = texture2D(tDiffuse, vUv); c.rgb += vec3(warmth, warmth*0.4, -warmth*0.6);
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722)); c.rgb = mix(vec3(l), c.rgb, sat); c.rgb = (c.rgb - 0.5) * contrast + 0.5;
       float v = smoothstep(0.85, 0.25, length(vUv - 0.5)); c.rgb *= mix(1.0 - vig, 1.0, v); gl_FragColor = c; }`,
 }));
 composer.addPass(new OutputPass());
@@ -376,7 +406,10 @@ function updateSky(dt) {
   const ang = (dayT - 0.25) * Math.PI * 2;            // sunrise at 0.25, sunset at 0.75
   const height = Math.sin(ang);
   const day = THREE.MathUtils.smoothstep(height, -0.15, 0.25);
-  sun.position.set(Math.cos(ang) * 18, Math.max(2, height * 22), 8);
+  // LOOK.light.sunAz turns the sun's path around the vertical axis.
+  const az = THREE.MathUtils.degToRad(LOOK.light.sunAz), sx = Math.cos(ang) * 18;
+  sun.position.set(sx * Math.cos(az) - 8 * Math.sin(az), Math.max(2, height * 22), sx * Math.sin(az) + 8 * Math.cos(az));
+  sun.shadow.radius = LOOK.light.shadowSoft;
   const w = atmos.state, flash = atmos.flash;
   sun.intensity = (0.1 + day * 1.7) * (0.25 + 0.75 * w.sun) * LOOK.light.sun;
   sun.color.setHSL(0.09, 0.6 * w.sun, 0.55 + day * 0.35);
@@ -398,35 +431,90 @@ function updateSky(dt) {
 }
 
 // ---------- build the hub ----------
-let player;
+let player, sunny = null;
+// Sunnyside paints the ground, water and meadow; the 3D grass blades go, since they fight the pixel grass.
+function paintSunnyside(ss) {
+  const dim = new THREE.Color().setScalar(LOOK.ground.brightness);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(grid.cols, grid.rows), new THREE.MeshLambertMaterial({ map: ss.ground(grid.cols, grid.rows, at), alphaTest: 0.5, color: dim }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = 0.002; ground.receiveShadow = true;
+  scene.add(ground);
+  meadow.material = new THREE.MeshLambertMaterial({ map: ss.tiled('grass', 160), color: dim });
+  // Matte, so the sky reflection doesn't wash the pixel waves out.
+  water.map = ss.tiled('water', 1); water.color.set(0xffffff); water.roughness = 1; water.metalness = 0; water.envMapIntensity = 0.2; water.needsUpdate = true;
+  blades.visible = false;
+  if (!LOOK.canopy.on) atmos.hideCanopy();
+}
+async function tree(c, r, opts) {
+  const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
+  const kinds = LOOK.trees.kind === 'round' ? [0] : LOOK.trees.kind === 'tall' ? [1] : [0, 1];
+  const obj = sunny && await sunny.tree(kinds[h % kinds.length], LOOK.trees.scale);
+  if (!obj) return place('tree', 'tree', c, r, opts);
+  const { x, z } = grid.toWorld(c, r), [ox, oz] = opts.offset || [0, 0];
+  obj.position.set(x + ox, 0, z + oz);
+  scene.add(obj);
+}
+// People are 3D models by default (LOOK.characters); 'pixel' uses the Sunnyside sprites. ?chars=pixel|3d overrides.
+const CHARS = new URLSearchParams(location.search).get('chars') || LOOK.characters;
+async function person(role, c, r, color, hair, variant = 0) {
+  if (CHARS === '3d' && manifest[role]) return place(role, 'person', c, r, { color, variant });
+  if (sunny) { const p = await sunny.person(hair); const { x, z } = grid.toWorld(c, r); p.obj.position.set(x, 0, z); scene.add(p.obj); return { obj: p.obj, clips: [], sprite: p.sprite }; }
+  return place(role, 'person', c, r, { color });
+}
 async function build() {
   await loadManifest();
-  document.getElementById('models').textContent = Object.keys(manifest).length ? 'KayKit models' : 'Placeholder shapes · KayKit models not added yet';
+  sunny = await loadSunnyside();
+  if (sunny) paintSunnyside(sunny);
+  document.getElementById('models').textContent = [sunny && 'Sunnyside World by Daniel Diggle', CHARS === '3d' && manifest.player && 'KayKit Adventurers by Kay Lousberg'].filter(Boolean).join(' · ') || 'Placeholder shapes · art pack not added';
   const jobs = [];
   for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
     const ch = at(c, r);
-    if (ch === 'T') jobs.push(place('tree', 'tree', c, r, { rot: (c * 7 + r * 3) % 6, scale: 0.9 + ((c + r) % 3) * 0.12 }));
+    if (ch === 'T') jobs.push(tree(c, r, { rot: (c * 7 + r * 3) % 6, scale: 0.9 + ((c + r) % 3) * 0.12 }));
     if (ch === 'C') jobs.push(place('center', 'center', c, r, { color: 0xd97757, offset: [0.5, -0.5] }));
     if (ch === 'H') jobs.push(place('house', 'house', c, r, { color: [0xe0a84f, 0x7a8fd0, 0xc05050][(c + r) % 3], rot: Math.PI }));
     if (ch === 'B') jobs.push(place('board', 'prop', c, r, { color: 0x8a6440 }));
     if (ch === 'M') jobs.push(place('mailbox', 'prop', c, r, { color: 0xc04040 }));
     if (ch === 'S') jobs.push(place('waystone', 'prop', c, r, { color: 0x6aa8e8 }));
   }
-  // A ring of forest beyond the edge so the map never ends at a cliff.
-  for (let r = -3; r < grid.rows + 3; r++) for (let c = -3; c < grid.cols + 3; c++) {
+  // A ring of forest beyond the edge so the map never ends at a cliff (LOOK.trees: ring depth and density).
+  const ring = LOOK.trees.ring;
+  for (let r = -ring; r < grid.rows + ring; r++) for (let c = -ring; c < grid.cols + ring; c++) {
     if (grid.inside(c, r)) continue;
     const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
-    if (h % 3 === 0) continue;
-    jobs.push(place('tree', 'tree', c, r, { rot: h % 6, scale: 0.85 + (h % 5) * 0.08, offset: [((h >> 3) % 7 - 3) * 0.08, ((h >> 6) % 7 - 3) * 0.08] }));
+    if ((h % 1000) / 1000 >= LOOK.trees.density) continue;
+    jobs.push(tree(c, r, { rot: h % 6, scale: 0.85 + (h % 5) * 0.08, offset: [((h >> 3) % 7 - 3) * 0.08, ((h >> 6) % 7 - 3) * 0.08] }));
   }
+  // A few trees standing in the open grass inside the map, away from the well and the player's start.
+  const open = [];
+  for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
+    if ((at(c, r) === '.' || at(c, r) === ',') && Math.abs(c - wellCell[0]) + Math.abs(r - wellCell[1]) > 3 && !(c === 11 && r === 9)) open.push([c, r]);
+  }
+  const rank = ([c, r]) => ((c * 7 + 3) * 73856093 ^ (r * 5 + 1) * 19349663) >>> 0;
+  for (const [c, r] of open.sort((a, b) => rank(a) - rank(b)).slice(0, LOOK.trees.inside)) { treeCells.add(c + ',' + r); jobs.push(tree(c, r, {})); }
   await Promise.all(jobs);
-  const p = await place('player', 'person', 11, 9, { color: 0x3050c0 });
-  player = makeActor(p.obj, p.clips, 11, 9, LOOK.move.walk);
-  const claudeSpots = [[4, 7], [17, 8], [11, 13], [6, 4]];
-  for (const [c, r] of claudeSpots) {
-    const m = await place('claude', 'person', c, r, { color: 0xd97757 });
-    const a = makeActor(m.obj, m.clips, c, r, 2.6 * LOOK.move.npcPace);
+  const p = await person('player', 11, 9, 0x3050c0, 'shorthair');
+  player = makeActor(p.obj, p.clips, 11, 9, LOOK.move.walk, p.sprite);
+  const keeperSpots = [[4, 7], [17, 8], [11, 13], [6, 4], [19, 12]].slice(0, LOOK.people.keepers);
+  for (const [i, [c, r]] of keeperSpots.entries()) {
+    const m = await person('keeper', c, r, 0xd97757, sunny?.HAIR[(i + 1) % sunny.HAIR.length], i);
+    const a = makeActor(m.obj, m.clips, c, r, 2.6 * LOOK.move.npcPace, m.sprite);
     a.npc = true; a.wait = Math.random() * 2;
+  }
+  // Animals wander slowly; ducks paddle around the pond.
+  if (sunny) {
+    const land = [], pond = [];
+    for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) (at(c, r) === '~' ? pond : at(c, r) === '.' || at(c, r) === ',' ? land : []).push([c, r]);
+    const rank = ([c, r]) => ((c + 11) * 73856093 ^ (r + 29) * 19349663) >>> 0;
+    land.sort((a, b) => rank(a) - rank(b)); pond.sort((a, b) => rank(a) - rank(b));
+    for (let i = 0; i < LOOK.animals.count; i++) {
+      const kind = LOOK.animals.kinds[i % LOOK.animals.kinds.length], swims = kind === 'Duck';
+      const spot = (swims ? pond : land).find(([c, r]) => free(c, r, { swims }));
+      const m = spot && await sunny.animal(kind);
+      if (!m) continue;
+      const { x, z } = grid.toWorld(...spot);
+      m.obj.position.set(x, swims ? -0.27 : 0, z); scene.add(m.obj);
+      const a = makeActor(m.obj, [], spot[0], spot[1], 1.6 * LOOK.animals.pace, m.sprite);
+      a.npc = true; a.swims = swims; a.pace = LOOK.animals.pace; a.wait = 1 + Math.random() * 3;
+    }
   }
   resize();
   document.body.classList.add('ready');
@@ -444,12 +532,12 @@ function loop() {
   const day = updateSky(dt);
   if (player) {
     if (player.k >= 1 && (held.size || tapped)) {
-      const dir = held.size ? [...held].pop() : tapped;
+      const dir = held.size ? newestHeld() : tapped;
       tapped = null;
-      if (tryMove(player, dir)) { lastStepK = 0; audio.step(); }
+      if (tryMove(player, dir)) lastStepK = 0;
     }
     for (const a of actors) {
-      if (a.npc && a.k >= 1 && (a.wait -= dt * LOOK.move.npcPace) <= 0) {
+      if (a.npc && a.k >= 1 && (a.wait -= dt * (a.pace ?? LOOK.move.npcPace)) <= 0) {
         const dirs = ['up', 'down', 'left', 'right'].sort(() => Math.random() - 0.5);
         for (const d of dirs) if (tryMove(a, d)) break;
         a.wait = 0.8 + Math.random() * 2.5;
@@ -464,9 +552,11 @@ function loop() {
     sun.target.position.copy(look);
     sun.position.add(look);
   }
+  sunny?.update(dt, t, camera, reduceMotion, player?.obj.position);
   if (!reduceMotion) { fire(t); sparks(t); fireflies.tick(t); }
   wellLight.intensity *= reduceMotion ? 1 : 0.9 + Math.sin(t * 11) * 0.05 + Math.sin(t * 23) * 0.05;
-  water.opacity = 0.8 + Math.sin(t * 1.2) * 0.05;
+  water.opacity = LOOK.water.opacity - 0.05 + Math.sin(t * 1.2) * 0.05;
+  if (water.map && !reduceMotion) water.map.offset.set(t * LOOK.water.flow * 0.05, t * LOOK.water.flow * 0.02);
   if (player) atmos.update(dt, t, look, day, reduceMotion);
   composer.render();
   requestAnimationFrame(loop);

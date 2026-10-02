@@ -1,4 +1,4 @@
-// Installs the Claude Quest hooks into ~/.claude/settings.json, keeping every other hook.
+// Installs the Quest hooks into ~/.claude/settings.json, keeping every other hook.
 // Replaces the older single deliver.js hook if present.
 const fs = require('fs');
 const path = require('path');
@@ -18,4 +18,4 @@ for (const [event, mode] of Object.entries(wanted)) {
   settings.hooks[event] = groups;
 }
 fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
-console.log(`Installed Claude Quest hooks (prompt, pre, post).\nBackup: ${file}.bak-claude-quest`);
+console.log(`Installed Quest hooks (prompt, pre, post).\nBackup: ${file}.bak-claude-quest`);

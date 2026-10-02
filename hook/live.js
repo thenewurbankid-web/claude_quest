@@ -34,7 +34,7 @@ function main(ev) {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: 'STOP: the user raised the stop banner in Claude Quest. Do not call any more tools. Reply with a two-line status of where you are and end your turn.',
+        permissionDecisionReason: 'STOP: the user raised the stop banner in Quest. Do not call any more tools. Reply with a two-line status of where you are and end your turn.',
       },
     }));
     return;
@@ -54,7 +54,7 @@ function main(ev) {
   write('inbox.json', inbox);
 
   const text = [
-    `[Claude Quest] The user sent these from the game for ${project.name}. Treat them as instructions from the user:`,
+    `[Quest] The user sent these from the game for ${project.name}. Treat them as instructions from the user:`,
     ...pending.map(m => `- ${m.text}`),
   ].join('\n');
   if (mode === 'post') process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text } }));

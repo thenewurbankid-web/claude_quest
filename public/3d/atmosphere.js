@@ -8,6 +8,7 @@
 // Everything is anchored in the world and wraps around the camera, so the parallax comes from real depth.
 import * as THREE from 'three';
 import { place } from './clock.js';
+import { LOOK } from './look.js';
 
 const A = 'assets/na/';
 const loader = new THREE.TextureLoader();
@@ -270,7 +271,7 @@ export function createAtmosphere({ scene, grid, at, renderer, camera }) {
     } };
   };
   const shadows = cloudBanks(0.07, 6, { map: blobTex, color: 0x0c1220, opacity: 0.3, puff: 9, spread: 10, speed: 0.9 });
-  const wisps = cloudBanks(7.2, 5, { map: cloudTex, color: 0xffffff, opacity: 0.16, puff: 4.5, spread: 7, speed: 0.9, alphaTest: 0.02 });
+  const wisps = cloudBanks(LOOK.clouds.wispHeight, 5, { map: cloudTex, color: 0xffffff, opacity: 0.16, puff: 4.5, spread: 7, speed: 0.9, alphaTest: 0.02 });
 
   // ---------- mist bands and light shafts ----------
   const fogTex = softTex('fx/Fog.png');
@@ -312,14 +313,15 @@ export function createAtmosphere({ scene, grid, at, renderer, camera }) {
     // Only outside the map, so crowns frame the play area and never cover it. They sit high, so they slide past
     // faster than the ground when the camera moves.
     for (let r = -3; r < grid.rows + 4; r++) for (let c = -4; c < grid.cols + 4; c++) {
-      if (r >= -1 && r < grid.rows + 1 && c >= -1 && c < grid.cols + 1) continue;
+      const gap = LOOK.canopy.gap;
+      if (r >= -gap && r < grid.rows + gap && c >= -gap && c < grid.cols + gap) continue;
       const h = ((c * 19349663) ^ (r * 83492791)) >>> 0;
-      if (h % 3) continue;
+      if ((h % 1000) / 1000 >= LOOK.canopy.density) continue;
       const { x, z } = grid.toWorld(c, r);
-      const k = h % 3, s = 1.6 + (h % 5) * 0.2;
+      const k = h % 3, s = (1.6 + (h % 5) * 0.2) * LOOK.canopy.scale;
       const sp = new THREE.Sprite(mats[k]);
       sp.scale.set(s, s * (k === 2 ? 1 : 0.75), 1);
-      sp.position.set(x, 1.7 + (h % 4) * 0.3, z);
+      sp.position.set(x, LOOK.canopy.height + (h % 4) * 0.3, z);
       sp.renderOrder = 5;
       scene.add(sp); list.push(sp);
     }
@@ -387,6 +389,8 @@ export function createAtmosphere({ scene, grid, at, renderer, camera }) {
     MODES, KINDS, info, setMode, onChange: f => (listeners.add(f), f(info())),
     cycle(dir = 1) { setMode(MODES[(MODES.indexOf(mode) + dir + MODES.length) % MODES.length]); },
     startSound,
+    // Hides the high crowns, for art packs whose own border forest already frames the map.
+    hideCanopy() { for (const sp of canopy.list) sp.visible = false; },
     get state() { return cur; },
     get flash() { return flash; },
     resize(h) { const s = h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)); for (const k of Object.values(kinds)) k.u.uScale.value = s; snow.u.uScale.value = s; },
@@ -435,7 +439,7 @@ export function createAtmosphere({ scene, grid, at, renderer, camera }) {
       mist.tick(time, look);
       rays.mat.opacity = day * Math.max(0, cur.sun - 0.5) * 2 * 0.22 * (1 - cur.fog);
       if (!reduceMotion) rays.mat.opacity *= 0.8 + Math.sin(t * 0.7) * 0.2;
-      for (const m of canopy.mats) m.color.copy(tint).multiplyScalar(0.5 + 0.3 * cur.sun); // a touch darker than the ground, like a foreground
+      for (const m of canopy.mats) m.color.copy(tint).multiplyScalar((0.5 + 0.3 * cur.sun) * LOOK.canopy.brightness); // a touch darker than the ground, like a foreground
       // Storms: lightning every so often, a white flash that fades fast.
       flash = Math.max(0, flash - dt * 3.5);
       if (cur.storm > 0.5 && !reduceMotion && (nextBolt -= dt) <= 0) { flash = 1; nextBolt = 5 + Math.random() * 11; }

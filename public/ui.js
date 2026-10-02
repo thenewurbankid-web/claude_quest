@@ -10,15 +10,14 @@ const UI = {
 
   get open() { return this.mode !== null || this.busy > 0; },
 
-  // The companion goes by the name the player gave it. Real-cost and proper names (Claude tokens, Claude Quest,
-  // the Claude Center, Claude Code) keep the real word.
+  // The companion goes by the name the player gave it. Place names (the Keeper's Lodge) keep the word.
   name(s) {
-    const n = (typeof WORLD !== 'undefined' && WORLD?.save?.settings.claudeName) || '';
+    const n = (typeof WORLD !== 'undefined' && WORLD?.save?.settings.keeperName) || '';
     if (!n || s == null) return s;
     return String(s)
-      .replace(/\bClaudes\b/g, `${n}s`)
-      .replace(/\bClaude\b(?! (Center|Quest|tokens|Code))/g, n)
-      .replace(/\bCLAUDE\b(?! QUEST)/g, n.toUpperCase());
+      .replace(/\bKeepers\b/g, `${n}s`)
+      .replace(/\bKeeper\b(?!'s Lodge)/g, n)
+      .replace(/\bKEEPER\b/g, n.toUpperCase());
   },
 
   // Buttons and clicks feed the same handlers as the keyboard.

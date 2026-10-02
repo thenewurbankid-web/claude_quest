@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude Quest · Map Room</title>
+<title>Quest · Map Room</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -42,7 +42,7 @@
 <body>
 <main>
   <h1>The Map Room</h1>
-  <p class="lead">Settings for Claude Quest. Changes reach the lands on the next scan. <a href="./" style="color:#a8c8ff">Back to the lands</a></p>
+  <p class="lead">Settings for Quest. Changes reach the lands on the next scan. <a href="./" style="color:#a8c8ff">Back to the lands</a></p>
 
   <section class="box" aria-labelledby="lands-h">
     <h2 id="lands-h">Charted lands <small id="lands-count"></small></h2>
@@ -151,7 +151,7 @@ async function load() {
   const agent = g.agents?.[0];
   $('guild').innerHTML = g.up
     ? `<div class="row"><span class="tag ok">open</span> ${agent ? `${esc(agent.name)} is <b>${esc(agent.status)}</b>` : 'No guild agent yet'} · ${(g.issues || []).length} recent quest(s) · ${(g.liveRuns || []).length} running</div>
-       <p class="sub">Post and stop quests from the Guild Hall in the Claude Center (the Clerk, or Enter → Guild Hall). Paperclip's own board is at <a href="http://127.0.0.1:3100" target="_blank" rel="noopener">127.0.0.1:3100</a>.</p>`
+       <p class="sub">Post and stop quests from the Guild Hall in the Keeper's Lodge (the Clerk, or Enter → Guild Hall). Paperclip's own board is at <a href="http://127.0.0.1:3100" target="_blank" rel="noopener">127.0.0.1:3100</a>.</p>`
     : `<div class="row"><span class="tag bad">closed</span> Paperclip isn't answering at 127.0.0.1:3100.</div>`;
 }
 
@@ -191,20 +191,20 @@ $('save-game').addEventListener('click', async () => {
 // ---------- the save and the link ----------
 async function saves() {
   const mode = Net.mode, cps = await Saves.checkpoints();
-  $('mode').innerHTML = { local: '<span class="tag ok">local</span> Served by Claude Quest on this Mac.', linked: `<span class="tag ok">linked</span> Paired with your Mac over an encrypted link · ${esc(Link.status)}`, browser: '<span class="tag">browser only</span> Playing on the save in this browser. Link your Mac for live Claude data.' }[mode];
+  $('mode').innerHTML = { local: '<span class="tag ok">local</span> Served by Quest on this Mac.', linked: `<span class="tag ok">linked</span> Paired with your Mac over an encrypted link · ${esc(Link.status)}`, browser: '<span class="tag">browser only</span> Playing on the save in this browser. Link your Mac for live Keeper data.' }[mode];
   $('unlink').hidden = mode !== 'linked';
   $('cps').innerHTML = cps.length ? cps.map((c, i) => `<div class="row"><span style="flex:1">${esc(c.name)} <span class="sub">${new Date(c.at).toLocaleString()}</span></span><button class="ghost" data-cp="load" data-i="${i}">Load</button><button class="danger" data-cp="del" data-i="${i}">Delete</button></div>`).join('') : '<p class="sub">No checkpoints yet.</p>';
 }
 $('export').onclick = () => Saves.exportFile();
 $('import').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
-  try { await Saves.importFile(f); status($('save-status'), 'Save loaded. Reload Claude Quest to continue from it.'); } catch (err) { status($('save-status'), err.message, true); }
+  try { await Saves.importFile(f); status($('save-status'), 'Save loaded. Reload Quest to continue from it.'); } catch (err) { status($('save-status'), err.message, true); }
   e.target.value = '';
 };
 $('checkpoint').onclick = async () => { await Saves.checkpoint($('cp-name').value.trim()); $('cp-name').value = ''; saves(); status($('save-status'), 'Checkpoint saved.'); };
 $('cps').onclick = async e => {
   const b = e.target.closest('[data-cp]'); if (!b) return;
-  if (b.dataset.cp === 'load') { if (!confirm('Load this checkpoint? Your current progress in this browser is replaced (export it first if you want to keep it).')) return; await Saves.loadCheckpoint(+b.dataset.i); status($('save-status'), 'Checkpoint loaded. Reload Claude Quest.'); }
+  if (b.dataset.cp === 'load') { if (!confirm('Load this checkpoint? Your current progress in this browser is replaced (export it first if you want to keep it).')) return; await Saves.loadCheckpoint(+b.dataset.i); status($('save-status'), 'Checkpoint loaded. Reload Quest.'); }
   else { await Saves.deleteCheckpoint(+b.dataset.i); }
   saves();
 };
@@ -214,7 +214,7 @@ $('pair').onclick = () => {
 };
 $('unlink').onclick = () => { if (confirm('Unlink this browser from your Mac? Your save stays.')) { Link.code = null; location.reload(); } };
 
-Net.subscribe(() => {}, () => {}).then(() => new Promise(r => setTimeout(r, Net.mode === 'linked' ? 2500 : 0))).then(load).catch(e => { document.querySelector('main').insertAdjacentHTML('beforeend', `<p style="color:#f88">Couldn't reach Claude Quest: ${esc(e.message)}</p>`); });
+Net.subscribe(() => {}, () => {}).then(() => new Promise(r => setTimeout(r, Net.mode === 'linked' ? 2500 : 0))).then(load).catch(e => { document.querySelector('main').insertAdjacentHTML('beforeend', `<p style="color:#f88">Couldn't reach Quest: ${esc(e.message)}</p>`); });
 </script>
 </body>
 </html>

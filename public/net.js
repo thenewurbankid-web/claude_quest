@@ -3,7 +3,7 @@
 //   linked  - hosted (e.g. GitHub Pages) and paired with the player's Mac over an end-to-end encrypted MQTT link
 //             (see Link below). The Mac never takes an incoming connection; both sides connect out to the broker.
 //   browser - nothing linked. The game runs on its last saved world, kept in IndexedDB, with export/import and
-//             checkpoints. Actions that need Claude wait in a queue until a link exists.
+//             checkpoints. Actions that need Keeper wait in a queue until a link exists.
 const SAVE_VERSION = 1;
 
 // ---------- the browser save: a tiny IndexedDB key/value store ----------
@@ -35,10 +35,10 @@ const Saves = {
   async bundle(name = 'save') {
     const client = {};
     for (const k of this.clientKeys) { try { client[k] = JSON.parse(localStorage.getItem(k)); } catch {} }
-    return { kind: 'claude-quest-save', version: SAVE_VERSION, name, at: new Date().toISOString(), world: await this.get('world'), client, pending: await this.get('pending', []) };
+    return { kind: 'quest-save', version: SAVE_VERSION, name, at: new Date().toISOString(), world: await this.get('world'), client, pending: await this.get('pending', []) };
   },
   async restore(b) {
-    if (b?.kind !== 'claude-quest-save') throw new Error('That file is not a Claude Quest save.');
+    if (!['quest-save', 'claude-quest-save'].includes(b?.kind)) throw new Error('That file is not a Quest save.');
     if (b.world) await this.set('world', b.world);
     await this.set('pending', b.pending || []);
     for (const k of this.clientKeys) { try { if (b.client?.[k] === undefined || b.client[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(b.client[k])); } catch {} }
@@ -47,7 +47,7 @@ const Saves = {
     const b = await this.bundle('export');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(b, null, 2)], { type: 'application/json' }));
-    a.download = `claude-quest-${b.at.slice(0, 16).replace(/[:T]/g, '-')}.cqsave.json`;
+    a.download = `quest-${b.at.slice(0, 16).replace(/[:T]/g, '-')}.cqsave.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   },
@@ -102,7 +102,7 @@ const Link = {
 })();
 
 // ---------- the one interface the game uses ----------
-const LOCAL_ONLY = 'The land is cut off from the Ember Well. Link your Mac in the Map Room (settings) to send this to Claude.';
+const LOCAL_ONLY = 'The land is cut off from the Ember Well. Link your Mac in the Map Room (settings) to send this to Keeper.';
 const QUEUEABLE = new Set(['/api/decide', '/api/letter', '/api/mission', '/api/step', '/api/flush']);
 
 const Net = {
@@ -212,12 +212,12 @@ const strip = w => ({ ...w, guild: { up: false } });
 function DEMO_WORLD() {
   return {
     towns: [{
-      id: 'claude-quest', name: 'Claude Quest', color: '#e0a84f', projectId: null, townName: 'Ember Hollow',
+      id: 'claude-quest', name: 'Quest', color: '#e0a84f', projectId: null, townName: 'Ember Hollow',
       motto: 'Where the roads are laid, one quest at a time.', status: 'quiet', generating: false, storySource: 'template',
-      activeTitle: null, lastActivityAgo: 'a while ago', lastClaude: null, blocked: null, branch: 'main', dirty: 0, commits: [],
+      activeTitle: null, lastActivityAgo: 'a while ago', lastKeeper: null, blocked: null, branch: 'main', dirty: 0, commits: [],
       story: ['Ember Hollow is quiet. Its builders are away.', 'Link your Mac in the Map Room and the lands come alive.'],
-      scout: ['No Claude has passed through yet.'], historian: ['The chronicle is still unwritten.'],
-      missions: [], decisions: [], camps: [], claudes: [], bosses: [], stopped: false, flowers: 3, statues: 0, journal: null,
+      scout: ['No Keeper has passed through yet.'], historian: ['The chronicle is still unwritten.'],
+      missions: [], decisions: [], camps: [], keepers: [], bosses: [], stopped: false, flowers: 3, statues: 0, journal: null,
     }],
     events: [], outbox: [], model: 'offline', night: null,
     stats: { answers: 0, missionsDone: 0, bosses: 0, messages: 0, days: [], streak: 0 }, badges: [], runs: [],

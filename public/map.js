@@ -1,5 +1,5 @@
 // Maps: an always-on minimap in the corner and a full Town Map, Pokémon style. Both are painted from the live
-// scene itself (tiles, buildings, camps, Claudes, bosses) at a small scale, so they always match the world.
+// scene itself (tiles, buildings, camps, Keepers, bosses) at a small scale, so they always match the world.
 const MapView = {
   // Placement and size come from the save's settings (the Map Room page); N toggles it in game.
   get mini() { return WORLD?.save?.settings.minimap ?? true; },
@@ -43,7 +43,7 @@ const MapView = {
     };
     for (const e of S.dyn.values()) {
       if (e.kind === 'boss') dot(e.bx + 0.5, e.by + 0.5, '#ff3838', r + 1);
-      if (e.kind === 'claude') dot(e.x, e.y, e.data.state === 'sleeping' ? '#9090b8' : '#ffb080');
+      if (e.kind === 'keeper') dot(e.x, e.y, e.data.state === 'sleeping' ? '#9090b8' : '#ffb080');
     }
     if (performance.now() % 1000 < 650) dot(S.px, S.py, '#ffffff', r + 1);
   },
@@ -76,7 +76,7 @@ const MapView = {
       const t = a.town && town(a.town);
       const camp = a.camp && t?.camps.find(c => c.id === a.camp);
       let sub = 'Mail, quests, the Guild Hall, the Cartographer';
-      if (t && !camp) sub = `${t.status} · ${t.claudes.length} Claude${t.claudes.length === 1 ? '' : 's'} · ${t.camps.length} camp${t.camps.length === 1 ? '' : 's'}${t.bosses.length ? ` · ${t.bosses.length} boss${t.bosses.length > 1 ? 'es' : ''}` : ''}`;
+      if (t && !camp) sub = `${t.status} · ${t.keepers.length} Keeper${t.keepers.length === 1 ? '' : 's'} · ${t.camps.length} camp${t.camps.length === 1 ? '' : 's'}${t.bosses.length ? ` · ${t.bosses.length} boss${t.bosses.length > 1 ? 'es' : ''}` : ''}`;
       if (camp) sub = `Worktree camp of ${t.townName}${camp.branch ? ` · ${camp.branch}` : ''} · last visit ${camp.ago}`;
       const warpable = a.slot === undefined;
       return { a, t, name: a.name, sub, cx: (a.x0 + a.x1) / 2, cy: (a.y0 + a.y1) / 2, warpable, real: t ? `(${t.name}${camp ? ` / ${camp.label}` : ''})` : '' };

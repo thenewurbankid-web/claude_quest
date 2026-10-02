@@ -1,6 +1,6 @@
-// The hub, Ember Hollow, as cells. Mirrors the 2D hub: Claude Center to the north, two crossing roads, the Ember Well
+// The hub, Ember Hollow, as cells. Mirrors the 2D hub: Keeper's Lodge to the north, two crossing roads, the Ember Well
 // at the crossing, a notice board, a mailbox and a Waystone. Legend:
-//   . grass   , tall grass   = road   ~ water   T tree   C Claude Center (2x2 footprint marker)   H house
+//   . grass   , tall grass   = road   ~ water   T tree   C Keeper's Lodge (2x2 footprint marker)   H house
 //   W Ember Well   B board   M mailbox   S Waystone   F flowers
 export const HUB = [
   'TTTTTTTTTT====TTTTTTTTTT',

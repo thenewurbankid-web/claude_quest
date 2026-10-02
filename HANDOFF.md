@@ -3,6 +3,84 @@
 **New session, start here.** Run with `npm start` (http://localhost:4777) or the `claude-quest` preview config.
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
+## NEXT SESSION START HERE: polish (user, 2026-10-02 night)
+The user wants it polished "like a Zelda or Pokémon game", with readable text that isn't pixelated.
+- **"Not pixelated" means the text only** (user: "no just text"). The world stays Sunnyside pixel art, and the people
+  stay 3D (KayKit). Do NOT move the world to 3D. That was proposed and declined.
+- Readable text: replace the pixel font in the HUD, dialogue and menus with a clean, rounded game font and proper,
+  polished text boxes (modern Pokémon style).
+- Improve the ground, trees, well and buildings within the pixel world: Sunnyside's modular houses instead of boxes, a
+  proper well, richer ground (paths, edges, flowers), and more tree variety.
+- Voice (optional, 0 Claude tokens): Keepers and townsfolk speak their lines. Choose between the browser's built-in
+  speech (free, robotic) and a small in-browser voice model (~80 MB download, better). Add a mute setting.
+- Night is too dark in the 3D view (found in testing): Keepers are hard to see at 10 pm.
+- Then the 2D→3D port, step by step: real Keepers, talking, towns and camps, game systems, then autoplay, minimap and save.
+
+## Characters + feel (user, 2026-10-02 night)
+- **3D is the default page** (`/` = the 3D view, `/2d.html` = the full 2D game; `#link=` pairing links forward to 2D).
+- **People are 3D now:** KayKit Adventurers (CC0, in the repo at `public/assets/3d/kaykit`) on the Sunnyside pixel
+  world. The user found the pixel people "too pixelated" and asked for stylized 3D that matches the world.
+  `LOOK.characters` ('3d' or 'pixel') or `?chars=pixel` switches back. The height is 1.35 tiles (manifest). The
+  player runs (Running_A) and Keepers walk (Walking_A).
+- Idle animations (breathing) start only after `LOOK.move.idleAfter` (2.5 s) of standing still, for both 3D and pixel.
+- The player glides cell to cell at a steady speed while a key is held, with no easing or stop per cell. Footsteps are removed.
+- Trees no longer cycle their frames, which looked like dancing.
+- **User's lab settings applied (2026-10-02 night)** in `public/3d/look.js` plus the manifest: the player is the Ranger,
+  the Keepers are the other KayKit models, 1.85 tall, 3 Keepers. Also animation speed 1.75, blend 0.55, idleAfter 2.75,
+  camera 9.2 up and 17 back, sun 1.5 at azimuth −6, shadow softness, saturation and contrast in the grade pass,
+  ground brightness 0.56, water opacity and flow, wisps at 9.4, trees (mixed, ×1.2, density 0.27, ring 4, 4 inside),
+  and animals (3, chickens and ducks; ducks swim in the pond).
+- **Trees fixed after "they look like they're floating":** they stand upright (not camera-facing) with their own
+  contact shadow (`LOOK.trees.contact`). The high canopy is off: trunkless crowns near the ground read as floating.
+- **Next, asked by the user:** improve the ground, trees, well and buildings. Houses and the Keeper's Lodge are still
+  placeholder boxes, the well is a plain cylinder, the ground is flat swatches, and the trees are two small Sunnyside sprites.
+- Sprite lab (artifact) has controls for every sprite, parallax layer, weather, grade and light. It still shows
+  pixel people; giving it the 3D characters is not done yet.
+- An 8-way Sunnyside human export was started and parked: a reader exists in the scratchpad, and the characters are 3D now.
+
+## Naming (user, 2026-10-02 night): no real product names
+- The helpers formerly called Claudes are **Keepers**; the hub building is the **Keeper's Lodge**. The game is **Quest**.
+  Done everywhere players see it and in identifiers (`keepers`, `keeperName`, kind/source/owner `'keeper'`).
+- Kept on purpose, because they're functional: the `claude` CLI and `cfg.claudeBin`, `~/.claude/` paths, the hook install,
+  model IDs, and "Claude Code" in comments and in prompts describing real transcripts.
+- Old saves still load: `claudeName`, `claudes`, `source: 'claude'`, `owner: 'claude'` and the `claude-quest-save`
+  file kind are all migrated or accepted (`upgradeWorld` in world.js, `settings()` in lib/areas.js).
+- The settings screen keeps real tool names (user's call). Dead files (`server.js`, `game.js`, `hook/deliver.js`) were not touched.
+- **Waiting on the user:** a new code, folder and repo name. That step also renames the IndexedDB `claude-quest`
+  (needs a migration), the local hub town id, the hook path and the package name, and changes the Pages URL.
+
+## Art direction, latest (user, 2026-10-02 late): pixel HD-2D, Sunnyside World as the anchor
+Supersedes the Pixel Crawler and KayKit notes below. Both are parked on branches: `hd2d-pixel-crawler` (Pixel Crawler
+ground tiles in a world-space shader, reusable for Sunnyside) and `lowpoly-kaykit` (KayKit glTF characters).
+- **Default packs**, all downloaded into ~/Downloads with real names:
+  - World: `Sunnyside_World_ASSET_PACK_V2.1.zip` (Daniel Diggle, 16 px). The 8-way human beta is an `.aseprite`
+    source only, so it needs an export step.
+  - Village: `Pixel 16 v2 village free.zip` (zedpxl). Paid v2 is $5.99.
+  - Pets: `AllCatsDemo.zip`, `CatMaterialsDEMO.zip` (ToffeeCraft, 32 px frames). Paid, all cats: $1.80.
+  - UI: `Humble Gift - Paper UI System v1.1.zip` (Humble Pixel). Paid Player Status: $4.
+  - FX and music: Ninja Adventure (CC0). Backup props: Pixel Crawler.
+- **User decisions:** the packs ship as defaults; players can reset to defaults but can't delete them. `/settings` gets
+  an asset manager (import packs, pick a pack per role, credits, buy links).
+- **Licence decision (user, 2026-10-02):** keep the packs out of git and upload them into the Pages build from the
+  Mac. They're unzipped in the git-ignored `public/packs/`. That deploy step isn't built yet. Caveat raised to the
+  user: packs on the live URL are still publicly downloadable.
+- **Slice 1 built (uncommitted):** `public/3d/sunnyside.js`. With Sunnyside present, the 3D view paints:
+  - the ground (grass and path) from the 16 px tileset onto one canvas, with water from a world-UV tiled swatch
+  - Sunnyside animated trees at the tileset's own scale, which fade when they stand between the camera and the player
+  - people as camera-facing billboards: body, hair and tools layers composited, idle and walk strips flipped for
+    left and right, sun and fire shadows, and a blob shadow
+  - the 3D grass blades and the Ninja Adventure canopy hidden (`atmos.hideCanopy()`), since they clash with the pixel style
+  Without the packs (for example on Pages), `load()` returns null and the placeholders remain. Water was invisible
+  before this change: its plane sat under the tile tops, now fixed at y −0.28.
+- **Next slices:** houses and Claude Center built from Sunnyside's modular roof and wall tiles (they're still
+  placeholder boxes); well, board, mailbox and waystone props; animals (chickens, sheep) and ToffeeCraft cats; the
+  `/settings` asset manager; the Pages upload step. Up/down walking reuses side frames, because Sunnyside humans are
+  side-view only. The 8-way beta is `.aseprite` and needs an export step.
+- **Queued from the user:** smooth animation, walking and camera; parallax layers; an occasional lightning flash in
+  rain, not only storms.
+- Sprite lab artifact (tuning sprites, light, camera): https://claude.ai/artifact/KXfCSDFdAg5UmzaeFCnYfP. Its tuned
+  values are in `public/3d/look.js`, already used by `scene.js`.
+
 ## Next up
 **Read `PLAN-settlements.md` and `PLAN-adventure.md` first.** Settlements is phases A–F. Adventure is the casual-player
 mode: a real game with no Claude Code needed, traditional game AI by default and WebLLM opt-in. Phase A comes first for both.

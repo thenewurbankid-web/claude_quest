@@ -1,7 +1,7 @@
 <title>Quest</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: a handbook for a GBA-era fantasy game. Pixel display face for names only, a readable body face,
    a live pixel overworld as the hero, then Guide → Docs → Roadmap as plain, scannable sections. */
@@ -18,7 +18,7 @@
   --box: #ffffff;
   --box-ink: #262630;
   --box-sub: #7a7a8a;
-  --display: "Silkscreen", ui-monospace, monospace;
+  --display: "Pixelify Sans", ui-monospace, monospace;
   --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: light;
@@ -165,7 +165,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 40px; color: var
     </div>
     <div class="screen" aria-label="An animated overworld: three town houses around the Ember Well, Claudes walking the road, and a Sphinx waiting with a riddle.">
       <canvas id="world" width="240" height="160"></canvas>
-      <div class="cap">240 × 160 · drawn in code</div>
+      <div class="cap">240 × 160 · the game's own art, drawn in code</div>
     </div>
   </header>
 
@@ -340,6 +340,7 @@ cd ~/Repositories/claude-quest &amp;&amp; npm install</pre>
   <span>Fantasy lore: the Ember Well, Waystones, Rifts and the Long Night.</span>
 </footer>
 
+<script src="art.js"></script>
 <script>
 // Copy buttons
 document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
@@ -350,79 +351,67 @@ document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () =
 }));
 function selectIn(el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
 
-// The hero overworld, 240×160 like a GBA screen, drawn with rectangles as the game does.
+// The hero overworld, 240×160 like a GBA screen, composed from the game's own art (art.js), the same drawing code the game uses.
 (() => {
-  const c = document.getElementById('world'), g = c.getContext('2d');
+  const c = document.getElementById('world');
+  if (typeof Art === 'undefined') return;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const p = (col, x, y, w = 1, h = 1) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
-  const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(7);
-  const tufts = Array.from({ length: 70 }, () => [rnd() * 240 | 0, rnd() * 160 | 0]);
-  const flowers = Array.from({ length: 22 }, () => [rnd() * 240 | 0, rnd() * 160 | 0, rnd() < .5 ? '#e05050' : '#f0d040']);
-
-  function ground() {
-    p('#88d070', 0, 0, 240, 160);
-    for (const [x, y] of tufts) { p('#68b850', x, y, 1, 2); p('#68b850', x + 2, y + 1); }
-    // roads (2 tiles wide) to the well
-    p('#d8c088', 0, 88, 240, 16); p('#d8c088', 112, 0, 16, 160);
-    p('#c8b078', 0, 103, 240, 1); p('#c8b078', 127, 0, 1, 160);
-    for (const [x, y, col] of flowers) if (!(y > 84 && y < 106) && !(x > 108 && x < 130)) { p(col, x, y, 2, 2); p('#fff8c0', x, y); }
-    // trees along the top edge
-    for (let x = 0; x < 240; x += 16) if (x < 104 || x > 128) tree(x, 0);
-  }
-  function tree(x, y) { p('#2f7a3a', x + 2, y + 1, 12, 10); p('#3f9a48', x + 3, y + 2, 9, 6); p('#245f2d', x + 2, y + 9, 12, 2); p('#7a5230', x + 7, y + 11, 3, 4); }
-  function house(x, y, roof, sign) {
-    p('#00000030', x + 2, y + 30, 36, 3);
-    p(roof, x, y, 40, 12); p(shade(roof, .75), x, y + 10, 40, 2); p(shade(roof, 1.2), x + 2, y + 2, 36, 2);
-    p('#f0e8d8', x + 3, y + 12, 34, 18); p('#d8ccb8', x + 3, y + 28, 34, 2);
-    p('#7a5230', x + 16, y + 19, 8, 11); p('#e8c040', x + 22, y + 24);
-    p('#78a8d8', x + 6, y + 16, 6, 5); p('#78a8d8', x + 28, y + 16, 6, 5);
-    if (sign) { p('#5a4030', x + 13, y + 13, 14, 5); }
-  }
-  function shade(hex, k) { const n = parseInt(hex.slice(1), 16), ch = s => Math.max(0, Math.min(255, ((n >> s) & 255) * k | 0)); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; }
-  function well(t) {
-    const glow = reduce ? .5 : .5 + .5 * Math.sin(t / 380);
-    g.fillStyle = `rgba(255,170,80,${.18 + .2 * glow})`; g.beginPath(); g.arc(120, 96, 15 + 3 * glow, 0, 7); g.fill();
-    p('#8a8a9a', 110, 90, 20, 12); p('#a8a8b8', 110, 90, 20, 3); p('#6a6a7a', 110, 100, 20, 2);
-    p('#ff9a40', 114, 92, 12, 6); p('#ffd070', 117, 93, 6, 3);
-    if (!reduce) for (let i = 0; i < 3; i++) { const k = ((t / 900 + i / 3) % 1); p(`rgba(255,200,110,${1 - k})`, 116 + i * 4, 90 - k * 16, 1, 1); }
-  }
-  function claude(x, y, step, col) {
-    const b = step ? 1 : 0;
-    p('#00000030', x + 3, y + 15, 10, 2);
-    p(col, x + 3, y + 6 + b, 10, 7); p(shade(col, .8), x + 3, y + 12 + b, 10, 1);
-    p('#f0c8a0', x + 4, y + 1 + b, 8, 6); p('#3a2a20', x + 4, y + b, 8, 2);
-    p('#202020', x + 6, y + 3 + b); p('#202020', x + 9, y + 3 + b);
-    p('#404050', x + 4 + (step ? 0 : 1), y + 13, 3, 2); p('#404050', x + 9 - (step ? 0 : 1), y + 13, 3, 2);
-  }
-  function sphinx(x, y, t) {
-    p('#00000030', x + 1, y + 17, 22, 3);
-    p('#c8a048', x + 2, y + 8, 20, 9); p('#e0b858', x + 14, y + 2, 9, 9); p('#3a2a1a', x + 17, y + 5); p('#3a2a1a', x + 20, y + 5);
-    p('#5878c8', x + 13, y + 1, 11, 3); p('#a08038', x + 2, y + 15, 20, 2);
-    const bob = reduce ? 0 : Math.round(Math.sin(t / 260) * 1.5);
-    p('#ffffff', x + 6, y - 11 + bob, 9, 10); p('#262630', x + 6, y - 11 + bob, 9, 1); p('#262630', x + 6, y - 2 + bob, 9, 1);
-    p('#262630', x + 5, y - 10 + bob, 1, 8); p('#262630', x + 15, y - 10 + bob, 1, 8);
-    p('#e05050', x + 9, y - 9 + bob, 3, 1); p('#e05050', x + 11, y - 8 + bob, 1, 2); p('#e05050', x + 10, y - 6 + bob, 1, 1); p('#e05050', x + 10, y - 4 + bob, 1, 1);
-  }
+  const T = 16, COLS = 15, ROWS = 10;
+  const tiles = Art.tiles();
+  const tile = (i, x, y) => g.drawImage(tiles, i * T, 0, T, T, x, y, T, T);
+  const map = [];
+  const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(11);
+  for (let y = 0; y < ROWS; y++) { map[y] = []; for (let x = 0; x < COLS; x++) {
+    let t = rnd() < .3 ? 1 : 0;
+    if (y === 0 && (x < 6 || x > 8)) t = 3;
+    if (x === 0 && y > 0) t = 3;
+    if (y >= 6 && y <= 6 && x !== 7) t = 2;
+    if (x === 7) t = 2;
+    if (t < 2 && rnd() < .08) t = rnd() < .5 ? 5 : 6;
+    if (t < 2 && y > 7 && x > 10 && rnd() < .4) t = 7;
+    map[y][x] = t;
+  } }
+  const center = Art.house(6, 4, '#d97757', { emblem: 'CC' });
+  const home = Art.house(5, 3, '#e0a84f', { sign: 'QUEST' });
+  const look = { claude: { cap: false, hair: '#c05a38', shirt: '#d97757', pants: '#6a4030', skin: '#f8d8b0' },
+    player: { hat: '#e03030', shirt: '#3050c0', pants: '#303850' }, guide: { hat: '#f0f0f0', shirt: '#e8e8e8', pants: '#406080' } };
+  const sheets = Object.fromEntries(Object.entries(look).map(([k, v]) => [k, Art.character(v)]));
+  const sphinx = Art.boss('question'), stone = Art.waystone(true), board = Art.board(), mailbox = Art.mailbox();
+  const spirit = [0, 1, 2].map(f => Art.spirit(f));
+  const sprite = (sheet, dir, f, x, y) => g.drawImage(sheet, (dir * 3 + f) * T, 0, T, T, Math.round(x), Math.round(y), T, T);
+  // walkers on the roads: [sheet, path in px]
   const walkers = [
-    { path: [[-16, 88], [104, 88], [104, 140], [104, 88], [-16, 88]], col: '#d97757', s: 0 },
-    { path: [[248, 88], [140, 88], [112, 88], [112, 24], [112, 88], [248, 88]], col: '#5878c8', s: .35 },
-    { path: [[112, 168], [112, 110], [60, 110], [112, 110], [112, 168]], col: '#58a868', s: .6 },
+    { k: 'claude', path: [[16, 96], [112, 96], [112, 150]], s: 0 },
+    { k: 'claude', path: [[230, 96], [112, 96], [112, 16]], s: .5 },
+    { k: 'guide', path: [[112, 150], [112, 96], [40, 96]], s: .25 },
   ];
   function at(w, t) {
-    const pts = w.path, seg = [];
+    const pts = [...w.path, ...w.path.slice(0, -1).reverse()], seg = [];
     let total = 0;
     for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(d); total += d; }
-    let d = ((t / 40 + w.s * total) % total);
-    for (let i = 0; i < seg.length; i++) { if (d <= seg[i]) { const k = d / seg[i]; return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k]; } d -= seg[i]; }
-    return pts[0];
+    let d = (t / 45 + w.s * total) % total;
+    for (let i = 0; i < seg.length; i++) if (d <= seg[i]) {
+      const [a, b] = [pts[i], pts[i + 1]], k = d / seg[i];
+      const dir = b[1] > a[1] ? 0 : b[1] < a[1] ? 1 : b[0] < a[0] ? 2 : 3;
+      return { x: a[0] + (b[0] - a[0]) * k, y: a[1] + (b[1] - a[1]) * k, dir };
+    } else d -= seg[i];
+    return { x: pts[0][0], y: pts[0][1], dir: 0 };
   }
   function frame(t) {
-    ground();
-    house(20, 44, '#e0a84f', true); house(170, 44, '#7a8fd0', true); house(160, 118, '#c05050', false); house(30, 120, '#58a868', false);
-    well(t);
-    sphinx(196, 130, t);
-    const ws = walkers.map(w => { const [x, y] = at(w, reduce ? 900 : t); return { x: Math.round(x), y: Math.round(y), col: w.col }; }).sort((a, b) => a.y - b.y);
-    for (const w of ws) claude(w.x, w.y - 4, !reduce && Math.floor(t / 180) % 2, w.col);
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const v = map[y][x]; tile(v === 3 || v >= 5 ? 0 : v, x * T, y * T); if (v === 3 || v >= 5) tile(v, x * T, y * T); }
+    g.drawImage(home, 8, 34);
+    g.drawImage(center, 136, 18);
+    g.drawImage(board, 96, 74); g.drawImage(mailbox, 136, 112);
+    g.drawImage(stone, 200, 112);
+    const bob = reduce ? 0 : Math.round(Math.sin(t / 300) * 2);
+    g.drawImage(sphinx, 168, 120 + bob);
+    const sf = reduce ? 0 : Math.floor(t / 160) % 3;
+    g.drawImage(spirit[sf], 60 + (reduce ? 0 : Math.sin(t / 900) * 30), 128 + (reduce ? 0 : Math.cos(t / 700) * 6));
+    const step = reduce ? 0 : [0, 1, 0, 2][Math.floor(t / 150) % 4];
+    const ws = walkers.map(w => ({ ...at(w, reduce ? 1500 : t), k: w.k })).sort((a, b) => a.y - b.y);
+    for (const w of ws) sprite(sheets[w.k], w.dir, step, w.x - 8, w.y - 12);
+    sprite(sheets.player, 0, 0, 104, 104);
     if (!reduce) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

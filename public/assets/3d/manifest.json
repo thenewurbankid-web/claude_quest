@@ -1,1 +1,6 @@
-{}
+{
+  "player": "kaykit/Ranger.glb",
+  "keeper": ["kaykit/Knight.glb", "kaykit/Mage.glb", "kaykit/Rogue_Hooded.glb", "kaykit/Barbarian.glb", "kaykit/Rogue.glb"],
+  "animations": ["kaykit/Rig_Medium_MovementBasic.glb", "kaykit/Rig_Medium_General.glb"],
+  "height": { "player": 1.85, "keeper": 1.85 }
+}

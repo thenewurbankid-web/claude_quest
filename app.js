@@ -1,6 +1,6 @@
-// Claude Quest server: scans projects, narrates them with a local model, serves the game,
+// Quest server: scans projects, narrates them with a local model, serves the game,
 // and runs the control channel (inbox, live delivery, stop, wake) the Claude Code hooks read.
-// Communication never calls Claude. Only an explicit in-game "wake" starts a Claude run.
+// Communication never calls Keeper. Only an explicit in-game "wake" starts a Keeper run.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -110,7 +110,7 @@ function checkBadges() {
   if (s.answers >= 10) award('oracle', 'Oracle Badge', 'Answered 10 riddles.');
   if (s.missionsDone >= 5) award('taskmaster', 'Taskmaster Badge', 'Finished 5 missions.');
   if (s.bosses >= 3) award('bossbreaker', 'Bossbreaker Badge', 'Cleared 3 blockers.');
-  if (s.messages >= 10) award('herald', 'Herald Badge', 'Sent 10 messages to Claude.');
+  if (s.messages >= 10) award('herald', 'Herald Badge', 'Sent 10 messages to Keeper.');
   if (streak() >= 3) award('streak-3', 'Ember Streak Badge', 'Played 3 days in a row.');
 }
 
@@ -175,7 +175,7 @@ function scan() {
   const wasNight = night;
   night = L.computeNight(facts, latestActivity);
   if (night && !wasNight) pushEvent(null, 'night', `The Ember Well ran dry and the Long Night falls. ${night.text}`, `night-${night.since}`);
-  if (!night && wasNight) pushEvent(null, 'dawn', 'Dawn! The Ember Well is full again and Claude wakes.', `dawn-${wasNight.since}`);
+  if (!night && wasNight) pushEvent(null, 'dawn', 'Dawn! The Ember Well is full again and Keeper wakes.', `dawn-${wasNight.since}`);
   for (const p of areas) {
     const f = facts[p.id];
     if (!f) continue;
@@ -239,7 +239,7 @@ function queueStory(p, force = false) {
 
 const BOSS_SCHEMA = {
   type: 'object',
-  properties: { steps: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, owner: { type: 'string', enum: ['you', 'claude'] }, done: { type: 'boolean' } }, required: ['title', 'owner', 'done'] } } },
+  properties: { steps: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, owner: { type: 'string', enum: ['you', 'keeper'] }, done: { type: 'boolean' } }, required: ['title', 'owner', 'done'] } } },
   required: ['steps'],
 };
 
@@ -254,11 +254,11 @@ async function planBoss(id) {
     `BLOCKER: ${b.name}: ${b.detail}`,
     b.evidence ? `EVIDENCE:\n${clip(b.evidence, 800)}` : '',
     `SESSION: "${b.sessionTitle}"`,
-    `CLAUDE'S LATEST MESSAGES:\n${recent.map(r => `- ${clip(r.text, 300)}`).join('\n') || '(none)'}`,
+    `KEEPER'S LATEST MESSAGES:\n${recent.map(r => `- ${clip(r.text, 300)}`).join('\n') || '(none)'}`,
     `CURRENT STEPS:\n${existing}`,
     b.steps.length
-      ? 'Return the same steps in the same order with the same titles. Set done=true for a claude step only if the latest messages show it is finished. You may append one new step if all are done but the blocker remains.'
-      : 'Break this blocker into 2 to 4 small steps. owner "you" = a decision or review the developer does; owner "claude" = research or a fix Claude does. All done=false.',
+      ? 'Return the same steps in the same order with the same titles. Set done=true for a keeper step only if the latest messages show it is finished. You may append one new step if all are done but the blocker remains.'
+      : 'Break this blocker into 2 to 4 small steps. owner "you" = a decision or review the developer does; owner "keeper" = research or a fix Keeper does. All done=false.',
   ].filter(Boolean).join('\n\n');
   let steps;
   try {
@@ -267,16 +267,16 @@ async function planBoss(id) {
   } catch (e) { console.warn(`[boss] ${id}: ${e.message}`); }
   if (!steps?.length && !b.steps.length) steps = L.fallbackSteps(b.kind).map(st => ({ ...st, done: false }));
   if (steps?.length) {
-    if (!b.steps.length) b.steps = steps.map((st, i) => ({ id: `s${i}`, title: clip(st.title, 70), owner: st.owner === 'you' ? 'you' : 'claude', state: 'todo' }));
+    if (!b.steps.length) b.steps = steps.map((st, i) => ({ id: `s${i}`, title: clip(st.title, 70), owner: st.owner === 'you' ? 'you' : 'keeper', state: 'todo' }));
     else {
       b.steps.forEach((st, i) => {
-        if (steps[i]?.done && st.owner === 'claude' && st.state !== 'done') {
+        if (steps[i]?.done && st.owner !== 'you' && st.state !== 'done') {
           st.state = 'done';
-          pushEvent(b.project, 'step', `Claude cleared a step against ${b.name}: ${st.title}`, `step-${id}-${st.id}`, { bossId: id });
+          pushEvent(b.project, 'step', `Keeper cleared a step against ${b.name}: ${st.title}`, `step-${id}-${st.id}`, { bossId: id });
         }
       });
       const extra = steps[b.steps.length];
-      if (extra && b.steps.every(st => st.state === 'done') && b.steps.length < 6) b.steps.push({ id: `s${b.steps.length}`, title: clip(extra.title, 70), owner: extra.owner === 'you' ? 'you' : 'claude', state: 'todo' });
+      if (extra && b.steps.every(st => st.state === 'done') && b.steps.length < 6) b.steps.push({ id: `s${b.steps.length}`, title: clip(extra.title, 70), owner: extra.owner === 'you' ? 'you' : 'keeper', state: 'todo' });
     }
   }
   if (f) b.planKey = recentKey(b, f);
@@ -306,7 +306,7 @@ const controlFile = () => store.read('control.json', { stops: {} });
 
 function startRun(p, s, text) {
   const id = hash(s.id, Date.now());
-  // CQ_NO_WAKE: a test server records the run but never starts Claude (no tokens, no real session touched).
+  // CQ_NO_WAKE: a test server records the run but never starts Keeper (no tokens, no real session touched).
   if (process.env.CQ_NO_WAKE) {
     const run = { id, project: p.id, session: s.id, title: s.title, startedAt: new Date().toISOString(), status: 'done', dry: true, text };
     runs.set(id, run);
@@ -323,11 +323,11 @@ function startRun(p, s, text) {
   child.on('exit', code => {
     run.status = code === 0 ? 'done' : 'failed';
     run.endedAt = new Date().toISOString();
-    pushEvent(p.id, 'run', `The woken Claude in "${s.title}" went back to rest (${run.status}).`, `run-${id}`);
+    pushEvent(p.id, 'run', `The woken Keeper in "${s.title}" went back to rest (${run.status}).`, `run-${id}`);
     rebuild();
   });
   child.unref();
-  pushEvent(p.id, 'run', `You woke Claude in "${s.title}". It's working…`, `runstart-${id}`);
+  pushEvent(p.id, 'run', `You woke Keeper in "${s.title}". It's working…`, `runstart-${id}`);
   return run;
 }
 
@@ -339,7 +339,7 @@ function sendToSession(p, s, kind, text) {
     const m = addToInbox(p.id, kind, `${label}: ${text}`, { session: s.id, live: true });
     state.awaiting[s.id] = { since: m.createdAt };
     tally('messages');
-    pushEvent(p.id, 'sent', `Sent to Claude live: ${text}`, `sent-${m.id}`);
+    pushEvent(p.id, 'sent', `Sent to Keeper live: ${text}`, `sent-${m.id}`);
     return { queued: 'live', id: m.id };
   }
   return { needsWake: true };
@@ -360,10 +360,10 @@ function townFor(p) {
   for (const s of f.sessions) {
     if (Date.now() - Date.parse(s.lastTs || 0) > L.DAY) continue;
     if (s.pendingAsk?.length) for (const q of s.pendingAsk) decisions.push({
-      id: `ask-${hash(s.id, q.question)}`, source: 'claude', session: s.id, sessionTitle: s.title,
+      id: `ask-${hash(s.id, q.question)}`, source: 'keeper', session: s.id, sessionTitle: s.title,
       question: q.question, options: (q.options || []).map(o => o.label).filter(Boolean).slice(0, 4),
     });
-    else if (s.openQuestion) decisions.push({ id: `q-${hash(s.id, s.openQuestion)}`, source: 'claude', session: s.id, sessionTitle: s.title, question: s.openQuestion, options: ['Yes, go ahead', 'No, hold off'] });
+    else if (s.openQuestion) decisions.push({ id: `q-${hash(s.id, s.openQuestion)}`, source: 'keeper', session: s.id, sessionTitle: s.title, question: s.openQuestion, options: ['Yes, go ahead', 'No, hold off'] });
   }
   for (const c of story.choices || []) decisions.push({ id: `o-${hash(p.id, c.question)}`, source: 'oracle', question: c.question, options: c.options });
   for (const d of decisions) d.firstSeen = state.firstSeen[d.id] ??= new Date().toISOString();
@@ -376,12 +376,12 @@ function townFor(p) {
 
   const inCamp = s => campIds.has(`c-${hash(L.locationOf(p, s) || '')}`);
   const fresh = f.sessions.filter(s => Date.now() - Date.parse(s.lastTs || 0) < L.DAY);
-  // Town Claudes are capped; every camp keeps its own.
-  const claudes = [...fresh.filter(s => !inCamp(s)).slice(0, 6), ...fresh.filter(inCamp)].map(s => {
+  // Town Keepers are capped; every camp keeps its own.
+  const keepers = [...fresh.filter(s => !inCamp(s)).slice(0, 6), ...fresh.filter(inCamp)].map(s => {
     const root = L.locationOf(p, s);
     const loc = root ? `c-${hash(root)}` : 'town';
     return {
-      sid: s.id, title: s.title, state: L.claudeState(s, night), location: campIds.has(loc) ? loc : 'town',
+      sid: s.id, title: s.title, state: L.keeperState(s, night), location: campIds.has(loc) ? loc : 'town',
       ago: ago(s.lastTs), working: s.status === 'working', branch: s.branch,
       recent: s.recent.slice(-3).map(r => ({ text: clip(r.text, 300), ago: ago(r.ts) })),
       lastUser: clip(s.lastPrompt || s.lastUser, 160), canWake: !!s.originCwd && s.status !== 'working',
@@ -400,14 +400,14 @@ function townFor(p) {
     status, generating: generating.has(p.id), storySource: story.source, storyAt: state.stories[p.id]?.at,
     activeTitle: (working || recent)?.title || null,
     lastActivityAgo: ago(recent?.lastTs || f.commits[0]?.at),
-    lastClaude: clip(recent?.lastAssistant, 280), blocked: recent?.blocked || null,
+    lastKeeper: clip(recent?.lastAssistant, 280), blocked: recent?.blocked || null,
     branch: f.branch, dirty: f.dirty,
     commits: f.commits.slice(0, 4).map(c => ({ ...c, ago: ago(c.at) })),
     story: story.story, scout: story.scout, historian: story.historian,
     missions: missions.slice(0, 5),
     decisions: decisions.filter(d => !state.decisions[d.id]),
     camps: camps.map(c => ({ ...c, ago: ago(c.lastTs) })),
-    claudes,
+    keepers,
     bosses: Object.values(state.bosses).filter(b => b.project === p.id && b.status === 'active').map(b => ({
       id: b.id, kind: b.kind, name: b.name, lore: b.lore, detail: b.detail, session: b.session, sessionTitle: b.sessionTitle,
       location: campIds.has(b.location) ? b.location : 'town', steps: b.steps,
@@ -425,7 +425,7 @@ function rebuild() {
   for (const m of inbox) {
     if (m.deliveredAt && !notifiedDelivered.has(m.id)) {
       notifiedDelivered.add(m.id);
-      pushEvent(m.project, 'delivered', `Claude received: ${m.text}`, `dlv-${m.id}`);
+      pushEvent(m.project, 'delivered', `Keeper received: ${m.text}`, `dlv-${m.id}`);
     }
   }
   world = {
@@ -480,7 +480,7 @@ const routes = {
     send(res, 200, m);
   },
   // The player closed the menu: every answer still waiting for a resting session goes out now, one wake per
-  // session with all its answers (owner's choice: spends Claude tokens, no extra confirm). Working sessions get
+  // session with all its answers (owner's choice: spends tokens, no extra confirm). Working sessions get
   // theirs live from the hook; nothing wakes during the Long Night.
   'POST /api/flush': async (req, res) => {
     if (night) return send(res, 200, { woke: [], night: true });
@@ -497,7 +497,7 @@ const routes = {
       const now = new Date().toISOString();
       for (const m of msgs) { m.deliveredAt = now; m.deliveredTo = sid; m.via = 'wake'; }
       store.write('inbox.json', inbox);
-      startRun(p, s, ['[Claude Quest] The user answered from the game. Treat these as the user\'s replies and continue:', ...msgs.map(m => `- ${m.text}`)].join('\n'));
+      startRun(p, s, ['[Quest] The user answered from the game. Treat these as the user\'s replies and continue:', ...msgs.map(m => `- ${m.text}`)].join('\n'));
       tally('messages');
       woke.push({ title: s.title, answers: msgs.length });
     }
@@ -526,7 +526,7 @@ const routes = {
     const p = projectById(project), s = sessionById(project, session);
     if (!p || !s || !text?.trim()) return send(res, 400, { error: 'project, session and text required' });
     if (night) return send(res, 409, { night: true });
-    if (s.status === 'working') return send(res, 409, { error: 'That Claude is already working. Talk to it live instead.' });
+    if (s.status === 'working') return send(res, 409, { error: 'That Keeper is already working. Talk to it live instead.' });
     if ([...runs.values()].some(r => r.session === s.id && r.status === 'running')) return send(res, 409, { error: 'Already awake.' });
     tally('messages');
     const run = startRun(p, s, text.trim());
@@ -540,7 +540,7 @@ const routes = {
     if (on) c.stops[project] = { at: new Date().toISOString() }; else delete c.stops[project];
     store.write('control.json', c);
     if (on) for (const r of runs.values()) if (r.project === project && r.status === 'running') { try { process.kill(r.pid, 'SIGINT'); } catch {} }
-    pushEvent(project, 'sent', on ? 'You raised the STOP banner. Claude halts at its next step.' : 'You lowered the STOP banner. Claude may continue.', hash('stop', project, Date.now()));
+    pushEvent(project, 'sent', on ? 'You raised the STOP banner. Keeper halts at its next step.' : 'You lowered the STOP banner. Keeper may continue.', hash('stop', project, Date.now()));
     rebuild();
     send(res, 200, { stopped: !!on });
   },
@@ -579,7 +579,7 @@ const routes = {
     send(res, 200, { ok: true });
   },
   // ---------- Guild Hall actions (Paperclip). Each one is an explicit player action; the ones that wake the agent
-  // spend Claude tokens, so the client confirms before calling them.
+  // spend tokens, so the client confirms before calling them.
   'POST /api/guild/mission': async (req, res) => {
     const { area, title, detail, priority = 'medium' } = await body(req);
     const save = store.read('world.json', {}), a = save.areas?.find(x => x.id === area);
@@ -660,7 +660,7 @@ const routes = {
       s.settings = { ...Areas.settings() };
       if (typeof patch.sound === 'boolean') s.settings.sound = patch.sound;
       if (typeof patch.music === 'boolean') s.settings.music = patch.music;
-      for (const k of ['playerName', 'claudeName']) if (typeof patch[k] === 'string' && patch[k].trim()) s.settings[k] = patch[k].trim().slice(0, 16);
+      for (const k of ['playerName', 'keeperName']) if (typeof patch[k] === 'string' && patch[k].trim()) s.settings[k] = patch[k].trim().slice(0, 16);
       // Names the player gave to lands, characters and places: { id: name }. They win over generated ones.
       if (patch.names && typeof patch.names === 'object') {
         s.settings.names = { ...s.settings.names };
@@ -709,7 +709,7 @@ const trimForLink = w => ({
 });
 const linkCfg = cfg.link || {};
 const link = (process.env.CQ_LINK ?? (linkCfg.enabled ? '1' : '')) === '1'
-  ? require('./lib/link').start({ broker: linkCfg.broker || require('./public/linkcrypto').DEFAULT_BROKER, pagesUrl: process.env.CQ_PAGES_URL || linkCfg.pagesUrl || 'https://thenewurbankid-web.github.io/claude_quest', dispatch, trim: trimForLink })
+  ? require('./lib/link').start({ broker: linkCfg.broker || require('./public/linkcrypto').DEFAULT_BROKER, pagesUrl: process.env.CQ_PAGES_URL || linkCfg.pagesUrl || 'https://thenewurbankid-web.github.io/keeper_quest', dispatch, trim: trimForLink })
   : null;
 
 http.createServer(async (req, res) => {
@@ -744,7 +744,7 @@ http.createServer(async (req, res) => {
     send(res, e.status || 500, { error: e.message });
   }
 }).listen(PORT, '127.0.0.1', () => {
-  console.log(`Claude Quest on http://localhost:${PORT} · model ${cfg.ollama.model} · claude ${CLAUDE}`);
+  console.log(`Quest on http://localhost:${PORT} · model ${cfg.ollama.model} · cli ${CLAUDE}`);
   scan();
   setInterval(scan, cfg.scanSeconds * 1000);
   pollGuild();
