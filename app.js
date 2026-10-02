@@ -462,6 +462,7 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
   '.hdr': 'application/octet-stream', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream',
   '.ogg': 'audio/ogg', '.jpg': 'image/jpeg', '.md': 'text/markdown' };
 const THREE_DIR = path.join(__dirname, 'node_modules', 'three');
+const editorAssets = require('./lib/editor-assets')(PUBLIC); // asset editor: local-only list + import
 
 const routes = {
   'GET /api/world': (req, res) => send(res, 200, world),
@@ -717,6 +718,7 @@ http.createServer(async (req, res) => {
   const route = routes[`${req.method} ${url.pathname}`];
   try {
     if (route) return await route(req, res, url);
+    if (url.pathname.startsWith('/api/editor/')) return await editorAssets(req, res, url);
     if (url.pathname === '/settings') return send302(res, '/settings.html');
     if (url.pathname === '/mqtt.min.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
