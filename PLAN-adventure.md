@@ -1,4 +1,4 @@
-> **Art (2026-10-02):** 2.5D with Three.js and free CC0 low-poly packs on the tile grid. Wherever this plan says
+> **Art (2026-10-02):** HD-2D: CC0 pixel sprites (Ninja Adventure) in a lit Three.js scene on the tile grid. No low poly. Wherever this plan says
 > "drawn in code" or "procedural art", read it as that instead. See HANDOFF "Art direction".
 
 # Quest: Adventure mode (a real game for casual players)

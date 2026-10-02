@@ -26,47 +26,40 @@ Still open: the licence for shared lore and art in the marketplace.
 *"This should be the way people work with agents."* Aim for mindblowing and clean: a living, classy diorama of your
 agents at work, not a dashboard with a game skin.
 
-## Art direction: 2.5D (user, 2026-10-02)
-Supersedes "all art drawn in code" (`public/art.js`) and the plans' "art is yours or procedural".
-- **Look:** like Pokémon Brilliant Diamond/Shining Pearl and Let's Go: chibi low-poly 3D characters on the existing
-  tile grid, a tilted top-down camera, warm lighting, day/night, animated grass and water, effects (Ember Well glow, the Long Night).
-- **Tech:** Three.js renderer replaces the Phaser drawing in `public/world.js`. **Game logic stays on the tile grid**,
-  so every plan, lore file, save and the server stay valid. Battles, maps and the minimap get 3D presentation later.
-- **Assets:** free CC0 low-poly packs only, all in one consistent style. Candidates are KayKit (Kay Lousberg),
-  Quaternius and Kenney (Fantasy Town / Castle / Nature kits). **Nothing downloaded yet.** Ask the user before each
-  download (name, source, size), check each pack's licence file, and keep a credits file.
-- The user said "don't do any art": no hand-drawn or AI art. Use the packs.
-- The user wants it to feel like a delight for players. Be honest about "AAA": the target is polished indie, cohesive and lively.
-- `art.js` stays as a fallback while the swap happens, through the asset registry (`PLAN-settlements.md` §13).
-- Parallax (old Phase 3b) is dropped, because the 3D camera gives real depth.
-- **Pack picks (licences checked on their pages 2026-10-02; NOT downloaded, because the user dismissed the download question):**
-  - KayKit (kaylousberg.itch.io, CC0, glTF, free tiers):
-    - Adventurers: player, Claudes, NPCs
-    - Character Animations
-    - Medieval Hexagon: 200+ buildings and props (blacksmith, lumbermill, market, mine, windmill, barracks, tavern, well) that fit the settlement kinds
-    - Forest Nature: trees, bushes, grass, rocks
-  - To check at download:
-    - Quaternius Ultimate Monsters (Sprites and bosses)
-    - one Poly Haven sky (HDRI)
-    - Kenney Particle Pack
-    - Kenney RPG Audio
-  - Optional paid EXTRA tiers ($8–10) add units, horses, seasons and modular terrain.
-- **Grid: hybrid, incremental, starting with the square grid** (user). Step 1: the existing square grid, with KayKit
-  buildings and props placed on square tiles and flat-shaded terrain under Forest Nature grass. Later steps add hex
-  regions where they suit play (e.g. the settlement/region map, using Medieval Hexagon's hex tiles), with clean
-  transitions between square and hex areas. Keep movement and layout code grid-agnostic, as a grid interface with
-  square and hex implementations, so hex can be added without rewriting.
-- **Classy look comes from rendering:**
-  - soft shadows and ambient occlusion
-  - warm colour grading
-  - bloom only on magic and embers
-  - tilt-shift miniature depth of field
-  - slow day/night
-  - a minimal UI
-- Open: whether music and SFX also come from free packs, or stay generated in `music.js`.
-- Uncommitted on purpose: `site/index.html` and `scripts/build-pages.sh` draw the landing hero with the game's 2D
-  `art.js`, replacing an earlier imitation. Under 2.5D, the hero should become a screenshot of the 3D game, so decide
-  whether to keep or drop this change.
+## Art direction: HD-2D (user, 2026-10-02; replaces the low-poly plan, "no low poly")
+Pixel-art sprites in a lit 3D scene, like Octopath Traveler, Triangle Strategy and the Dragon Quest III remake (Sea of
+Stars and Eastward for lighting). It keeps the Pokémon-GBA soul and looks premium with free assets.
+- **No low-poly models.** KayKit and Quaternius are dropped; don't download them. No hand-drawn or AI art.
+- **Assets:** the Ninja Adventure pack, Pixel-Boy & AAA, CC0. It has:
+  - animated characters with portraits, monsters, bosses
+  - tilesets, effects, items, UI, fonts
+  - 37 music tracks and 100+ SFX
+
+  It's at pixel-boy.itch.io/ninja-adventure-asset-pack (89 MB). itch.io downloads can't be scripted, so the user downloads
+  it into ~/Downloads. Credit it in `public/assets/CREDITS.md`.
+- **Keep from the 2.5D step 1** (`public/3d/`):
+  - Three.js renderer, square grid interface, camera follow
+  - sky, day/night, bloom, tilt-shift, vignette
+  - Ember Well fire, fireflies, footsteps, touch pad
+- **Swap:**
+  - placeholder shapes → camera-facing sprites (billboards) with walk animations from the pack's sheets,
+    nearest-neighbour filtering, lit by scene lights and casting shadows
+  - box tiles → textured tiles from the pack's tilesets
+- **Techniques to add, in rough order:**
+  1. sprites lit by real lights, with shadows (the Ember Well lights the characters)
+  2. textured terrain plus wind sway on grass, trees and water
+  3. a smooth spring-damped camera with gentle sway
+  4. layered parallax backgrounds (mountains, clouds, distant forest)
+  5. curved-world projection (the ground bends away at the edges)
+  6. light shafts through trees, plus bloom on embers and magic
+  7. water reflections and shimmer
+  8. weather particles (rain, petals, embers)
+  9. ambient occlusion, anti-aliasing, colour grading
+- **Grid:** hybrid, built in steps, starting with the square grid. Keep the grid interface so hex regions can come later.
+- Be honest about "AAA": the target is a polished, cohesive indie game that's a delight to play.
+- Parallax is back in, as layered backgrounds.
+- Open: whether the pack's music replaces the generated music in `music.js`. It probably should, matched by mood.
+- Uncommitted on purpose: `site/index.html` hero change. Replace it later with a real HD-2D screenshot.
 
 ## 2.5D preview: step 1 built (f4e36ed)
 - `/3d.html` (local: `npm start` then http://localhost:4777/3d.html). Test server: the `claude-quest-3d` launch
@@ -77,7 +70,7 @@ Supersedes "all art drawn in code" (`public/art.js`) and the plans' "art is your
   - day/night, with `?time=night` etc. to jump to a time
   - tilt-shift and bloom
   - footsteps and a touch d-pad
-- **Placeholder shapes until the KayKit packs arrive.** itch.io downloads can't be scripted (signed key), so the user
+- **Placeholder shapes until the Ninja Adventure sprites arrive** (KayKit plan dropped, see Art direction). itch.io downloads can't be scripted (signed key), so the user
   downloads the 4 KayKit packs + Quaternius Ultimate Monsters into ~/Downloads. Then unzip the glTF files into
   `public/assets/3d/` and map roles in `manifest.json`:
   - roles: player, claude, tree, house, center, board, mailbox, waystone
@@ -86,7 +79,7 @@ Supersedes "all art drawn in code" (`public/art.js`) and the plans' "art is your
   Update `CREDITS.md`.
 - Downloaded and in the repo (CC0): Kenney Particle Pack subset, Kenney RPG Audio subset, Poly Haven Kloofendal sky 1k.
 - Next steps:
-  - KayKit models + animations (walk/idle clip names)
+  - Ninja Adventure sprites and tiles (HD-2D)
   - the 2x2 footprint for the Claude Center
   - real 2D-game data (towns, Claudes, bosses) feeding the 3D view
   - then hex regions
