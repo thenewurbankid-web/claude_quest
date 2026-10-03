@@ -300,6 +300,27 @@ and runs the safety tests. Each feature lives in its own module; only integratio
 is one session long. Exceptions: R2's tuning and playtest run in order after its parallel round, and R6's shared core
 is built alone. The R2 playtest is the gate: nothing from R3 on starts before it passes.
 
+## R2 playtest criteria (approved by the user, 2026-10-03)
+The gate before R3. **Setup:** the sample Realm plus a scripted backlog that crosses the boss threshold with three
+fake questions: one normal, one risk:high, one on the never-in-game list. The user plays it twice: once fresh, once a
+day later with a heavier backlog. **R2 passes only if every line holds;** a miss means rethink before R3 (see Risks).
+1. **Fun with no real work in it:** run once with only fake questions, the user still rates "I'd fight it again" at
+   4/5 or higher, and never waits more than 5 seconds with nothing to do.
+2. **Readable:** a three-question fight lasts 3 to 6 minutes. On every turn the options are clear, and the user can
+   name which Works feed the Gloamwyrm and why it is the size it is.
+3. **Questions feel welcome, not forced:** every pause shows the whole question (True Sight) with no timer, the user
+   never feels rushed into an answer, and answers at least one question they would otherwise have left.
+4. **Safety holds in combat:** mashing through a pause never picks an answer (input lock); the risk:high question
+   pauses the fight and is answered in the Lodge; the never-list one only shows where to answer it; "Ask me later"
+   lands the hit; no answer changes hit power.
+5. **Retreat is a real choice:** it works from any turn, keeps every answer already given, and the Gloamwyrm comes
+   back stronger in a way the user can explain.
+6. **Clearing the backlog wins:** the Gloamwyrm falls only when its questions are resolved (answered or deferred), and
+   winning visibly changes the world (the Beacon, the Haze).
+7. **Wants to come back:** after the second session the user wants to play tomorrow and can name one thing they look
+   forward to.
+8. **Sound:** no console errors; playable at 375px width by touch and with reduced motion.
+
 ## Risks and gaps (2026-10-03)
 Decided by the user on 2026-10-03, through the Quest Engine Council page (one pick per item).
 
