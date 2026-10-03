@@ -78,8 +78,27 @@ cool street theme". They picked **new setting, same physics**: `CombatSimulation
 
 ## Next jobs
 
-1. **Wait for the user's photo.** The user asked: "if i give you a photo of a location can you recreate it?" If one
-   comes, rebuild the street from it (layout, buildings, materials, signs, light) instead of item 2.
+1. **Rebuild the location from the user's photo** (sent 2026-10-03; a frame from a YouTube short, "NY Cypher",
+   tagged New York, not saved in the repo). This replaces item 2. What it shows:
+   - **Location:** a neighbourhood basketball court, not an alley. Grey asphalt court with faded white lines; the
+     fight spot is on the court. A tall black chain-link fence (about 4 m) runs around it on posts.
+   - **Hoop:** a steel gooseneck pole, a rectangular white/grey steel backboard with a red-orange square, an orange rim
+     with a chain net. It stands behind the crowd, centred in the camera's view.
+   - **Buildings behind:** 5–6 storey red-brown brick tenements, in a continuous row. Black iron fire escapes zig-zag
+     up the fronts. Window AC units stick out, some lower windows have bars, and there are decorative stone lintels.
+     A ground-floor shop at the back right has a dark green awning with white lettering, partly hidden.
+   - **Trees:** bare or sparse autumn street trees (thin trunks, a few yellow-green leaves) between the fence and the
+     buildings.
+   - **Light:** **daytime, overcast**. Soft, even, slightly cool light, no hard shadows, muted colours. That is matte
+     and fits "no shiny graphics", but it replaces the night look (neon, fire barrels, headlights, rain): ask the user
+     whether night stays as an option.
+   - **Crowd (the cypher):** packed shoulder to shoulder in a tight circle, several rows deep, leaning in, arms up,
+     shouting. Clothes: New York Yankees fitted caps (navy, some backwards), navy and grey varsity jackets with leather
+     sleeves, light and dark denim jackets, white tees and tank tops, black hoodies, gold chains, light-wash and ripped
+     jeans, wheat Timberland boots and white sneakers. This is also the reference for the hip hop outfits in the
+     creator (item 3) and for dressing the onlookers.
+   - Textures already in `public/boxing/textures/` fit: asphalt (court), brick_red or brick_dirty (tenements; compare
+     against the photo's red-brown), sidewalk concrete. A chain-link alpha texture exists in code (`chainLinkTexture`).
 2. **Outdoor street** (user: "and outdoor steet fight"). Open the yard into a street: buildings on ±z only, with
    sidewalks and curbs, the road running away along x into the fog, more lamps and parked cars, sky. Wire in the
    textures: asphalt on the road, brick on the walls, the worn concrete on the sidewalks, rust on the barrels.
