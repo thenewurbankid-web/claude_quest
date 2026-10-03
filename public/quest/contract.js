@@ -237,6 +237,18 @@ export function validateLedger(l) {
 
 const clone = v => JSON.parse(JSON.stringify(v));
 
+// R1: rules never touch the store. They return Changes, and one place writes them, events last.
+/**
+ * @typedef {{ puts: { kind: string, record: object }[], events: Event[] }} Changes
+ */
+export const noChanges = () => ({ puts: [], events: [] });
+export const mergeChanges = (...cs) => ({ puts: cs.flatMap(c => c.puts), events: cs.flatMap(c => c.events) });
+/** Writes Changes to a LedgerStore: every put, then every event. */
+export async function applyChanges(store, changes) {
+  for (const { kind, record } of changes.puts) await store.put(kind, record);
+  for (const e of changes.events) await store.put('events', e);
+}
+
 /** The reference LedgerStore, in memory. Slices and tests use it until the IndexedDB store lands. */
 export function memoryStore(initial = emptyLedger()) {
   let l = clone(initial);

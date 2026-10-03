@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   validateLedger, emptyLedger, memoryStore, makeSave, ledgerFromSave, canMove, RIDDLE_MOVES, QUEUE_MOVES, stewardOf,
-  DEFAULT_RULES, EVENT_KIND,
+  DEFAULT_RULES, EVENT_KIND, applyChanges, mergeChanges, noChanges,
 } from '../public/quest/contract.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -108,4 +108,15 @@ test('R1: lore rule defaults and the events the Riddle slices log', () => {
   for (const k of ['riddle.recalled', 'riddle.sealed', 'riddle.returned', 'riddle.faded', 'riddle.proposed'])
     assert.ok(EVENT_KIND.includes(k), k);
   assert.deepEqual(validateLedger(sample()).map(p => p.path), ['works[8].hallId']); // the sample's R1 examples are sound
+});
+
+test('R1: Changes merge and apply puts before events', async () => {
+  const s = memoryStore(sample());
+  const r = (await s.snapshot()).riddles[1];
+  const c = mergeChanges(noChanges(), { puts: [{ kind: 'riddles', record: { ...r, state: 'deferred', deferredUntil: 'x' } }],
+    events: [{ at: 'x', kind: 'riddle.deferred', ref: r.id }] });
+  await applyChanges(s, c);
+  const l = await s.snapshot();
+  assert.equal(l.riddles[1].state, 'deferred');
+  assert.equal(l.events.at(-1).kind, 'riddle.deferred');
 });
