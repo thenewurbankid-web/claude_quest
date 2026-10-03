@@ -343,7 +343,8 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     await logEvents(res.events);
     const dealt = res.hits.reduce((s, h) => s + h.damage, 0);
     const regained = res.healed.reduce((s, h) => s + h.hp, 0);
-    if (regained && !line) line = `An answer was recalled. The Gloamwyrm regains ${regained}.`;
+    const relit = res.healed.reduce((s, h) => s + (h.lantern || 0), 0);
+    if (regained && !line) line = `An answer was recalled. The Gloamwyrm regains ${regained}${relit ? `, and your Lantern gets back the ${relit} its bite took` : ''}.`;
     if (dealt) { wyrm?.hit(Math.min(1, dealt / play.battle.maxHp * 3)); popDamage(dealt); }
     if (play.battle.phase === 'won') {
       view = 'won';
@@ -355,14 +356,17 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     const hitLine = dealt ? `Your answer lands: −${dealt}${res.hits.some(h => h.mashed) && spent > 0 ? ' (with light)' : ''}.` : line || 'No answer, no hit. That\'s fine.';
     // Cut heads free their Keepers, who join you.
     const cutNow = (play.battle.heads || []).filter(h => res.hits.some(x => h.riddleIds.includes(x.riddleId)) && h.riddleIds.every(id => play.battle.resolvedIds.includes(id)));
-    const freedLine = cutNow.map(h => h.keeper ? `${h.keeper} is going again and stands with you.` : 'A head falls away.').join(' ');
+    // Put off is not unstuck: the Keeper still waits on it, but stands with you for this fight.
+    const putOff = h => h.riddleIds.some(id => l.riddles.find(r => r.id === id)?.state === 'deferred');
+    const freedLine = cutNow.map(h => !h.keeper ? 'A head falls away.' : putOff(h)
+      ? `${h.keeper} sets it aside for now and stands with you.` : `${h.keeper} is going again and stands with you.`).join(' ');
     // The Gloamwyrm's turn: a short beat of its own, then yours again. Struck, it bites back at your Lantern (never
     // during a question, never against a clock); a pause with no hit gets no bite.
     busy = true;
     wyrm?.windup();
     let move;
     if (dealt && play.battle.heads) {
-      const bit = beat(play, new Date(), rules);
+      const bit = beat(play, new Date(), rules, res.hits.map(h => h.riddleId));
       save(bit.play);
       await logEvents(bit.events);
       if (bit.pushed) {

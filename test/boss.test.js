@@ -217,3 +217,16 @@ test('order matters: cutting the heavy heads first costs less Lantern than leavi
   assert.equal(lightFirst.phase, 'won');
   assert.ok(heavyFirst.lost < lightFirst.lost, JSON.stringify({ heavyFirst, lightFirst }));
 });
+
+test('recalling an answer gives back the Lantern its bite took, as well as the hp', async () => {
+  let l = realm();
+  let play = summon(l, emptyBossPlay(), T0).play;
+  const answered = await resolveAll(l, ['p1']);
+  play = settle(answered, face(play, 'p1'), {}, T0).play;
+  const bit = beat(play, T0, DEFAULT_RULES, ['p1']);
+  assert.ok(bit.lost > 0);
+  const back = settle(l, bit.play, {}, T0); // p1 open again: recalled
+  assert.equal(back.healed[0].lantern, bit.lost);
+  assert.equal(back.play.battle.lantern, back.play.battle.lanternMax);
+  assert.deepEqual(validateBattle(back.play.battle), []);
+});

@@ -16,6 +16,14 @@ Open http://localhost:4791/?playtest and accept the confirm. Walk around for abo
   criteria 1 and 3: check that the fight says how to land a hit and what the Lodge pause asks of you.
   On the replay the player asked "where are these questions coming from?": the fight never says they are the agents'
   questions on real Works, waiting on you. The March › Hall › Work line is in the conversation box, not the fight.
+- Claude's run with heads and the Lantern (2026-10-03, on 4793, not the player's): cut in about 10 s after loading.
+  Worst order on purpose (light head first). Mashing Enter as a question opened, and on the seal confirm, picked
+  nothing (the confirm went Back). p1 answered: −16, Moss freed, Lantern 9 → 5 (bites 3 + 2, 1 guarded). Recalled p1:
+  hp came back but the 4 Lantern didn't (**fixed**: the bite's cost now comes back too). p2 answered in the Lodge and
+  sealed: −16, Lantern 6 → 3. p3 (never list) only showed where to answer it; "Ask me later" landed −17, and the line
+  said "Wren is going again" for a put-off question (**fixed**: "sets it aside for now"). p1 again: it fell, the Haze
+  lifted, no console errors. Not something Claude can judge: whether it's fun (criterion 1) or the fight's length at
+  a human's reading pace (criterion 2).
 - [ ] Time at cut-in: ______
 - [ ] Before facing anything, open "Why?" under the hp bar. I can name which Works feed it and why it's that size.
 - [ ] Plant catalogue (asked in the fight): picked a real answer.

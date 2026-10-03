@@ -158,7 +158,8 @@ export const stewardOf = (ledger, marchId) =>
  *             riddleIds: string[], lodgeIds: string[], resolvedIds: string[], current: string|null, turn: number,
  *             endedAt?: string|null, weights?: Record<string, number>,
  *             dealt?: Record<string, number>, heads?: Head[], lantern?: number, lanternMax?: number,
- *             pushed?: boolean }} Battle
+ *             pushed?: boolean, bitten?: Record<string, number> }} Battle
+ *   bitten: the Lantern each hit's beat cost, given back with the hp if that answer is recalled
  * @typedef {{ workId: string, workTitle: string, keeperId: string|null, keeper: string|null, riddleIds: string[],
  *             kind: string, bite: number, beats: number }} Head
  *   kind: snap (a plain question), dim (waited dimHours or more), echo (put off before: bites harder each beat alive);

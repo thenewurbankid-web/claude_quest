@@ -146,9 +146,11 @@ export function headsOf(battle) {
  * The Gloamwyrm's beat after a turn that landed a hit: every living head bites the Lantern, and each freed Keeper takes
  * rules.guardBlock off the total. Only while fighting, so never during a question or the Lodge. An empty Lantern pushes
  * you back to the Lodge: the fight ends as a retreat with pushed: true, every answer kept, and no strength penalty.
+ * cause: the Riddles whose hit set off this beat; what it cost is kept against them (bitten), so recalling that answer
+ * gives the Lantern back as well as the hp (recalling is a safety feature and never costs anything).
  * Returns { play, bites: [{ workId, kind, bite }], guarded, lost, pushed, events }.
  */
-export function beat(play, now = new Date(), rules = DEFAULT_RULES) {
+export function beat(play, now = new Date(), rules = DEFAULT_RULES, cause = []) {
   const b = clone(play.battle);
   if (!b || b.phase !== 'fighting') throw new Error('the Gloamwyrm only bites while the fight is on');
   if (!b.heads) return { play: clone(play), bites: [], guarded: 0, lost: 0, pushed: false, events: [] };
@@ -158,6 +160,7 @@ export function beat(play, now = new Date(), rules = DEFAULT_RULES) {
   const guarded = Math.min(total, cut.length * rules.guardBlock);
   const lost = Math.min(b.lantern, total - guarded);
   b.lantern -= lost;
+  if (lost && cause.length) b.bitten = { ...(b.bitten || {}), [cause[0]]: ((b.bitten || {})[cause[0]] || 0) + lost };
   for (const h of b.heads) if (!isCut(b, h)) h.beats += 1;
   const events = [];
   let next = { ...clone(play), battle: b };
@@ -220,7 +223,9 @@ export function settle(ledger, play, { mash = 0 } = {}, now = new Date(), rules 
     const back = b.dealt?.[id] || 0;
     b.hp = Math.min(b.maxHp, b.hp + back);
     if (b.dealt) delete b.dealt[id];
-    healed.push({ riddleId: id, hp: back });
+    const light = b.bitten?.[id] || 0;
+    if (light) { b.lantern = Math.min(b.lanternMax, b.lantern + light); delete b.bitten[id]; }
+    healed.push({ riddleId: id, hp: back, lantern: light });
   }
   const newly = all.filter(id => !b.resolvedIds.includes(id) && resolved(riddles.get(id)));
   const total = all.reduce((s, id) => s + (b.weights?.[id] || 1), 0);
