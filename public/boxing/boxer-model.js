@@ -207,7 +207,7 @@ function zoneOf(bone) {
 
 /** The colour (hex) an outfit puts on each zone, or null where skin shows. */
 function outfitColors(o) {
-  const sleeve = o.sleeve ?? o.top;
+  const sleeve = o.topStyle === 'varsity' ? o.sleeve ?? o.top : o.top;   // only the varsity jacket has contrast sleeves
   const covers = { tank: ['torso'], tee: ['torso', 'upper'], varsity: ['torso', 'upper', 'lower'], hoodie: ['torso', 'upper', 'lower', 'neck'] }[o.topStyle] ?? [];
   return {
     legs: o.jeans, feet: o.boots === 'sneakers' ? '#ececea' : '#c89a5c',
@@ -250,6 +250,7 @@ export async function paintOutfit(B, scene, mesh, baseTex, outfit) {
   }
   const m = mg.getImageData(0, 0, W, H).data, px = base.data;
   const cols = outfitColors(outfit);
+  const tint = SKIN_TINT[outfit.skin];
   const rgb = Object.fromEntries(Object.entries(cols).map(([k, hex]) => [k, hex && [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))]));
   // Mean brightness of the base texture, so its shading becomes a ±25 % shade on the cloth.
   let sum = 0, n = 0;
@@ -258,7 +259,10 @@ export async function paintOutfit(B, scene, mesh, baseTex, outfit) {
   for (let i = 0, p = 0; i < px.length; i += 4, p++) {
     const zone = ZONES[Math.round(m[i] / 30) - 1];
     const c = zone && rgb[zone];
-    if (!c) continue;
+    if (!c) {
+      if (zone && tint) { px[i] *= tint[0]; px[i + 1] *= tint[1]; px[i + 2] *= tint[2]; }
+      continue;
+    }
     const x = p % W, y = (p / W) | 0;
     let shade = Math.min(1.25, Math.max(0.7, 0.75 + 0.25 * ((px[i] + px[i + 1] + px[i + 2]) / mean)));
     if (zone === 'legs') shade *= ((x + y) % 6 < 3 ? 0.94 : 1.04) * (1 + 0.12 * Math.sin(x * 0.05) * Math.sin(y * 0.03));
@@ -272,19 +276,59 @@ export async function paintOutfit(B, scene, mesh, baseTex, outfit) {
   return tex;
 }
 
-/** The two fighters' default outfits, taken from the user's reference photo. Character creation will offer these. */
+/** The two fighters' default outfits, taken from the user's reference photo. Character creation starts from these. */
 export const PHOTO_OUTFITS = {
-  red: { topStyle: 'tee', top: '#ecebe6', jeans: '#8fa8c4', boots: 'timbs', cap: '#1c2540', capBackwards: true, chain: true, wraps: '#c9343a' },
-  blue: { topStyle: 'varsity', top: '#1f2a44', sleeve: '#c9c6bf', jeans: '#2f3b52', boots: 'sneakers', cap: null, chain: true, wraps: '#2f6fd0' },
+  red: { topStyle: 'tee', top: '#ecebe6', jeans: '#8fa8c4', boots: 'timbs', cap: '#1c2540', capBackwards: true, chain: true, wraps: '#c9343a', skin: 'light' },
+  blue: { topStyle: 'varsity', top: '#1f2a44', sleeve: '#c9c6bf', jeans: '#2f3b52', boots: 'sneakers', cap: null, chain: true, wraps: '#2f6fd0', skin: 'deep' },
 };
+
+/** What character creation offers. Everything comes from the reference photo (user: "the outfits will be the ones in the photo"). */
+export const LOOK_OPTIONS = {
+  topStyle: { tee: 'Tee', tank: 'Tank', varsity: 'Varsity', hoodie: 'Hoodie' },
+  top: ['#ecebe6', '#1f2a44', '#16171a', '#7a1f26', '#3d5a3a', '#8a8f96', '#c9a227'],
+  sleeve: ['#c9c6bf', '#ecebe6', '#16171a', '#7a1f26', '#1f2a44'],
+  jeans: { '#8fa8c4': 'Light wash', '#4f6b8f': 'Mid wash', '#2f3b52': 'Dark wash', '#1d1e22': 'Black' },
+  boots: { timbs: 'Wheat boots', sneakers: 'White sneakers' },
+  cap: ['#1c2540', '#16171a', '#7a1f26', '#ecebe6', '#3d5a3a'],
+  wraps: ['#c9343a', '#2f6fd0', '#ecebe6', '#16171a', '#d9a12b'],
+  skin: { light: 'Light', medium: 'Medium', deep: 'Deep' },
+};
+// Medium skin: the light texture multiplied by this, so the painted folds and features stay.
+const SKIN_TINT = { medium: [0.8, 0.64, 0.52] };
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const pick = (value, allowed, fallback) => (allowed.includes(value) ? value : fallback);
+
+/**
+ * A look safe to render: unknown keys dropped, every value checked against LOOK_OPTIONS or a hex colour, gaps filled
+ * from `base`. Looks arrive in P2P `start` messages, so nothing from the other player reaches a material unchecked.
+ */
+export function normalizeLook(look, base = PHOTO_OUTFITS.red) {
+  const l = look && typeof look === 'object' ? look : {};
+  const hex = (v, d) => (typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : d);
+  return {
+    topStyle: pick(l.topStyle, Object.keys(LOOK_OPTIONS.topStyle), base.topStyle),
+    top: hex(l.top, base.top),
+    sleeve: hex(l.sleeve, base.sleeve ?? base.top),
+    jeans: hex(l.jeans, base.jeans),
+    boots: pick(l.boots, Object.keys(LOOK_OPTIONS.boots), base.boots),
+    cap: l.cap === null ? null : hex(l.cap, base.cap ?? null),
+    capBackwards: typeof l.capBackwards === 'boolean' ? l.capBackwards : !!base.capBackwards,
+    chain: typeof l.chain === 'boolean' ? l.chain : !!base.chain,
+    wraps: hex(l.wraps, base.wraps),
+    skin: pick(l.skin, Object.keys(LOOK_OPTIONS.skin), base.skin ?? 'light'),
+  };
+}
 
 export class ModelBoxer {
   constructor(B, scene, assets, corner, shadow, colors) {
     this.B = B; this.corner = corner;
-    const skin = corner === 'red' ? assets.skinLight : null;
+    // The model's own texture is the deep tone; light and medium use the light texture (medium tinted in paintOutfit).
+    const tone = colors.outfit?.skin ?? (corner === 'red' ? 'light' : 'deep');
+    const skin = tone === 'deep' ? null : assets.skinLight;
     this.rig = new ModelRig(B, scene, assets, corner);
     // The rest of the arena uses standard materials and has no environment map, so the PBR skin would come out near
-    // black. Rebuild it as a standard material from the same textures; the red corner gets the light skin.
+    // black. Rebuild it as a standard material from the same textures, with the look's skin tone.
     for (const m of this.rig.meshes) {
       const pbr = m.material;
       if (!pbr?.albedoTexture) continue;
@@ -303,9 +347,10 @@ export class ModelBoxer {
       const body = this.rig.meshes.find((m) => /Superhero/.test(m.material?.name ?? ''));
       if (body) {
         if (body.material.bumpTexture) body.material.bumpTexture.level = 0.5;
-        paintOutfit(B, scene, body, body.material.diffuseTexture, outfit)
-          .then((tex) => { body.material.diffuseTexture = tex; })
-          .catch((err) => console.warn('outfit paint failed, keeping skin:', err));
+        // Kept so the character preview can dispose the painted texture when it swaps looks.
+        this.painted = paintOutfit(B, scene, body, body.material.diffuseTexture, outfit)
+          .then((tex) => { body.material.diffuseTexture = tex; return tex; })
+          .catch((err) => { console.warn('outfit paint failed, keeping skin:', err); return null; });
       }
     }
 

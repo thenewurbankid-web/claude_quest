@@ -102,6 +102,18 @@
   .intel .t { font-weight: 600; }
   .intel .why { font: 11px var(--mono); color: var(--muted); }
   @media (prefers-reduced-motion: reduce) { .meter i { transition: none; } }
+  /* Character creation */
+  #look-preview { position: relative; height: 240px; background: #1c2430; border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+  #look-preview .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; text-align: center; padding: 12px; }
+  .look { display: grid; grid-template-columns: 64px 1fr; gap: 8px 10px; align-items: center; margin-bottom: 10px; }
+  .look > span { font-size: 12px; color: var(--muted); }
+  .look select { min-height: 30px; }
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .swatches button { width: 26px; height: 26px; min-height: 0; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
+  .swatches button[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
+  .seg { display: flex; gap: 4px; }
+  .seg button { flex: 1; min-height: 30px; padding: 0 6px; font-size: 12px; }
+  .seg button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -117,6 +129,12 @@
     <section class="card" aria-labelledby="fighter-h">
       <h2 id="fighter-h">Your fighter</h2>
       <label class="field"><span>Name</span><input type="text" id="fighter-name" maxlength="24" autocomplete="off"></label>
+      <details id="look-details" open>
+        <summary>Look</summary>
+        <div id="look-preview"><div class="placeholder" id="look-preview-msg">Loading preview…</div></div>
+        <div class="look" id="look" role="group" aria-label="Fighter look"></div>
+        <button class="sm" id="look-reset">Back to the photo</button>
+      </details>
       <div id="stats"></div>
       <div class="derived" id="derived" aria-label="Derived physics"></div>
     </section>
@@ -247,6 +265,8 @@
 import { FighterModel, CombatSimulation, createPhysicsGame, TACTICS, STAT_KEYS, TICK_MS, deriveAttributes, normalizeStats } from './physics-engine.js';
 import { GameDB, toLLMContext } from './game-db.js';
 import { createArena3D } from './arena-babylon.js';
+import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
+import { createLookPreview } from './look-preview.js';
 
 // ─── Small helpers ──────────────────────────────────────────────────────────
 
@@ -260,7 +280,7 @@ const STAT_LABEL = { speed: 'Speed', power: 'Power', stamina: 'Stamina', ringIQ:
 
 const db = new GameDB();
 const state = {
-  fighter: { name: 'Kid Dynamo', stats: { speed: 50, power: 50, stamina: 50, ringIQ: 50 }, points: 20, record: { w: 0, l: 0, d: 0 } },
+  fighter: { name: 'Kid Dynamo', stats: { speed: 50, power: 50, stamina: 50, ringIQ: 50 }, points: 20, record: { w: 0, l: 0, d: 0 }, look: { ...PHOTO_OUTFITS.red } },
   pending: null,          // training changes not yet confirmed
   sim: null, game: null,
   match: null,            // { mode, seed, matchId, myCorner, fighters: {red, blue} }
@@ -336,6 +356,54 @@ $('camp-confirm').onclick = async () => {
 $('camp-reset').onclick = () => { state.pending = null; setStatus($('camp-status'), ''); renderFighter(); };
 $('fighter-name').oninput = (e) => { state.fighter.name = e.target.value.trim() || 'Unnamed'; db.saveFighter(state.fighter); };
 
+// ─── Character creation: looks only, the sim never sees them ────────────────
+
+let preview = null;
+const saveLook = () => { db.saveFighter(state.fighter); preview?.setLook(state.fighter.look); renderLook(); };
+const setLook = (patch) => { state.fighter.look = normalizeLook({ ...state.fighter.look, ...patch }); saveLook(); };
+
+function swatches(key, colors, label) {
+  return el('div', { className: 'swatches', role: 'group', ariaLabel: label }, ...colors.map((c) => el('button', {
+    type: 'button', ariaLabel: `${label} ${c}`, title: c, style: `background:${c}`,
+    ariaPressed: String(state.fighter.look[key] === c), onclick: () => setLook({ [key]: c }),
+  })));
+}
+function seg(options, current, onPick, label) {
+  return el('div', { className: 'seg', role: 'group', ariaLabel: label }, ...Object.entries(options).map(([k, text]) =>
+    el('button', { type: 'button', textContent: text, ariaPressed: String(current === k), onclick: () => onPick(k) })));
+}
+function selectOf(options, current, onPick, label) {
+  const s = el('select', { ariaLabel: label, onchange: (e) => onPick(e.target.value) },
+    ...Object.entries(options).map(([k, text]) => el('option', { value: k, textContent: text, selected: k === current })));
+  return s;
+}
+const capMode = (l) => (!l.cap ? 'none' : l.capBackwards ? 'backwards' : 'forward');
+
+function renderLook() {
+  const l = state.fighter.look;
+  const rows = [
+    ['Skin', seg(LOOK_OPTIONS.skin, l.skin, (k) => setLook({ skin: k }), 'Skin tone')],
+    ['Top', selectOf(LOOK_OPTIONS.topStyle, l.topStyle, (k) => setLook({ topStyle: k }), 'Top style')],
+    ['', swatches('top', LOOK_OPTIONS.top, 'Top colour')],
+    ...(l.topStyle === 'varsity' ? [['Sleeves', swatches('sleeve', LOOK_OPTIONS.sleeve, 'Sleeve colour')]] : []),
+    ['Jeans', selectOf(LOOK_OPTIONS.jeans, l.jeans, (k) => setLook({ jeans: k }), 'Jeans wash')],
+    ['Shoes', selectOf(LOOK_OPTIONS.boots, l.boots, (k) => setLook({ boots: k }), 'Shoes')],
+    ['Cap', seg({ none: 'None', forward: 'Forward', backwards: 'Backwards' }, capMode(l), (k) =>
+      setLook(k === 'none' ? { cap: null } : { cap: l.cap ?? LOOK_OPTIONS.cap[0], capBackwards: k === 'backwards' }), 'Cap')],
+    ...(l.cap ? [['', swatches('cap', LOOK_OPTIONS.cap, 'Cap colour')]] : []),
+    ['Chain', el('label', { className: 'row small' }, el('input', { type: 'checkbox', checked: l.chain, onchange: (e) => setLook({ chain: e.target.checked }) }), 'Gold chain')],
+    ['Wraps', swatches('wraps', LOOK_OPTIONS.wraps, 'Wrap colour')],
+  ];
+  $('look').replaceChildren(...rows.flatMap(([k, control]) => [el('span', { textContent: k }), control]));
+}
+$('look-reset').onclick = () => { state.fighter.look = { ...PHOTO_OUTFITS.red }; saveLook(); };
+
+function startPreview() {
+  createLookPreview({ parent: $('look-preview'), look: state.fighter.look })
+    .then((p) => { preview = p; $('look-preview-msg').remove(); })
+    .catch((err) => { $('look-preview-msg').textContent = `Preview unavailable: ${err.message}`; console.warn(err); });
+}
+
 // ─── Opponents ──────────────────────────────────────────────────────────────
 
 const ARCHETYPES = {
@@ -346,7 +414,8 @@ const ARCHETYPES = {
 };
 
 /** Profile shipped to the physics engine and stored in logs. */
-const profileOf = (f) => ({ name: f.name, stats: { ...f.stats } });
+// `look` is render-only: FighterModel never reads it, so it rides along in P2P `start` messages without touching lockstep.
+const profileOf = (f) => (f.look ? { name: f.name, stats: { ...f.stats }, look: { ...f.look } } : { name: f.name, stats: { ...f.stats } });
 
 /** The automated corner: reads gas, health and the score, and picks a tactic. */
 function aiCorner(sim, corner) {
@@ -387,7 +456,7 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner }) {
   // Phaser's headless mode still makes a canvas, so outside the 2D view it gets a parent that is never shown.
   state.game = createPhysicsGame({ parent: headless ? document.createElement('div') : $('ring'), sim, headless, timeScale: speedValue() });
   if (view === '3d') {
-    createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name }, timeOfDay: $('time').value })
+    createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name }, looks: { red: red.look, blue: blue.look }, timeOfDay: $('time').value })
       .then((arena) => { if (state.sim === sim) state.arena = arena; else arena.destroy(); })
       .catch((err) => { $('ring-placeholder').hidden = false; $('ring-placeholder').textContent = `3D view failed to load: ${err.message}`; });
   }
@@ -700,8 +769,10 @@ async function updateDbStatus() {
 
 async function boot() {
   const saved = await db.loadFighter();
-  if (saved) state.fighter = { ...state.fighter, ...saved, stats: normalizeStats(saved.stats) };
+  if (saved) state.fighter = { ...state.fighter, ...saved, stats: normalizeStats(saved.stats), look: normalizeLook(saved.look) };
   $('fighter-name').value = state.fighter.name;
+  renderLook();
+  if (preview) preview.setLook(state.fighter.look); else startPreview();
   renderFighter();
   renderTactics();
   await updateDbStatus();

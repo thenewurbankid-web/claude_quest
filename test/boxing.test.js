@@ -116,3 +116,29 @@ test('3D view: two-bone IK keeps bone lengths and stops at full reach', async ()
   const p = rotateAbout({ x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, Math.PI / 2);
   assert.ok(Math.abs(p.y) < 1e-9 && Math.abs(Math.abs(p.z) - 1) < 1e-9);
 });
+
+test('normalizeLook keeps valid choices, drops junk, and fills gaps from the base outfit', async () => {
+  const { normalizeLook, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  assert.deepEqual(normalizeLook(undefined), normalizeLook(PHOTO_OUTFITS.red));
+  const l = normalizeLook({ topStyle: 'hoodie', top: '#ABCDEF', skin: 'medium', cap: null, chain: false, evil: '<script>' }, PHOTO_OUTFITS.blue);
+  assert.equal(l.topStyle, 'hoodie');
+  assert.equal(l.top, '#abcdef');
+  assert.equal(l.skin, 'medium');
+  assert.equal(l.cap, null);
+  assert.equal(l.chain, false);
+  assert.equal(l.jeans, PHOTO_OUTFITS.blue.jeans);
+  assert.ok(!('evil' in l));
+  const bad = normalizeLook({ topStyle: 'cape', top: 'red; background:url(x)', boots: 'heels', skin: 'blue', wraps: 42 });
+  assert.deepEqual(
+    [bad.topStyle, bad.top, bad.boots, bad.skin, bad.wraps],
+    [PHOTO_OUTFITS.red.topStyle, PHOTO_OUTFITS.red.top, PHOTO_OUTFITS.red.boots, PHOTO_OUTFITS.red.skin, PHOTO_OUTFITS.red.wraps],
+  );
+});
+
+test('a look in the profile does not change the fight', () => {
+  const plain = new CombatSimulation({ seed: 11, rounds: 2, red: fighter('red'), blue: fighter('blue') });
+  const dressed = new CombatSimulation({ seed: 11, rounds: 2,
+    red: new FighterModel({ corner: 'red', name: 'red', stats: AVG, look: { topStyle: 'hoodie', skin: 'deep' } }), blue: fighter('blue') });
+  for (const sim of [plain, dressed]) while (sim.phase !== 'fight_over') { sim.startRound({ red: 'pressure', blue: 'outbox' }); sim.runRoundToEnd(); }
+  assert.equal(JSON.stringify(plain.rounds), JSON.stringify(dressed.rounds));
+});

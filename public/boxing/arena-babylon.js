@@ -10,7 +10,7 @@
  * a rigged model can replace `Boxer` later without touching the rest.
  */
 import { RING_HALF_M, TICK_MS } from './physics-engine.js';
-import { loadBoxerAssets, loadGltfLoader, ModelBoxer, PHOTO_OUTFITS } from './boxer-model.js';
+import { loadBoxerAssets, loadGltfLoader, ModelBoxer, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 import { v, add, sub, mul, dot, len, norm, lerp, bez, clamp, smooth, UP, rotateAbout, solveTwoBone } from './pose-math.js';
 
 const BABYLON_SRC = '/vendor/babylonjs/babylon.js';
@@ -1221,9 +1221,10 @@ const TACTIC_LABEL = { pressure: 'Pressure', outbox: 'Box outside', counter: 'Co
 
 /**
  * Mounts the 3D view in `parent` and starts rendering. Returns { destroy }.
- * names: { red, blue } for the lower thirds.
+ * names: { red, blue } for the lower thirds. looks: { red, blue } from character creation (see normalizeLook); a
+ * corner without one wears its outfit from the reference photo.
  */
-export async function createArena3D({ parent, sim, names = {}, timeOfDay = 'day', BABYLON: B = globalThis.BABYLON }) {
+export async function createArena3D({ parent, sim, names = {}, looks = {}, timeOfDay = 'day', BABYLON: B = globalThis.BABYLON }) {
   const night = timeOfDay === 'night';
   B ??= await loadBabylon();
   const canvas = document.createElement('canvas');
@@ -1294,7 +1295,7 @@ export async function createArena3D({ parent, sim, names = {}, timeOfDay = 'day'
   let boxers;
   try {
     const assets = await loadBoxerAssets(B, scene);
-    boxers = Object.fromEntries(['red', 'blue'].map((c) => [c, new ModelBoxer(B, scene, assets, c, shadow, { glove: LOOK.wraps, trunks: LOOK.trunks[c], wraps: true, outfit: PHOTO_OUTFITS[c] })]));
+    boxers = Object.fromEntries(['red', 'blue'].map((c) => [c, new ModelBoxer(B, scene, assets, c, shadow, { glove: LOOK.wraps, trunks: LOOK.trunks[c], wraps: true, outfit: looks[c] ? normalizeLook(looks[c], PHOTO_OUTFITS[c]) : PHOTO_OUTFITS[c] })]));
   } catch (err) {
     console.warn('boxer models unavailable, using primitive boxers:', err);
     boxers = { red: new Boxer(B, scene, 'red', shadow), blue: new Boxer(B, scene, 'blue', shadow) };
