@@ -328,7 +328,9 @@ feature list; releases pick from them.
   and WebSocket upgrades and the Bridge's HTTP writes from any page but the game's own origin are refused (review of
   `152c47e`/`83edeaf`). *Logins (user, 2026-10-04):* one shared Realm login, as built; anyone with the Realm password can
   claim any client id, and the user accepts that. *Keepers (user, 2026-10-04):* the game publishes only the opted-in
-  Keepers and their status on a retained topic; the Bridge never holds the full ledger.
+  Keepers and their status on a retained topic; the Bridge never holds the full ledger. *Offers (user, 2026-10-04):* that retained
+  message also carries, per queued item, the finished WorkOffer the game's own rules allow now (`keepersMessage`); only
+  the Bridge may read the topic, and the Bridge only relays offers, it never builds them.
 - **R5 "Missions and the first Sealed Hall"** (user, 2026-10-03): missions (a parent Work and its children; the saga is
   their Hall), backlog pressure against the release date and its gate on side content, the Sealed Hall as the saga's
   finale and its Sigil, and Keepers summoned with Ember, joining and released. The R4 controls already respect
