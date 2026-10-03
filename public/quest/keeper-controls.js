@@ -4,10 +4,15 @@
 // changes and a plain-text problem instead (`problem`), so the UI can say why.
 // Waking only queues a short task note; the /work page wraps it with the branch and REPORT_INSTRUCTIONS when copied.
 // The game can't stop an agent that is already running: the player stops it in their own tool.
-import { DEFAULT_RULES, QUEUE_MOVES, WORK_RESOLVED, canMove, emberLeft, isGameOnly, noChanges } from './contract.js';
+// A released Keeper (retired to the Hall of Champions) is never woken, rested, resumed or rung home: it gets no more
+// work. A summoned Keeper may be woken for its trial Work; resting it and resuming it brings it back as summoned until
+// it has joined (joinedAt).
+import { DEFAULT_RULES, QUEUE_MOVES, WORK_RESOLVED, LIVE_QUEUE, canMove, emberLeft, isGameOnly, noChanges } from './contract.js';
 
 /** Queue states that still hold a Keeper to a Work. */
-export const LIVE = ['queued', 'leased', 'lapsed'];
+export const LIVE = LIVE_QUEUE;
+/** What a Keeper goes back to after resting or a cancel: summoned until it joins, else busy or free. */
+const settled = (k, leased) => (k.summonedAt && !k.joinedAt ? 'summoned' : leased ? 'busy' : 'free');
 
 const clone = v => JSON.parse(JSON.stringify(v));
 const refuse = problem => ({ ...noChanges(), problem });
@@ -21,11 +26,11 @@ function blocked(ledger, w) {
   return (w.blockedBy || []).some(id => works.has(id) && !WORK_RESOLVED.includes(works.get(id).status));
 }
 
-/** Works a Keeper can be woken for: unresolved, real, not blocked, and with no live queue item. */
+/** Works a Keeper can be woken for: unresolved, real, not blocked, not waiting in review, with no live queue item. */
 export function startable(ledger) {
   const held = new Set(liveFor(ledger, () => true).map(q => q.workId));
-  return (ledger.works || []).filter(w => !WORK_RESOLVED.includes(w.status) && !isGameOnly(w) && !blocked(ledger, w)
-    && !held.has(w.id));
+  return (ledger.works || []).filter(w => !WORK_RESOLVED.includes(w.status) && w.status !== 'in_review' && !isGameOnly(w)
+    && !blocked(ledger, w) && !held.has(w.id));
 }
 
 /** The short task note a queue item carries: the Work's title, then the player's note. Plain text. */
@@ -41,6 +46,7 @@ export const taskNote = (work, note) => {
 export function wake(ledger, keeperId, workId, { note } = {}, now = new Date(), rules = DEFAULT_RULES) {
   const k = keeperOf(ledger, keeperId);
   if (!k) return refuse(`No Keeper ${keeperId}.`);
+  if (k.status === 'released') return refuse(`${k.name} is released and takes no more work.`);
   if (k.status === 'resting') return refuse(`${k.name} is resting. Resume them first.`);
   const w = (ledger.works || []).find(x => x.id === workId);
   if (!w) return refuse(`No Work ${workId}.`);
@@ -59,6 +65,7 @@ export function wake(ledger, keeperId, workId, { note } = {}, now = new Date(), 
 export function rest(ledger, keeperId, now = new Date()) {
   const k = keeperOf(ledger, keeperId);
   if (!k) return refuse(`No Keeper ${keeperId}.`);
+  if (k.status === 'released') return refuse(`${k.name} is released.`);
   if (k.status === 'resting') return refuse(`${k.name} is already resting.`);
   return { puts: [{ kind: 'keepers', record: { ...clone(k), status: 'resting' } }],
     events: [{ at: now.toISOString(), kind: 'keeper.rested', ref: k.id }] };
@@ -70,7 +77,7 @@ export function resume(ledger, keeperId, now = new Date()) {
   if (!k) return refuse(`No Keeper ${keeperId}.`);
   if (!['resting', 'wandered'].includes(k.status)) return refuse(`${k.name} is ${k.status}, not resting.`);
   const leased = (ledger.queue || []).some(q => q.keeperId === k.id && q.state === 'leased');
-  return { puts: [{ kind: 'keepers', record: { ...clone(k), status: leased ? 'busy' : 'free' } }],
+  return { puts: [{ kind: 'keepers', record: { ...clone(k), status: settled(k, leased) } }],
     events: [{ at: now.toISOString(), kind: 'keeper.resumed', ref: k.id }] };
 }
 
@@ -80,26 +87,27 @@ export function cancel(ledger, itemId, now = new Date()) {
   if (!q) return refuse(`No queue item ${itemId}.`);
   if (!canMove(QUEUE_MOVES, q.state, 'cancelled')) return refuse(`This run is ${q.state}; it can't be cancelled.`);
   const at = now.toISOString();
-  const c = { puts: [{ kind: 'queue', record: { ...clone(q), state: 'cancelled' } }],
+  const c = { puts: [{ kind: 'queue', record: { ...clone(q), state: 'cancelled', cancelledAt: at } }],
     events: [{ at, kind: 'work.cancelled', ref: q.id }] };
   const k = keeperOf(ledger, q.keeperId);
-  if (k && k.status !== 'resting') {
+  if (k && !['resting', 'released'].includes(k.status)) {
     const others = liveFor(ledger, x => x.keeperId === k.id && x.id !== q.id);
-    const status = !others.length ? 'free' : others.some(x => x.state === 'leased') ? 'busy' : k.status;
+    const status = !others.length || others.some(x => x.state === 'leased') ? settled(k, others.length > 0) : k.status;
     if (status !== k.status) c.puts.push({ kind: 'keepers', record: { ...clone(k), status } });
   }
   return c;
 }
 
 /**
- * The Recall Bell (safety rule 11): every Keeper resting and every queued, leased or lapsed item cancelled, from
+ * The Recall Bell (safety rule 11): every Keeper resting (released ones stay released) and every queued, leased or
+ * lapsed item cancelled, from
  * anywhere, with one bell.rung. Returned and cancelled items are left alone. It never refuses.
  */
 export function ringBell(ledger, now = new Date()) {
-  const puts = [];
-  for (const k of ledger.keepers || []) if (k.status !== 'resting') puts.push({ kind: 'keepers', record: { ...clone(k), status: 'resting' } });
-  for (const q of liveFor(ledger, () => true)) puts.push({ kind: 'queue', record: { ...clone(q), state: 'cancelled' } });
-  return { puts, events: [{ at: now.toISOString(), kind: 'bell.rung', ref: null }] };
+  const puts = [], at = now.toISOString();
+  for (const k of ledger.keepers || []) if (!['resting', 'released'].includes(k.status)) puts.push({ kind: 'keepers', record: { ...clone(k), status: 'resting' } });
+  for (const q of liveFor(ledger, () => true)) puts.push({ kind: 'queue', record: { ...clone(q), state: 'cancelled', cancelledAt: at } });
+  return { puts, events: [{ at, kind: 'bell.rung', ref: null }] };
 }
 
 /**

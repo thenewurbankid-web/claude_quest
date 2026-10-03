@@ -234,8 +234,10 @@ export const stewardOf = (ledger, marchId) =>
 // the paste is always kept verbatim. Agents work on branchFor(work) and never merge (safety rule 12).
 // Keeper controls are state changes on the ledger: wake = queue work for it; rest = Keeper resting, no prompts
 // offered; resume = back to free or busy; cancel = the queue item cancelled, later pastes refused; the Recall Bell =
-// every Keeper resting and every leased item cancelled. The game can't stop a running agent; the player stops it.
+// every Keeper resting (released ones stay released) and every queued, leased or lapsed item cancelled. The game can't
+// stop a running agent; the player stops it.
 export const REPORT_KIND = ['progress', 'done', 'blocked'];
+export const LIVE_QUEUE = ['queued', 'leased', 'lapsed']; // queue states that still hold a Keeper to a Work
 export const REPORT_FENCE = 'quest-report';
 export const KEEPER_CONTROL = ['wake', 'rest', 'resume', 'cancel', 'bell'];
 export const branchFor = work => `quest/${work.id}`;
@@ -380,7 +382,9 @@ export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
  *   "while you were away", counted from the event log after the last session.end
  * @typedef {{ id: string, keeperId: string, workId: string, prompt: string, state: string,
  *             leaseUntil?: string|null, result?: { text: string, usage?: { input: number, output: number },
- *             at: string }|null, createdAt: string, copiedAt?: string|null, reports?: Report[] }} QueueItem
+ *             at: string }|null, createdAt: string, copiedAt?: string|null, reports?: Report[],
+ *             cancelledAt?: string|null }} QueueItem
+ *   leaseUntil is null once returned; a leased item may be copied again, which renews it (leased → leased)
  *   prompt: what the player copies (the Work, the branch, REPORT_INSTRUCTIONS); copiedAt: when the lease started
  *   result: the final pasted text once returned (verbatim, plain text); reports: every paste, oldest first
  * @typedef {{ kind: string, summary: string, question?: string|null, branch?: string|null,

@@ -83,9 +83,13 @@ export function sealedHalls(ledger) {
 }
 
 // ---------- Keepers ----------
-// Capacity at the Lodge benches. A Keeper with an unknown status counts as resting.
+// Capacity at the Lodge benches. A summoned Keeper (on its trial Work) counts as busy; a released one is off the
+// benches entirely; any other unknown status (wandered included) counts as resting.
 export function keepers(ledger) {
   const out = { free: [], busy: [], resting: [] };
-  for (const k of ledger.keepers || []) (out[k.status] || out.resting).push(k);
+  for (const k of ledger.keepers || []) {
+    if (k.status === 'released') continue;
+    (out[k.status === 'summoned' ? 'busy' : k.status] || out.resting).push(k);
+  }
   return out;
 }

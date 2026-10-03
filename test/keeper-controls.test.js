@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { memoryStore, applyChanges, validateLedger, DEFAULT_RULES } from '../public/quest/contract.js';
 import { startable, wake, rest, resume, cancel, ringBell, tokenReadout, LIVE } from '../public/quest/keeper-controls.js';
+import { keepers as keepersSplit } from '../public/quest/status.js';
 
 const read = f => JSON.parse(readFileSync(new URL(`../public/quest/${f}`, import.meta.url)));
 const sample = () => ({ ...read('sample-realm.json'), queue: read('sample-work.json').queue });
@@ -15,7 +16,7 @@ const refused = c => { assert.ok(c.problem, 'gives a problem'); assert.deepEqual
 
 test('startable: open, real, unblocked Works with no live run', () => {
   // w3 leased, w8 queued, w4 blocked, w5 waits on w4, w1 w2 w7 done, w10 cancelled
-  assert.deepEqual(startable(sample()).map(w => w.id), ['w6', 'w9']);
+  assert.deepEqual(startable(sample()).map(w => w.id), ['w9']); // w6 waits in review
 });
 
 test('wake queues a sound item with a short task note and gives the Work to the Keeper', async () => {
@@ -112,4 +113,32 @@ test('tokenReadout: Ember left of max, the last run, and the day\'s spend', () =
   assert.deepEqual(next.lastRun, { input: 42000, output: 9000 }); // the last run is still the last run
   const empty = { ...sample(), queue: [] };
   assert.deepEqual(tokenReadout(empty, T0), { emberLeft: 100, emberMax: 100, lastRun: null, spentToday: 0 });
+});
+
+// ---------- R5 Keeper states in the R4 controls ----------
+test('a released Keeper is never woken, rested, rung home or offered a prompt', async () => {
+  const { offerable } = await import('../public/quest/work-queue.js');
+  const l = sample();
+  l.keepers[3] = { ...l.keepers[3], status: 'released', releasedAt: '2026-10-03T10:00:00Z' };
+  assert.ok(wake(l, 'k4', 'w9', {}, T0).problem);
+  assert.ok(rest(l, 'k4', T0).problem);
+  assert.ok(!ringBell(l, T0).puts.some(p => p.kind === 'keepers' && p.record.id === 'k4'));
+  assert.ok(!offerable(l, T0).some(o => o.keeper.id === 'k4'));
+  assert.ok(!keepersSplit(l).free.concat(keepersSplit(l).busy, keepersSplit(l).resting).some(k => k.id === 'k4'));
+});
+
+test('a summoned Keeper takes its trial Work and comes back summoned after resting', () => {
+  const l = sample();
+  l.keepers[3] = { ...l.keepers[3], status: 'summoned', summonedAt: '2026-10-03T10:00:00Z' };
+  assert.equal(wake(l, 'k4', 'w9', {}, T0).problem, undefined);
+  l.keepers[3].status = 'resting';
+  assert.equal(resume(l, 'k4', T0).puts[0].record.status, 'summoned');
+  assert.equal(keepersSplit({ keepers: [{ ...l.keepers[3], status: 'summoned' }] }).busy.length, 1);
+});
+
+test('cancels and the bell stamp cancelledAt; Works in review are not startable', () => {
+  const l = sample();
+  const at = T0.toISOString();
+  assert.ok(ringBell(l, T0).puts.filter(p => p.kind === 'queue').every(p => p.record.cancelledAt === at));
+  assert.ok(!startable(l).some(w => w.status === 'in_review'));
 });

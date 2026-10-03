@@ -73,7 +73,7 @@ export function offerable(ledger, now = new Date(), rules = DEFAULT_RULES) {
   return (ledger.queue || [])
     .filter(q => COPYABLE.includes(q.state))
     .map(q => ({ item: q, work: byId(ledger.works, q.workId), keeper: byId(ledger.keepers, q.keeperId) }))
-    .filter(({ work, keeper }) => work && keeper && keeper.status !== 'resting' && !isGameOnly(work)
+    .filter(({ work, keeper }) => work && keeper && !['resting', 'released'].includes(keeper.status) && !isGameOnly(work)
       && !RESOLVED.includes(work.status))
     .sort((a, b) => String(a.item.createdAt).localeCompare(String(b.item.createdAt)))
     .map(x => clone(x));
@@ -83,10 +83,11 @@ export function offerable(ledger, now = new Date(), rules = DEFAULT_RULES) {
 const otherLease = (ledger, keeperId, skip) =>
   (ledger.queue || []).some(q => q.keeperId === keeperId && q.state === 'leased' && !skip.has(q.id));
 
-/** The Keeper's record after a move, or null when it doesn't change. A resting Keeper stays resting. */
+/** The Keeper's record after a move, or null when it doesn't change. Resting and released Keepers stay so, and a
+ *  summoned one stays summoned until it joins (R5). */
 function keeperTo(ledger, keeperId, status) {
   const k = byId(ledger.keepers, keeperId);
-  if (!k || k.status === 'resting' || k.status === status) return null;
+  if (!k || ['resting', 'released', 'summoned'].includes(k.status) || k.status === status) return null;
   return { kind: 'keepers', record: { ...clone(k), status } };
 }
 

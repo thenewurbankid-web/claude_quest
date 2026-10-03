@@ -245,7 +245,9 @@ export function mountStartWork(container, store, { now = () => new Date(), rules
     const foot = el('div', 'qkh-foot');
     const { box: ro, r } = readout(l);
 
-    if (k.status === 'resting') {
+    if (k.status === 'released') {
+      nodes.push(el('p', '', `${k.name} is released to the Hall of Champions and takes no more work.`));
+    } else if (k.status === 'resting') {
       nodes.push(el('p', '', `${k.name} is resting: no prompts are offered. Resume them to start work.`), ro);
       foot.append(restBtn(k));
     } else {
@@ -314,7 +316,7 @@ export function mountStartWork(container, store, { now = () => new Date(), rules
   function listView(l, problem) {
     const nodes = [el('h2', '', 'Keepers'), el('p', 'qkh-sub', 'Wake, rest or call back your Keepers. Cancelling a run stops new prompts for it; an agent already running is stopped in your own tool.')];
     const ul = el('ul', 'qkh-keepers');
-    for (const k of l.keepers) {
+    for (const k of l.keepers.filter(k => k.status !== 'released')) { // released ones live in the Hall of Champions
       const li = el('li'), row = el('div', 'qkh-row'), who = el('div', 'qkh-who');
       who.append(el('span', 'qkh-title', k.name));
       const st = el('span', 'qkh-status', k.status);
