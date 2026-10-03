@@ -7,3 +7,7 @@ public/packs/
 
 # Sprite Lab: the Sunnyside World licence forbids sharing it, so it stays local (dev/dashboard.js serves it)
 dev/dashboard/local/
+
+# The Bridge's own secrets and ledger snapshot
+bridge/credential.json
+bridge/ledger.json
