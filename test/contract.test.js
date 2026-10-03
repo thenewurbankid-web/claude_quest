@@ -9,6 +9,7 @@ import {
   isGameOnly, validateAreaLore, validateAreaLoreIndex, validateAreaLoreCells, MARK_SOURCE,
   KEEPER_STATUS, parseReport, emberLeft, branchFor, REPORT_INSTRUCTIONS,
   suggest, MISSION_MOVES, validateMissionPlay, emptyMissionPlay, chainEvent, verifyEvents,
+  playFromSave,
 } from '../public/quest/contract.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -336,4 +337,28 @@ test('release dates and deadlines are optional ISO times on Halls and Works', ()
   l.halls[0].dueAt = 'next friday';
   l.works[0].dueAt = 'soon';
   assert.deepEqual(validateLedger(l).filter(p => p.path.endsWith('dueAt')).map(p => p.path), ['halls[0].dueAt', 'works[0].dueAt']);
+});
+
+test('R5: a save carries mission play; unsound mission play loads as empty with a warning, never a refusal', () => {
+  const l = sample();
+  assert.deepEqual(makeSave(l).play.missions, emptyMissionPlay());               // older callers get empty missions
+  const at = '2026-10-03T12:00:00Z';
+  const missions = { current: 'w3', runs: { w3: { id: 'w3', state: 'active', startedAt: at } } };
+  const save = makeSave(l, { boss: null, missions });
+  assert.deepEqual(playFromSave(save), { play: { boss: null, missions }, problems: [] });
+  assert.deepEqual(playFromSave({ play: {} }).play.missions, emptyMissionPlay());   // a save from before R5
+  const bad = makeSave(l, { missions: { current: 'w3', runs: { w3: { id: 'w3', state: 'flying', startedAt: at } } } });
+  const r = playFromSave(bad);
+  assert.deepEqual(r.play.missions, emptyMissionPlay());
+  assert.ok(r.problems.some(p => p.path === 'runs.w3.state'));
+  assert.ok(ledgerFromSave(bad).works.length);                                   // the ledger loads either way
+});
+
+test('R5: the sample Realm has a mission with release dates, and pressure rules default sensibly', () => {
+  const l = sample();
+  assert.deepEqual(l.works.filter(w => w.parentId === 'w3').map(w => w.id).sort(), ['w10', 'w4', 'w5']);
+  assert.ok(l.halls.find(h => h.id === 'ferry-b').dueAt);
+  assert.ok(DEFAULT_RULES.pressureGate > 0 && DEFAULT_RULES.pressureGate < 1);
+  for (const p of ['critical', 'high', 'medium', 'low']) assert.ok(DEFAULT_RULES.pressurePriority[p] > 0, p);
+  for (const z of ['S', 'M', 'L']) assert.ok(DEFAULT_RULES.pressureSize[z] > 0, z);
 });

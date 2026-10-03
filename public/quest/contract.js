@@ -126,6 +126,14 @@ export const DEFAULT_RULES = {
   tokensPerEmber: 10000,   // reported tokens (input + output) per Ember
   emberWindowHours: 24,    // Ember spent in this rolling window counts against emberMax
   summonCost: 10,          // Ember spent to summon a Keeper; it counts against the window like reported tokens
+  // R5, backlog pressure (missions.js pressure()): a saga's open Work weight against the days left to its release date.
+  // A Work weighs its weight if set, else pressurePriority[priority] * pressureSize[size] + pressureFailure * failures.
+  pressurePriority: { critical: 4, high: 3, medium: 2, low: 1 },
+  pressureSize: { S: 1, M: 2, L: 3 },
+  pressureFailure: 1,
+  pressurePerDay: 4,       // open weight a saga clears in a day: pressure = open / (pressurePerDay * days left), at most 1
+  pressureFull: 24,        // with no release date, this much open weight is full pressure
+  pressureGate: 0.75,      // at or above it, side content locks (lore quests, the lore tab, past the hub); never real work
 };
 
 // ---------- R2: the battle ----------
@@ -572,6 +580,17 @@ export function validateMissionPlay(mp) {
 }
 export const emptyMissionPlay = () => ({ current: null, runs: {} });
 
+/**
+ * The play state inside a save, with play.missions checked: missing becomes empty, and unsound mission play is
+ * dropped to empty with its problems returned (a warning, never a refusal; the ledger is untouched either way).
+ */
+export function playFromSave(save) {
+  const play = clone(save?.play || {});
+  if (play.missions === undefined) return { play: { ...play, missions: emptyMissionPlay() }, problems: [] };
+  const problems = validateMissionPlay(play.missions);
+  return { play: problems.length ? { ...play, missions: emptyMissionPlay() } : play, problems };
+}
+
 // ---------- the event log's hash chain ----------
 // Each event the store writes is stamped with its place (seq), the hash before it (prevHash) and its own hash, so an
 // event that goes missing or changes shows up. FNV-1a: it catches accidents (a lost write, a hand-edited save), not a
@@ -716,7 +735,8 @@ export function makeSave(ledger, play = {}, { withLedger = true } = {}) {
   const parts = ['manifest.json', 'play.json', ...(withLedger ? ['ledger.json', ...Object.keys(marches).map(id => `march/${id}.json`)] : [])];
   return clone({
     manifest: { kind: SAVE_KIND, version: SAVE_VERSION, at: new Date().toISOString(), realm: ledger.realm, parts, withLedger },
-    play, ledger: withLedger ? { keepers: ledger.keepers, events: ledger.events } : null, marches, archives: {},
+    play: { ...play, missions: play.missions ?? emptyMissionPlay() },
+    ledger: withLedger ? { keepers: ledger.keepers, events: ledger.events } : null, marches, archives: {},
   });
 }
 
