@@ -446,6 +446,30 @@ export const keeperList = keepers =>
   ({ v: BRIDGE_VERSION, keepers: (keepers || []).filter(k => k && BRIDGE_ID.test(k.id || '') && ONE_LINE(k.name))
     .map(k => ({ id: k.id, name: k.name, status: String(k.status ?? '') })) });
 
+/**
+ * The retained message the game publishes on the keepers topic: the Keepers the player opted in (being listed IS the
+ * opt-in; nobody else is ever offered work), their status, and each live queue item of theirs. offer is the finished
+ * WorkOffer for a queued item the game's own rules (offerable) allow now, else null.
+ * @typedef {{ v: number, keepers: { id: string, name: string, status: string }[],
+ *             queue: { queueId: string, keeperId: string, state: string, offer: WorkOffer|null }[] }} KeepersMessage
+ */
+export function validateKeepersMessage(m) {
+  const p = [], bad = (field, problem) => p.push({ field, problem });
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return [{ field: 'record', problem: 'not an object' }];
+  for (const k of Object.keys(m)) if (!['v', 'keepers', 'queue'].includes(k)) bad(k, 'unknown field');
+  if (m.v !== BRIDGE_VERSION) bad('v', `must be ${BRIDGE_VERSION}`);
+  if (!Array.isArray(m.keepers) || m.keepers.length > 200) return [...p, { field: 'keepers', problem: 'up to 200 Keepers' }];
+  if (!Array.isArray(m.queue) || m.queue.length > 500) return [...p, { field: 'queue', problem: 'up to 500 items' }];
+  m.keepers.forEach((k, i) => {
+    if (!k || !BRIDGE_ID.test(k.id || '') || !ONE_LINE(k.name) || !ONE_LINE(k.status)) bad(`keepers[${i}]`, 'id, name and status are required');
+  });
+  m.queue.forEach((q, i) => {
+    if (!q || !BRIDGE_ID.test(q.queueId || '') || !BRIDGE_ID.test(q.keeperId || '') || !ONE_LINE(q.state)) bad(`queue[${i}]`, 'queueId, keeperId and state are required');
+    else if (q.offer !== null && (typeof q.offer !== 'object' || q.offer?.queueId !== q.queueId || typeof q.offer.prompt !== 'string')) bad(`queue[${i}].offer`, 'must be null or the offer for this item');
+  });
+  return p;
+}
+
 /** Halt state: the Bell halts it; only the game's open message clears it. Nothing an agent sends reaches here. */
 export const bridgeHalt = (halted, kind) => kind === 'bell' ? true : kind === 'open' ? false : halted;
 

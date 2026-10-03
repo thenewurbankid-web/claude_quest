@@ -3,7 +3,7 @@
 // Pure functions over a Ledger snapshot (contract.js): they never touch a store and never mutate their input. Each
 // move returns Changes ({ puts, events }) that applyChanges writes, events last. The page lives in work-page.js.
 import { DEFAULT_RULES, QUEUE_MOVES, REPORT_KIND, REPORT_INSTRUCTIONS, canMove, branchFor, emberLeft, parseReport,
-  isGameOnly, noChanges } from './contract.js';
+  isGameOnly, noChanges, BRIDGE_VERSION, workOffer } from './contract.js';
 import { raiseRiddle } from './riddles.js';
 
 const HOUR = 3600e3;
@@ -222,4 +222,17 @@ export function workBoard(ledger, now = new Date(), rules = DEFAULT_RULES) {
       .map(q => ({ item: clone(q), work: clone(byId(ledger.works, q.workId)), offered: offered.has(q.id) }))
       .filter(x => x.work && !isGameOnly(x.work)),
   })).filter(g => g.items.length || g.keeper.status === 'resting');
+}
+
+/** The keepers message (contract.js): only the opted-in Keepers, their status and their live queue items; an item
+ *  carries its offer only when offerable allows it now. Pure; the game publishes the result, retained. */
+export function keepersMessage(ledger, optedIn, now = new Date(), rules = DEFAULT_RULES) {
+  const ids = new Set(optedIn);
+  const keepers = (ledger.keepers || []).filter(k => ids.has(k.id)).map(k => ({ id: k.id, name: k.name, status: k.status }));
+  const can = new Map(offerable(ledger, now, rules).map(x => [x.item.id, x]));
+  const queue = (ledger.queue || []).filter(q => ids.has(q.keeperId) && LIVE.includes(q.state)).map(q => {
+    const hit = q.state === 'queued' && can.get(q.id);
+    return { queueId: q.id, keeperId: q.keeperId, state: q.state, offer: hit ? workOffer(hit.work, hit.item, buildPrompt(ledger, q.id, rules)) : null };
+  });
+  return { v: BRIDGE_VERSION, keepers, queue };
 }

@@ -8,9 +8,8 @@ public/packs/
 # Sprite Lab: the Sunnyside World licence forbids sharing it, so it stays local (dev/dashboard.js serves it)
 dev/dashboard/local/
 
-# The Bridge's own secrets and ledger snapshot
+# The Bridge's own secrets
 bridge/credential.json
-bridge/ledger.json
 
 # Paperclip per-issue worktrees for Quest Dev
 .paperclip/

@@ -236,3 +236,13 @@ test('R4.5 Bridge: only the game publishes the Keeper list, and it carries only 
   assert.ok(!json.includes('secret skill') && !json.includes('hunter2'));
   for (const k of JSON.parse(json).keepers) assert.deepEqual(Object.keys(k), ['id', 'name', 'status']);
 });
+
+test('R4.5 Bridge: only the game publishes the keepers list; an agent can neither publish nor read it', async () => {
+  const { topicAllowed, bridgeTopic, validateKeepersMessage } = await import('../public/quest/contract.js');
+  const t = bridgeTopic('keepers', 'lantern');
+  assert.equal(topicAllowed({ role: 'game', realmId: 'lantern' }, t, 'publish'), true);
+  assert.equal(topicAllowed({ role: 'bridge', realmId: 'lantern' }, t, 'subscribe'), true);
+  for (const a of ['publish', 'subscribe']) assert.equal(topicAllowed({ role: 'agent', keeperId: 'k4', realmId: 'lantern' }, t, a), false, a);
+  assert.deepEqual(validateKeepersMessage({ v: 1, keepers: [], queue: [] }), []);
+  assert.ok(validateKeepersMessage({ v: 1, keepers: 'all', queue: [] }).length);
+});
