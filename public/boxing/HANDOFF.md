@@ -97,8 +97,7 @@ night toggle**.
   tee, light-wash jeans, wheat Timberland-style boots, a backwards navy cap, a gold chain and red wraps. Blue wears a
   navy varsity jacket with light sleeves, dark jeans, white sneakers, a chain and blue wraps. The jeans replace the trunks.
 - Checked at 1280×720: the day hard camera frames like the photo, 60 fps, `npm test` 93 pass.
-- Known issues: night's first load takes about 15 s while the 15-light shaders compile (day about 3 s); something
-  like `scene.whenReadyAsync` plus a loading card would hide it. The crowd gap on the hard camera's side shows on the
+- Known issues: night's first load takes about 15 s while the 15-light shaders compile (day about 3 s; now hidden by a loading card, see BOX-2). The crowd gap on the hard camera's side shows on the
   rooftop shot. The paint seams at the garment edges are jagged (they read as frayed). The primitive fallback fighters
   don't get outfits.
 
@@ -138,14 +137,18 @@ Built in 9717ad6 (WIP) and finished here. `boxer-model.js`: `LOOK_OPTIONS`, `nor
 - **Untested in a browser** (nothing here has been run): the Look panel at 375px, the preview scene (lighting, framing, rebuild without leaking textures or breaking the arena's shared assets), skin tones, a reload keeping the look, two tabs of P2P showing each other's look, the AI opponent's outfit.
 - Not done: archetype AI opponents all share the blue photo outfit; the primitive fallback fighters ignore looks.
 
+## Done (2026-10-04): night load card (BOX-2)
+
+`arena-babylon.js`: the overlay now has a loading card ("Setting up the fight", plus "Night takes a little longer the first time" at night). `createArena3D` awaits `scene.whenReadyAsync()` (capped at 60 s) before starting the render loop, so the shaders compile behind the card instead of a frozen page; the card fades out and removes itself. All views and both times of day get it. No lights removed, look unchanged. `npm test` passes (96); no test covers it (needs WebGL).
+- **Untested in a browser**: that the card shows during night's compile, that the page stays responsive, how long night actually takes now, the card at 375px, and that day still starts without a visible flash.
+
 ## Next jobs
 
 1. **Realistic people from Blender** (not picked yet; step 2 after the bake): Blender's MPFB (MakeHuman) add-on has CC0
    output and clothing assets, and its game rig uses UE-style bone names like the Quaternius clips. Character creation
    would then be built on those models.
 
-2. Night load time (see the known issues above).
-3. Balance (see Open issues).
+2. Balance (see Open issues).
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.

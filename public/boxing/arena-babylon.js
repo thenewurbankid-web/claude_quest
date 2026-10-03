@@ -1190,6 +1190,12 @@ function makeOverlay(parent) {
       .bm3d-third div { background:rgba(8,12,20,.72); padding:5px 10px; border-left:3px solid; font: 600 12px/1.3 system-ui; }
       .bm3d-third div small { display:block; font-weight:400; opacity:.75; font-size:10.5px; }
       .bm3d-cam { position:absolute; top:12px; right:14px; font: 600 10px/1 ui-monospace,monospace; opacity:.6; }
+      .bm3d-loading { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+        background:#0c0f16; font: 600 13px/1.4 system-ui; letter-spacing:.12em; text-transform:uppercase; transition: opacity .4s; text-align:center; padding:0 16px; }
+      .bm3d-loading.off { opacity:0; }
+      .bm3d-loading i { width:30px; height:30px; border:3px solid rgba(255,255,255,.2); border-top-color:#e5484d; border-radius:50%; animation: bm3dspin .8s linear infinite; }
+      .bm3d-loading small { font-weight:400; letter-spacing:.06em; text-transform:none; opacity:.6; }
+      @keyframes bm3dspin { to { transform:rotate(360deg); } }
     </style>
     <div class="bm3d-bug"><b>●</b> LIVE · UPTOWN NYC</div>
     <div class="bm3d-cam"></div>
@@ -1197,8 +1203,10 @@ function makeOverlay(parent) {
     <div class="bm3d-third">
       <div data-c="red" style="border-color:${LOOK.corners.red}"></div>
       <div data-c="blue" style="border-color:${LOOK.corners.blue};text-align:right"></div>
-    </div>`;
+    </div>
+    <div class="bm3d-loading"><i></i><span>Setting up the fight</span><small></small></div>`;
   parent.appendChild(el);
+  const loadingEl = el.querySelector('.bm3d-loading');
   const banner = el.querySelector('.bm3d-banner');
   let bannerTimer = 0;
   return {
@@ -1211,6 +1219,8 @@ function makeOverlay(parent) {
     },
     third(corner, name, line) { el.querySelector(`[data-c="${corner}"]`).innerHTML = `${name}<small>${line}</small>`; },
     cam(label) { el.querySelector('.bm3d-cam').textContent = label; },
+    loading(note) { loadingEl.querySelector('small').textContent = note; },
+    loaded() { loadingEl.classList.add('off'); setTimeout(() => loadingEl.remove(), 500); },
     dispose() { clearTimeout(bannerTimer); el.remove(); },
   };
 }
@@ -1232,6 +1242,7 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
   canvas.setAttribute('aria-label', '3D view of the fight');
   parent.appendChild(canvas);
   const overlay = makeOverlay(parent);
+  overlay.loading(night ? 'Night takes a little longer the first time' : '');
 
   const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true, antialias: true }, true);
   const scene = new B.Scene(engine);
@@ -1451,6 +1462,10 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
     arena.update(time, dt);
   };
   scene.onBeforeRenderObservable.add(step);
+
+  // Compile every shader before the first frame (night's 15 lights take ~15 s) so the card hides it, not a frozen page.
+  await Promise.race([scene.whenReadyAsync(), new Promise((r) => setTimeout(r, 60000))]);
+  overlay.loaded();
   engine.runRenderLoop(() => scene.render());
 
   const ro = new ResizeObserver(() => engine.resize());
