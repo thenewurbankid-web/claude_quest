@@ -119,9 +119,18 @@ const CSS = `
 .qdg-close:hover { background: rgba(255, 255, 255, 0.1); color: #eef0f4; }
 .qdg-close:focus-visible { outline: 2px solid #f2c14e; outline-offset: 1px; }
 .qdg-list { margin: 0; padding: 0 0 0 18px; }
+.qdg-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 0; border: 0;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.qdg-toggle:focus-visible { outline: 2px solid #f2c14e; outline-offset: 2px; border-radius: 6px; }
+.qdg-badge { padding: 0 6px; border-radius: 999px; background: #f2c14e; color: #1b1406; font-size: 12px; font-weight: 700; }
+.qdg-caret { color: #a3a9b6; font-size: 11px; }
+.qdg-root:not(.qdg-folded) .qdg-caret { transform: rotate(180deg); }
+.qdg-root.qdg-folded { width: auto; padding: 6px 12px; border-radius: 999px; }
+.qdg-root.qdg-folded .qdg-head { margin: 0; }
+.qdg-root.qdg-folded .qdg-list, .qdg-root.qdg-folded .qdg-close { display: none; }
 .qdg-list li { margin: 2px 0; }
 @media (max-width: 720px) {
-  .qdg-root { top: var(--qdg-top, 72px); right: 16px; left: 16px; width: auto; }
+  .qdg-root { top: var(--qdg-top, 72px); right: 16px; width: auto; max-width: calc(100vw - 32px); }
 }
 `;
 
@@ -150,19 +159,31 @@ export function mountDigest(container, store, { since } = {}) {
   const root = el('section', 'qdg-root');
   root.setAttribute('aria-label', 'While you were away');
   root.hidden = true;
+  // Folded by default to a pill (the title and how many things changed); clicking it opens the list.
   const head = el('div', 'qdg-head'), close = el('button', 'qdg-close', '×');
   close.type = 'button';
   close.setAttribute('aria-label', 'Dismiss');
-  head.append(el('h2', 'qdg-title', 'While you were away'), close);
+  const toggle = el('button', 'qdg-toggle'), badge = el('span', 'qdg-badge');
+  toggle.type = 'button';
+  toggle.append(el('span', 'qdg-title', 'While you were away'), badge, el('span', 'qdg-caret', '▾'));
+  head.append(toggle, close);
   const list = el('ul', 'qdg-list');
+  list.id = `qdg-list-${Math.random().toString(36).slice(2, 8)}`;
+  toggle.setAttribute('aria-controls', list.id);
   root.append(head, list);
+  const fold = f => { root.classList.toggle('qdg-folded', f); toggle.setAttribute('aria-expanded', String(!f)); };
+  fold(true);
+  toggle.addEventListener('click', () => fold(!root.classList.contains('qdg-folded')));
   container.append(root);
 
-  // Under 720px the Beacon HUD spans the top, so the card sits just below it, following its height.
+  // Beside the Beacon HUD on wide screens (left of it, whatever its width, folded or open); under 720px just below it.
   const narrow = matchMedia('(max-width: 720px)');
   const place = () => {
     const hud = document.querySelector('.qbh-root');
-    if (narrow.matches && hud) root.style.setProperty('--qdg-top', `${Math.round(hud.getBoundingClientRect().bottom) + 8}px`);
+    if (!hud) return;
+    const r = hud.getBoundingClientRect();
+    if (narrow.matches) { root.style.right = ''; root.style.setProperty('--qdg-top', `${Math.round(r.bottom) + 8}px`); }
+    else root.style.right = `${Math.round(innerWidth - r.left) + 8}px`;
   };
   const hudNode = document.querySelector('.qbh-root');
   const ro = hudNode && typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
@@ -175,6 +196,7 @@ export function mountDigest(container, store, { since } = {}) {
     if (gone || from === undefined) return;
     const lines = digestLines(digest(ledger, from));
     list.replaceChildren(...lines.map(t => el('li', '', t)));
+    badge.textContent = String(lines.length);
     root.hidden = dismissed || !lines.length;
   };
   close.addEventListener('click', () => { dismissed = true; root.hidden = true; });
