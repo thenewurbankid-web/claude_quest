@@ -404,6 +404,10 @@ function setRiddlers(list) {
   bangs.forEach((b, i) => { b.visible = i < carriers.length; b.userData.at = carriers[i]; });
 }
 addEventListener('quest:riddlers', e => setRiddlers(e.detail));
+// R2: boot.js sends 'quest:haze' (0 clear to 1 thick) from the Gloamwyrm's score; the fog closes in and turns violet.
+let haze = 0, hazeTarget = window.__questHaze || 0;
+const HAZE_TINT = new THREE.Color(0.36, 0.3, 0.52);
+addEventListener('quest:haze', e => { hazeTarget = Math.min(1, Math.max(0, Number(e.detail) || 0)); });
 addEventListener('quest:input', e => { inputLocked = !!e.detail?.locked; if (inputLocked) { held.clear(); order.length = 0; tapped = null; } });
 function riddleTick(t) {
   for (const b of bangs) if (b.visible) b.position.set(b.userData.at.x, 2.1 + (reduceMotion ? 0 : Math.sin(t * 3) * 0.06), b.userData.at.z);
@@ -519,6 +523,11 @@ function updateSky(dt) {
   const grey = (1 - w.sun) * 0.5;
   scene.fog.color.setRGB(0.2 + day * 0.61, 0.24 + day * 0.64, 0.38 + day * 0.54).lerp(new THREE.Color(0.32 + day * 0.4, 0.34 + day * 0.4, 0.38 + day * 0.4), grey);
   scene.fog.near = 26 - w.fog * 18; scene.fog.far = 58 - w.fog * 34;
+  haze += (hazeTarget - haze) * Math.min(1, dt * 0.6);
+  if (haze > 0.005) {
+    scene.fog.color.lerp(HAZE_TINT, haze * 0.55);
+    scene.fog.near = Math.max(3, scene.fog.near - haze * 14); scene.fog.far = Math.max(scene.fog.near + 8, scene.fog.far - haze * 26);
+  }
   wellLight.intensity = (3 + (1 - day * w.sun) * 9) * LOOK.light.fire;
   fireflies.mat.opacity = (1 - day) * 0.9;
   bloom.strength = (0.3 + (1 - day) * 0.45) * LOOK.lens.bloom;

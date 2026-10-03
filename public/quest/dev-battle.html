@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Dev page for the Gloamwyrm (R2): the playtest backlog (sample Realm + three fake questions) in a memoryStore, the
+     conversation box and outbox, and the battle box over them. "Fight" summons it; "Heavier" loads the second
+     session's backlog. Serve with: node dev/static.js 4790, then open /quest/dev-battle.html -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gloamwyrm dev</title>
+  <script type="importmap">
+  { "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/examples/jsm/" } }
+  </script>
+  <style>
+    html, body { margin: 0; min-height: 100%; }
+    body { min-height: 100vh; background: radial-gradient(ellipse at 30% 70%, #2f5d3a 0%, #1b2f3f 45%, #0c1220 100%);
+      color: #eef0f4; font: 14px/1.4 system-ui, -apple-system, sans-serif; }
+    .dev { position: fixed; top: 16px; left: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .dev button { min-height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.1); color: inherit; font: inherit; cursor: pointer; }
+    pre { position: fixed; top: 80px; left: 16px; right: 16px; max-height: 60vh; overflow: auto; margin: 0; padding: 8px;
+      font-size: 11px; background: rgba(0,0,0,.4); border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="dev" aria-label="Dev controls">
+    <button type="button" data-act="fight">Fight</button>
+    <button type="button" data-act="fresh">Reset: first session</button>
+    <button type="button" data-act="heavier">Reset: a day later (heavier)</button>
+  </div>
+  <pre id="state"></pre>
+  <script type="module">
+    import { memoryStore } from './contract.js';
+    import { playtestRealm } from './playtest.js';
+    import { bossScore, shouldSummon, emptyBossPlay } from './boss.js';
+    import { mountConversation } from './conversation.js';
+    import { startOutbox, mountOutbox } from './outbox.js';
+    import { mountBattle } from './battle.js';
+
+    const sample = await (await fetch('sample-realm.json')).json();
+    let store, battle, stop;
+    const talk = mountConversation(document.body);
+    const show = async () => {
+      const l = await store.snapshot();
+      const s = bossScore(l);
+      document.getElementById('state').textContent = JSON.stringify({ score: s.score, over: s.over,
+        summon: shouldSummon(l, battle.play), play: battle.play,
+        riddles: l.riddles.map(r => `${r.id} ${r.state}${r.answer ? ` "${r.answer.text}"` : ''}`) }, null, 1);
+    };
+    const reset = heavier => {
+      stop?.();
+      document.querySelectorAll('.qob-root, .qbt-root').forEach(n => n.remove());
+      store = memoryStore(playtestRealm(sample, new Date(), { heavier }));
+      mountOutbox(document.body, store);
+      stop = startOutbox(store);
+      battle = mountBattle(document.body, { store, talk, play: emptyBossPlay(), savePlay: () => show(), onEnd: show });
+      store.subscribe(show);
+      show();
+    };
+    reset(false);
+    document.querySelector('.dev').addEventListener('click', e => {
+      const act = e.target.closest('button')?.dataset.act;
+      if (act === 'fight') battle.fight().catch(err => alert(err.message));
+      if (act === 'fresh') reset(false);
+      if (act === 'heavier') reset(true);
+    });
+  </script>
+</body>
+</html>

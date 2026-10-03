@@ -210,7 +210,7 @@ let uid = 0;
  * @returns {{ say: (lines: string[], speaker: { name: string, sprite?: string }) => Promise<void>,
  *   ask: (riddle: object, opts: { speaker: { name: string, sprite?: string }, tier?: 'normal'|'confirm'|'never',
  *     flags?: { start: number, end: number, why: string }[], workTitle?: string, agentName?: string,
- *     context?: { path: string[], facts: [string, string][] } })
+ *     context?: { path: string[], facts: [string, string][] }, lockMs?: number })
  *     => Promise<{ choice: string }|{ askBack: string }|{ reply: string }|null>,
  *   close: () => void, unmount: () => void }}
  */
@@ -334,9 +334,21 @@ export function mountConversation(container) {
     if (to && typeof to.focus === 'function' && to.isConnected) to.focus();
   };
 
+  // Input lock (R2, safety in combat): with lockMs, no choice can be picked until lockMs after the box opens AND after
+  // the last key press, so mashing straight through a pause never lands on an answer.
+  const locked = () => !!session && Date.now() < (session.lockedUntil || 0);
+  const setLock = s => {
+    clearTimeout(lockTimer);
+    root.classList.toggle('qcv-locked', locked());
+    for (const b of seal.querySelectorAll('button:not([data-safe])')) b.disabled = locked();
+    if (locked()) lockTimer = setTimeout(() => session === s && setLock(s), s.lockedUntil - Date.now() + 10);
+  };
+  let lockTimer = null;
+
   const open = s => {
     if (session) finish(session.kind === 'ask' ? null : undefined);
     session = s;
+    if (s.opts?.lockMs > 0) s.lockedUntil = Date.now() + s.opts.lockMs;
     returnFocus = document.activeElement;
     setSpeaker(s.speaker);
     root.hidden = false;
@@ -433,6 +445,7 @@ export function mountConversation(container) {
     const later = button(ASK_LATER, 'qcv-choice');
     later.addEventListener('click', () => choose(ASK_LATER));
     seal.append(later);
+    if (s.lockedUntil) setLock(s);
   }
 
   // One text field for the three typed actions. Typed text is shown back only through textContent.
@@ -466,10 +479,11 @@ export function mountConversation(container) {
 
   function choose(choice) {
     const s = session;
-    if (!s) return;
+    if (!s || locked()) return;
     if (s.opts.tier === 'confirm' && choice !== ASK_LATER) {
       s.view = 'confirm';
       s.pending = choice;
+      if (s.opts.lockMs > 0) s.lockedUntil = Date.now() + s.opts.lockMs; // the plain confirm is locked afresh too
       render();
       return;
     }
@@ -497,13 +511,14 @@ export function mountConversation(container) {
     seal.hidden = false;
     const yes = button('Seal');
     const no = button('Back');
-    yes.addEventListener('click', () => finish({ choice: s.pending }));
+    yes.addEventListener('click', () => !locked() && finish({ choice: s.pending }));
     no.addEventListener('click', () => { s.view = 'talk'; s.pending = null; render(); seal.querySelector('button, input')?.focus(); });
     seal.append(yes, no);
     count.textContent = '';
     back.hidden = true;
     next.hidden = true;
-    yes.focus();
+    if (s.lockedUntil) { no.dataset.safe = '1'; setLock(s); no.focus(); } // locked: never land on Seal by a held key
+    else yes.focus();
   }
 
   // ---------- moving ----------
@@ -526,6 +541,10 @@ export function mountConversation(container) {
   closeBtn.addEventListener('click', () => finish(session?.kind === 'ask' ? null : undefined));
   root.addEventListener('keydown', e => {
     if (!session) return;
+    if (session.lockedUntil && locked()) { // still mashing: keep the lock on a little longer
+      session.lockedUntil = Date.now() + session.opts.lockMs;
+      setLock(session);
+    }
     const t = e.target;
     const inInput = t instanceof HTMLInputElement;
     const onButton = t instanceof HTMLButtonElement;

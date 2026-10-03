@@ -82,3 +82,16 @@ test('rule 10: teammates\' answers are shown as proposals, never overwritten', a
   assert.deepEqual(r1.proposals.map(p => [p.by, p.text]), [['sam', 'Paddle'], ['ana', 'Stripe']]);
   assert.equal(sealDue(l, later(3600)).puts.length, 0);
 });
+
+// R2: safety in combat (playtest criterion 4). The input lock itself lives in the conversation box (lockMs).
+test('combat: no answer changes hit power, and only resolving a Riddle lands a hit', async () => {
+  const { playtestRealm } = await import('../public/quest/playtest.js');
+  const { summon, face, settle, emptyBossPlay } = await import('../public/quest/boss.js');
+  const l0 = playtestRealm(sample(), T0);
+  const { play: fight } = summon(l0, emptyBossPlay(), T0);
+  const hit = async text => settle(await play(l0, x => answerRiddle(x, 'p1', { text, by: 'player' }, T0)), face(fight, 'p1'), {}, T0).hits;
+  const [a, b, c] = [await hit('Keep both'), await hit('Use the first spelling'), await hit(ASK_LATER)];
+  assert.equal(a[0].damage, b[0].damage);
+  assert.equal(a[0].damage, c[0].damage);
+  assert.deepEqual(settle(l0, face(fight, 'p1'), { mash: 1 }, T0).hits, []);
+});

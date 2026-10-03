@@ -61,6 +61,19 @@ collecting (PLAN-adventure §5 rewritten).
   <Keeper>", and the reply is pasted by hand until R3's /work page delivers it. The Beacon panel and the "While you
   were away" card both start folded to small chips with counts (the user found the open panel too invasive).
   `npm test` 74 pass.
+- **R2 parallel round + integration done (2026-10-03, built in one session, not in worktrees, user's choice):**
+  `boss.js` (bossScore with per-Work/per-Riddle reasons, bossSize, hazeLevel, summon/face/settle/retreat; hits are each
+  Riddle's weight share of maxHp, so deferred Riddles add hp but are never faced), `playtest.js` (the R2 backlog:
+  sample + p1 normal, p2 risk:high, p3 never, times relative to now; `heavier` for session two), `battle.js` (the
+  full-screen box: Face / Gather light (Space, ≤15%) / Retreat, Lodge pauses for confirm/never, a 1.1 s Gloamwyrm beat
+  between turns, `applyTalk` shared with boot), `gloamwyrm.js` (Three.js placeholder serpent + Haze motes),
+  `dev-battle.html`. The conversation box takes `lockMs` (input lock, extended while keys keep coming; the plain
+  confirm is locked afresh and focuses Back). Integration: `boot.js` sends `quest:haze`, cuts in after a 2.5 s warning,
+  keeps play in localStorage `quest-play`, 10 min calm after a fight; `?playtest` / `?playtest=heavier` loads the
+  backlog after a confirm. `scene.js` fog closes in and turns violet with the Haze. `npm test` 82 pass. Checked on
+  4791 (`quest-static-2`; 4790 belonged to another chat): win, retreat (returns ×1.25), 375px, no console errors.
+  Known gaps for tuning: light drains fast (0.18/s), a recalled answer keeps the hit it landed, the Haze is faint at
+  night, the Lodge is the plain box rather than a place. **Next: tuning, then the playtest (gate).**
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.

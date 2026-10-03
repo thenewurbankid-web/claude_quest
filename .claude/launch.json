@@ -17,6 +17,15 @@
     "4790"
    ],
    "port": 4790
+  },
+  {
+   "name": "quest-static-2",
+   "runtimeExecutable": "node",
+   "runtimeArgs": [
+    "dev/static.js",
+    "4791"
+   ],
+   "port": 4791
   }
  ]
 }

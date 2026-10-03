@@ -144,7 +144,8 @@ export const stewardOf = (ledger, marchId) =>
  * @typedef {{ at: string, kind: string, ref?: string|null }} Event
  * @typedef {{ id: string, startedAt: string, phase: string, score: number, strength: number, hp: number, maxHp: number,
  *             riddleIds: string[], lodgeIds: string[], resolvedIds: string[], current: string|null, turn: number,
- *             endedAt?: string|null }} Battle
+ *             endedAt?: string|null, weights?: Record<string, number> }} Battle
+ *   weights: each fight Riddle's weight when it was summoned, so a hit's size is its share of maxHp
  *   riddleIds: normal-tier Riddles asked in the fight; lodgeIds: confirm/never ones that pause it for the Lodge;
  *   resolvedIds: those answered or deferred so far (answers kept across a retreat); current: the Riddle on screen
  * @typedef {{ battle: Battle|null, retreats: number }} BossPlay   the save's play.boss
