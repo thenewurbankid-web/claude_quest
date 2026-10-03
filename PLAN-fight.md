@@ -48,8 +48,8 @@ back next time is heavier; retreat works from any turn and keeps every answer.
   light meter for up to +2 instead of the hit bonus, which is how a bad order can still be rescued.
 - The playtest backlog's ages are now 6, 18 and 30 h (one snap and two dim heads); the heavier one puts p1 off twice
   and p2 once (two echo heads, one dim). Simulated over every order with Lantern 6 (no tending): first session costs 2 to 5,
-  so no order loses (the worst ends at 1 of 6); heavier session, three of six orders are pushed back (anything
-  that leaves the twice-put-off plant head for last but one), the others win. Tune in the replay.
+  so no order loses (the worst ends at 1 of 6); heavier session, three of six orders are pushed back (payment
+  first, or staging then payment); cutting the twice-put-off plant head first, or right after staging, wins. Tune in the replay.
 
 ## Scope (if approved)
 - Contract step: `contract.js` adds `heads`, `lantern` and `freed` to the Battle record, plus the head kinds and
