@@ -361,9 +361,10 @@ function updateActor(a, dt) {
 // the Lodge. Standing next to one sends 'quest:near' ({ riddleId } or null), and E sends 'quest:talk'.
 // Standing at the Lodge with no Riddle near sends 'quest:near' ({ place: 'lodge' }), and E sends 'quest:lodge' (the
 // stats board). R3: standing by the hub's notice board ('B') sends ({ place: 'board' }), and E sends 'quest:board'.
+// R4: standing next to a Keeper with no Riddle sends ({ keeper: slot }), and E sends 'quest:keeper' ({ slot }) to start work.
 // 'quest:input' ({ locked }) stops the player moving while the conversation box is open.
 const keeperActors = [];
-let riddlers = [], nearRiddle = null, nearLodge = false, nearBoard = false, inputLocked = false;
+let riddlers = [], nearRiddle = null, nearLodge = false, nearBoard = false, nearKeeper = null, inputLocked = false;
 const boardCell = (() => { for (let r = 0; r < grid.rows; r++) { const c = rows[r].indexOf('B'); if (c >= 0) return [c, r]; } return null; })();
 const bangMat = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -415,7 +416,7 @@ addEventListener('quest:haze', e => { hazeTarget = Math.min(1, Math.max(0, Numbe
 addEventListener('quest:input', e => { inputLocked = !!e.detail?.locked; if (inputLocked) { held.clear(); order.length = 0; tapped = null; } });
 function riddleTick(t) {
   for (const b of bangs) if (b.visible) b.position.set(b.userData.at.x, 2.1 + (reduceMotion ? 0 : Math.sin(t * 3) * 0.06), b.userData.at.z);
-  let near = null, lodge = false, board = false;
+  let near = null, lodge = false, board = false, keeper = null;
   if (player) {
     if (boardCell) board = Math.abs(player.c - boardCell[0]) <= 1 && Math.abs(player.r - boardCell[1]) <= 1;
     // the Lodge's 2x2 plot runs from (lc, lr - 1) to (lc + 1, lr), but the house draws larger and the camera looks
@@ -425,12 +426,16 @@ function riddleTick(t) {
     const by = (c, r) => Math.abs(c - player.c) + Math.abs(r - player.r) <= 1;
     near = keeperActors.find(a => a.riddleId && a.k >= 1 && by(a.c, a.r))?.riddleId
       || (villager.riddleId && villagerCell && by(...villagerCell) ? villager.riddleId : null);
+    const k = keeperActors.findIndex(a => !a.riddleId && a.k >= 1 && by(a.c, a.r));
+    keeper = k >= 0 ? k : null;
   }
   lodge &&= !near; // a Riddle beside the Lodge comes first
   board &&= !near && !lodge;
-  if (near !== nearRiddle || lodge !== nearLodge || board !== nearBoard) {
-    nearRiddle = near; nearLodge = lodge; nearBoard = board;
-    dispatchEvent(new CustomEvent('quest:near', { detail: near ? { riddleId: near } : lodge ? { place: 'lodge' } : board ? { place: 'board' } : null }));
+  keeper = near || lodge || board ? null : keeper; // a Keeper wandering by never hides the Lodge or the board
+  if (near !== nearRiddle || lodge !== nearLodge || board !== nearBoard || keeper !== nearKeeper) {
+    nearRiddle = near; nearLodge = lodge; nearBoard = board; nearKeeper = keeper;
+    dispatchEvent(new CustomEvent('quest:near', { detail: near ? { riddleId: near } : lodge ? { place: 'lodge' } : board ? { place: 'board' }
+      : keeper != null ? { keeper } : null }));
   }
 }
 
@@ -445,6 +450,7 @@ addEventListener('keydown', e => { if (inputLocked) return; const k = KEY[e.key]
   if ((e.key === 'e' || e.key === 'E') && nearRiddle) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: nearRiddle } })); }
   else if ((e.key === 'e' || e.key === 'E') && nearLodge) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:lodge')); }
   else if ((e.key === 'e' || e.key === 'E') && nearBoard) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:board')); }
+  else if ((e.key === 'e' || e.key === 'E') && nearKeeper != null) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:keeper', { detail: { slot: nearKeeper } })); }
   audio.unlock(); });
 addEventListener('keyup', e => { const k = KEY[e.key]; if (k) { held.delete(k); order.splice(0, order.length, ...order.filter(d => d !== k)); } });
 for (const b of document.querySelectorAll('[data-dir]')) {

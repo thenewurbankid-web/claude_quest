@@ -4,7 +4,18 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
-**Latest (2026-10-03, R4 session): R4 contract done.** User decisions: pastes are read from one fenced `quest-report`
+**Latest (2026-10-03, R4 session, later): R4 Bring your Keeper is built and integrated.** Slices (a) `/work` page
+(`public/work.html`, `quest/work-queue.js`, `quest/work-page.js`; `work.html?sample` loads the sample) and (b) Keeper
+controls (`quest/keeper-controls.js`, `quest/keeper-hud.js`, `dev-keepers.html`) merged into 3d-world. Wiring: E next to
+a Keeper with no Riddle → 'quest:keeper' {slot} → Start work dialog; Ember meter + Keepers + Recall Bell (key B) dock
+bottom left. User chose: a lapsed lease sends only an in-progress Work back to todo (blocked/in-review stay). `npm test`
+147 pass. Checked on 4791: wake, copy, done paste → in review, Ember 94→91, bell confirm, 375px, no console errors.
+**Open:** walking up to a Keeper and pressing E untested by walking (event dispatched); `startable` offers in-review
+Works (ask whether that's wanted); the dock sits close to the bottom key hint on desktop; contract follow-ups from the
+slices (`manualReport` helper, `LIVE_QUEUE` shared constant, optional `cancelledAt`, the bell comment in contract.js
+says "every leased item" but it cancels queued/leased/lapsed). **Next:** the Paperclip connector release, or R5.
+
+**Earlier (2026-10-03, R4 session): R4 contract done.** User decisions: pastes are read from one fenced `quest-report`
 block (manual kind pick as fallback, paste kept verbatim); the Paperclip connector moves to its own release after R4.
 `contract.js` adds `REPORT_KIND`, `REPORT_INSTRUCTIONS`, `parseReport` (last block wins, never repairs), `branchFor`,
 `KEEPER_CONTROL`, `emberLeft` (rolling-window Ember from reported tokens), Keeper status `wandered`, late pastes on a

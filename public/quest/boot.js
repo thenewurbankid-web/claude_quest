@@ -11,7 +11,10 @@
 // ?playtest (or ?playtest=heavier) swaps in the R2 playtest backlog, after a confirm.
 // R3: Lore quests. Area lore for the player's geohash-4 cell and its neighbours (area-lore.js), or the built-in calendar,
 // becomes game-only Riddles in a Town news March. They are taken on from the hub's notice board ('quest:board'), not
-// carried by Keepers, and never feed the Beacon, the Haze, the boss or the stats. ?lore=<folder/> reads a lore folder
+// carried by Keepers, and never feed the Beacon, the Haze, the boss or the stats.
+// R4: Bring your Keeper. E next to a Keeper with no Riddle ('quest:keeper', { slot }) opens Start work for the ledger
+// Keeper in that slot; the prompt then waits on the /work page (work.html). The Ember meter and the Recall Bell (B)
+// sit in a dock at the bottom left. ?lore=<folder/> reads a lore folder
 // (?lore alone: the sample cell, with &cell=gcpv to stand in it); with no folder yet, only the calendar is posted.
 import { openLedger } from './ledger-idb.js';
 import { mountLedgerPanel } from './ledger-panel.js';
@@ -28,6 +31,7 @@ import { bossScore, hazeLevel, shouldSummon, emptyBossPlay } from './boss.js';
 import { playtestRealm } from './playtest.js';
 import { geohash, cellAndNeighbours, fetchAreaLore, boardLore, loreChanges, riddleId as loreRiddleId, LORE_MARCH } from './area-lore.js';
 import { mountTownBoard } from './town-board.js';
+import { mountStartWork, mountEmberReadout, mountRecallBell } from './keeper-hud.js';
 import { place } from '../3d/clock.js';
 
 const store = await openLedger();
@@ -117,15 +121,20 @@ Object.assign(prompt.style, { position: 'fixed', left: '50%', bottom: '120px', t
   color: '#eef0f4', font: '600 14px system-ui, sans-serif', cursor: 'pointer' });
 document.body.append(prompt);
 // near: a Riddle id, 'lodge' (the stats board), 'board' (the notice board) or null
-let near = null, talking = false;
-const PLACES = { lodge: 'Stats board (E)', board: 'Notice board (E)' };
+let near = null, talking = false, keeperCount = 0;
+const PLACES = { lodge: 'Stats board (E)', board: 'Notice board (E)', keeper: 'Start work (E)' };
+let nearSlot = null;
+store.subscribe(l => { keeperCount = l.keepers.length; });
+keeperCount = (await store.snapshot()).keepers.length;
 addEventListener('quest:near', e => {
-  near = e.detail?.riddleId || (PLACES[e.detail?.place] ? e.detail.place : null);
+  nearSlot = e.detail?.keeper ?? null;
+  near = e.detail?.riddleId || (PLACES[e.detail?.place] ? e.detail.place : null)
+    || (nearSlot != null && nearSlot < keeperCount ? 'keeper' : null); // a scene Keeper with no ledger Keeper stays quiet
   prompt.textContent = PLACES[near] || 'Talk (E)';
   prompt.hidden = !near || talking;
 });
-prompt.addEventListener('click', () => near && dispatchEvent(PLACES[near] ? new CustomEvent(`quest:${near}`)
-  : new CustomEvent('quest:talk', { detail: { riddleId: near } })));
+prompt.addEventListener('click', () => near && dispatchEvent(near === 'keeper' ? new CustomEvent('quest:keeper', { detail: { slot: nearSlot } })
+  : PLACES[near] ? new CustomEvent(`quest:${near}`) : new CustomEvent('quest:talk', { detail: { riddleId: near } })));
 
 const lock = locked => { talking = locked; prompt.hidden = locked || !near; dispatchEvent(new CustomEvent('quest:input', { detail: { locked } })); };
 
@@ -182,6 +191,20 @@ addEventListener('quest:board', async () => {
       onUsePlace: usePlace });
   } finally { lock(false); }
   if (pick) dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: pick } }));
+});
+
+// ---------- R4: Bring your Keeper ----------
+const startWork = mountStartWork(document.body, store, { workUrl: 'work.html' });
+mountEmberReadout(document.body, store);
+mountRecallBell(document.body, store, { onKeepers: () => { if (!talking && !battle.open) openKeeper(null); } });
+const openKeeper = async keeperId => {
+  lock(true);
+  try { await startWork.open(keeperId ?? undefined); } finally { lock(false); }
+};
+addEventListener('quest:keeper', async e => {
+  if (talking || battle.open) return;
+  const k = (await store.snapshot()).keepers[e.detail?.slot];
+  if (k) await openKeeper(k.id);
 });
 
 addEventListener('quest:talk', async e => {
