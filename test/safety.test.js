@@ -83,6 +83,20 @@ test('rule 10: teammates\' answers are shown as proposals, never overwritten', a
   assert.equal(sealDue(l, later(3600)).puts.length, 0);
 });
 
+// R4: the /work page.
+test('rule 5: the budget is stamina: when it\'s empty, work pauses', async () => {
+  const { offerable, copyPrompt, pasteResult } = await import('../public/quest/work-queue.js');
+  const { emberLeft } = await import('../public/quest/contract.js');
+  const l = { ...sample(), queue: JSON.parse(readFileSync(new URL('../public/quest/sample-work.json', import.meta.url))).queue };
+  assert.ok(offerable(l, T0).length > 0);
+  l.queue[0].reports[0].usage = { input: DEFAULT_RULES.emberMax * DEFAULT_RULES.tokensPerEmber, output: 0 };
+  assert.equal(emberLeft(l, T0), 0);
+  assert.deepEqual(offerable(l, T0), []);                                  // no prompts offered
+  assert.throws(() => copyPrompt(l, 'q3', T0), /Ember/);                    // and none can be leased
+  assert.equal(pasteResult(l, 'q1', 'Still going.', { kind: 'progress' }, T0).refused, null); // work already out still reports
+  assert.ok(offerable(l, later(DEFAULT_RULES.emberWindowHours * 3600)).length > 0); // Ember comes back as the window moves
+});
+
 // R2: safety in combat (playtest criterion 4). The input lock itself lives in the conversation box (lockMs).
 test('combat: no answer changes hit power, and only resolving a Riddle lands a hit', async () => {
   const { playtestRealm } = await import('../public/quest/playtest.js');

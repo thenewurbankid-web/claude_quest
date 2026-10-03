@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- The /work page (R4, PLAN-engine.md): queued Works as prompts to copy into your own agent, and a box to paste its
+     reply back. GitHub Pages serves it at /work. It opens the game's own browser ledger (IndexedDB), so it shows the
+     same Keepers and Works as the game in this browser. ?sample loads the sample Realm and /work queue first (asks). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Keepers' work · Quest</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; }
+    body { min-height: 100vh; background: radial-gradient(ellipse at 30% 0%, #1b2f3f 0%, #10131f 60%) fixed, #10131f;
+      color: #eef0f4; padding: env(safe-area-inset-top) max(0px, env(safe-area-inset-right)) env(safe-area-inset-bottom)
+      max(0px, env(safe-area-inset-left)); }
+    .boot { padding: 16px; font: 14px/1.4 system-ui, sans-serif; color: #a3a9b6; }
+  </style>
+</head>
+<body>
+  <p class="boot" id="boot">Opening the ledger…</p>
+  <script type="module">
+    import { openLedger } from './quest/ledger-idb.js';
+    import { mountWorkPage } from './quest/work-page.js';
+
+    const boot = document.getElementById('boot');
+    // In-page yes/no, as boot.js does: no native dialogs.
+    const askInPage = (text, yesLabel) => new Promise(resolve => {
+      const box = document.createElement('div');
+      box.setAttribute('role', 'alertdialog');
+      box.setAttribute('aria-label', text);
+      Object.assign(box.style, { position: 'fixed', left: '50%', top: '40%', transform: 'translate(-50%, -50%)', zIndex: 1200,
+        width: 'min(420px, calc(100vw - 32px))', padding: '16px', borderRadius: '12px', background: 'rgba(14,16,24,.95)',
+        color: '#eef0f4', font: '14px/1.4 system-ui, sans-serif', border: '1px solid rgba(255,255,255,.2)', boxSizing: 'border-box' });
+      const p = document.createElement('p');
+      p.style.margin = '0 0 12px';
+      p.textContent = text;
+      box.append(p);
+      for (const [label, yes] of [[yesLabel, true], ['Cancel', false]]) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        Object.assign(b.style, { minHeight: '40px', padding: '8px 14px', marginRight: '8px', borderRadius: '8px', cursor: 'pointer',
+          border: '1px solid rgba(255,255,255,.25)', background: yes ? '#6b4fd8' : 'rgba(255,255,255,.08)', color: 'inherit', font: 'inherit' });
+        b.onclick = () => { box.remove(); resolve(yes); };
+        box.append(b);
+      }
+      document.body.append(box);
+      box.querySelector('button').focus();
+    });
+
+    try {
+      const store = await openLedger();
+      if (new URLSearchParams(location.search).has('sample')
+        && await askInPage("Replace this browser's ledger with the sample Realm and its /work queue?", 'Load it')) {
+        const realm = await (await fetch('quest/sample-realm.json')).json();
+        const work = await (await fetch('quest/sample-work.json')).json();
+        await store.replace({ ...realm, queue: work.queue });
+      }
+      boot.remove();
+      mountWorkPage(document.body, store, { gameUrl: './' });
+    } catch (e) {
+      boot.textContent = `The ledger could not be opened in this browser: ${e.message || e}`;
+    }
+  </script>
+</body>
+</html>
