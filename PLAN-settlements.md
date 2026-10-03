@@ -10,6 +10,10 @@
 - the Paperclip company
 - new GitHub repos follow the same prefix: `claude-quest-marketplace`, the player's `claude-quest-saves`
 
+**Renamed (user, 2026-10-04):** the public name is now **A Vibe Called Quest** (page titles, the site, README, the
+settings line, the editor prompt). Only public mentions changed; "Quest" stays as the short form in prose and dialogue,
+and all code names above are unchanged.
+
 The display name lives in `lore/world.md` (§12), so it can be changed there later without touching code.
 
 **Phases (each ships on its own, in this order):**
