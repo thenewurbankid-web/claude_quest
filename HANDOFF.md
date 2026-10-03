@@ -109,6 +109,12 @@ collecting (PLAN-adventure §5 rewritten).
   logs `agent.blocked`. The door area is wider than the 2x2 plot because the house draws larger than its cells.
   `npm test` 89 pass; checked on 4793 by walking there, at 375px, no console errors. **All three pre-R3 gaps are
   closed; R3 waits only on the R2 playtest gate.**
+- **Playtest session 1, fight 1 attempt 1 failed (2026-10-03):** the player retreated at 15/49 because it was unclear
+  what to do, and asked "where are these questions coming from?" (see PLAYTEST-R2.md). **Next: the fight wording fix
+  in `battle.js`, fake data kept (user's choice):** the opening line says the questions are the Keepers' (agents')
+  work waiting on you; each Face button names who asks and on which Work instead of "asked here · weight 1"; the Lodge
+  pause says why it pauses (money, deploys and the like are answered calmly, not mid-fight). Then replay fight 1 on a
+  static server with `?playtest`.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
