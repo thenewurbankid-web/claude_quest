@@ -4,6 +4,7 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**R4.5 contract done (CLA-6, 2026-10-04, `152c47e`):** `contract.js` "R4.5: the Bridge" (topics `quest/<realm>/...`, `topicAllowed`, `Registration`, `bridgeMayOffer`/`bridgeHalt`, `reportFromBridge` via `parseReport`, `Credential`, `bridgeBindHost`/`isOwnMachine`), `sample-bridge.json`, four Bridge safety tests; `npm test` 181 pass. Slices: CLA-7 Bridge process (`bridge/`), CLA-8 in-game client and settings, CLA-9 integration (`boot.js`), in that order. Nothing here touches the browser. **Next:** CLA-7 (needs `aedes`, `mqtt` and its WebSocket adapter only). `PLAN-engine.md` has the user's 2026-10-04 decisions uncommitted; commit it with the next change.
 **Done (2026-10-04): Quest Pulse, a local Paperclip dashboard (user).** `node dev/dashboard.js` (launch config
 `quest-pulse`, port 4795) serves `dev/dashboard/index.html`, refreshing every 5 s:
 - Quest Dev's pulse, releases R0 to R9+ (matched to Paperclip issues by title prefix), issues with their latest comment,
