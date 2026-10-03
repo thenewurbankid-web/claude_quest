@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import {
   validateLedger, emptyLedger, memoryStore, makeSave, ledgerFromSave, canMove, RIDDLE_MOVES, QUEUE_MOVES, stewardOf,
   DEFAULT_RULES, EVENT_KIND, applyChanges, mergeChanges, noChanges, validateBattle, BATTLE_MOVES,
-  isGameOnly, validateAreaLore, validateAreaLoreIndex, MARK_SOURCE,
+  isGameOnly, validateAreaLore, validateAreaLoreIndex, validateAreaLoreCells, MARK_SOURCE,
 } from '../public/quest/contract.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -175,4 +175,11 @@ test('R3: a lore mark is valid in the ledger and game-only; real work is not', (
   assert.ok(isGameOnly({ mark: { source: 'player', real: false } }));
   assert.ok(!isGameOnly(l.riddles[1]));
   assert.ok(!isGameOnly({ mark: { source: 'task', real: true } }));
+});
+
+test('R3: lore/cells.json lists the cells that have an index', () => {
+  const c = JSON.parse(readFileSync(new URL('../public/quest/sample-lore/cells.json', import.meta.url)));
+  assert.deepEqual(validateAreaLoreCells(c), []);
+  assert.deepEqual(c.cells, ['gcpv']);
+  assert.deepEqual(validateAreaLoreCells({ ...c, cells: ['nope!'] }).map(p => p.path), ['cells']);
 });

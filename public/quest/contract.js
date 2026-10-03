@@ -117,7 +117,7 @@ export const BATTLE_MOVES = {
 
 // ---------- R3: area lore ----------
 // Shared lore for an area (PLAN-engine.md, "R3 Lore quests"): a geohash-4 cell, about 39x20 km. The generator writes
-// each entry once to lore/<cell>/<id>.json and lists it in lore/<cell>/index.json; every player in the cell (and its 8
+// each entry once to lore/<cell>/<id>.json and lists it in lore/<cell>/index.json (and the cell in lore/cells.json); every player in the cell (and its 8
 // neighbours) reads the same files until the entry ends. Only these kinds are written; anything else is dropped at the
 // source, never filtered after the fact. 'calendar' is the built-in fallback (time of day, season, weekend), made in
 // the client and never published.
@@ -136,6 +136,8 @@ export const GEOHASH_CELL = /^[0-9b-hjkmnp-z]{4}$/; // geohash-4: base32 without
  * @typedef {{ version: number, cell: string, updatedAt: string,
  *             entries: { id: string, kind: string, startsAt: string, endsAt: string }[] }} AreaLoreIndex
  *   lore/<cell>/index.json: what is live or coming in the cell, so a client fetches only the entries it needs
+ * @typedef {{ version: number, updatedAt: string, cells: string[] }} AreaLoreCells
+ *   lore/cells.json: every cell with an index, so a client asks only for cells that exist (no 404s in the console)
  */
 
 const ISO = v => typeof v === 'string' && !Number.isNaN(Date.parse(v));
@@ -155,6 +157,16 @@ export function validateAreaLore(e) {
     bad('options', 'a list of plain-text choices');
   for (const k of ['startsAt', 'endsAt', 'writtenAt']) if (!ISO(e[k])) bad(k, 'needs an ISO time');
   if (ISO(e.startsAt) && ISO(e.endsAt) && Date.parse(e.endsAt) <= Date.parse(e.startsAt)) bad('endsAt', 'ends after it starts');
+  return out;
+}
+
+/** Problems with lore/cells.json, empty when sound. */
+export function validateAreaLoreCells(c) {
+  const out = [];
+  if (!c || typeof c !== 'object') return [{ path: '', problem: 'not an area-lore cell list' }];
+  if (c.version !== AREA_LORE_VERSION) out.push({ path: 'version', problem: `expected ${AREA_LORE_VERSION}, got ${c.version}` });
+  if (!ISO(c.updatedAt)) out.push({ path: 'updatedAt', problem: 'needs an ISO time' });
+  if (!Array.isArray(c.cells) || c.cells.some(x => !GEOHASH_CELL.test(x))) out.push({ path: 'cells', problem: 'a list of geohash-4 cells' });
   return out;
 }
 
