@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- Dev page for the Keeper controls (R4): the sample Realm with sample-work.json's queue in a memoryStore, the Ember
+     meter and Recall Bell docked bottom-left, the Beacon HUD top-right to check they don't overlap, and buttons that
+     open the start-work dialog as pressing E next to a Keeper would. Serve with: node dev/static.js 4795 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keepers dev</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; }
+    body { min-height: 100vh; background: radial-gradient(ellipse at 30% 70%, #2f5d3a 0%, #1b2f3f 45%, #0c1220 100%);
+      color: #eef0f4; font: 14px/1.4 system-ui, -apple-system, sans-serif; }
+    .dev { position: fixed; top: 16px; left: 16px; right: 372px; display: flex; flex-wrap: wrap; gap: 8px; }
+    @media (max-width: 720px) { .dev { right: 16px; top: 64px; } }
+    .dev button { min-height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.1); color: inherit; font: inherit; cursor: pointer; }
+    .dev button:hover { background: rgba(255,255,255,.2); }
+    pre { position: fixed; left: 16px; bottom: 72px; width: min(420px, calc(100vw - 32px)); max-height: 34vh;
+      overflow: auto; margin: 0; padding: 8px; font-size: 11px; background: rgba(0,0,0,.4); border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="dev" aria-label="Dev controls">
+    <button type="button" data-act="k1">E next to Bramble (busy)</button>
+    <button type="button" data-act="k4">E next to Wren (free)</button>
+    <button type="button" data-act="list">Keepers list</button>
+    <button type="button" data-act="spend">Report 900k tokens</button>
+    <button type="button" data-act="reset">Reset sample</button>
+  </div>
+  <pre id="state" aria-label="Keepers, queue and recent events"></pre>
+  <script type="module">
+    import { memoryStore } from './contract.js';
+    import { mountBeaconHud } from './beacon-hud.js';
+    import { mountStartWork, mountEmberReadout, mountRecallBell } from './keeper-hud.js';
+
+    const [realm, work] = await Promise.all(['./sample-realm.json', './sample-work.json'].map(async u => (await fetch(u)).json()));
+    // the sample's times are fixed, so shift the queue to now: its reports then count against today's Ember
+    const shift = Date.now() - Date.parse('2026-10-03T12:00:00Z');
+    const moved = iso => iso ? new Date(Date.parse(iso) + shift).toISOString() : iso;
+    const queue = work.queue.map(q => ({ ...q, createdAt: moved(q.createdAt), copiedAt: moved(q.copiedAt), leaseUntil: moved(q.leaseUntil),
+      reports: (q.reports || []).map(r => ({ ...r, at: moved(r.at) })), result: q.result ? { ...q.result, at: moved(q.result.at) } : q.result }));
+    const sample = { ...realm, queue };
+    const store = memoryStore(sample);
+    window.questStore = store; // for poking at from the console
+
+    mountBeaconHud(document.body, store);
+    const startWork = mountStartWork(document.body, store, { workUrl: '../work.html' });
+    mountEmberReadout(document.body, store);
+    mountRecallBell(document.body, store, { onKeepers: () => startWork.open() });
+
+    const show = l => {
+      document.getElementById('state').textContent = [
+        ...l.keepers.map(k => `${k.id} ${k.name} ${k.status}`),
+        ...l.queue.map(q => `${q.id.slice(0, 8)} ${q.keeperId} ${q.workId} ${q.state}  ${JSON.stringify(q.prompt)}`),
+        ...l.events.slice(-4).map(e => `${e.kind} ${e.ref || ''}`),
+      ].join('\n');
+    };
+    store.subscribe(show);
+    show(await store.snapshot());
+
+    const acts = {
+      k1: () => startWork.open('k1').then(id => console.log('queued', id)),
+      k4: () => startWork.open('k4').then(id => console.log('queued', id)),
+      list: () => startWork.open(),
+      async spend() {
+        const q = (await store.snapshot()).queue[0];
+        await store.put('queue', { ...q, reports: [...q.reports, { ...q.reports[0], usage: { input: 800000, output: 100000 }, at: new Date().toISOString() }] });
+      },
+      async reset() { await store.replace(sample); },
+    };
+    document.querySelector('.dev').addEventListener('click', e => {
+      const act = e.target.closest('button')?.dataset.act;
+      if (act) acts[act]();
+    });
+  </script>
+</body>
+</html>
