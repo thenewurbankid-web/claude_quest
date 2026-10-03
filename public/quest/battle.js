@@ -61,7 +61,8 @@ const btn = (text, sub) => {
   if (sub) b.append(el('small', '', sub));
   return b;
 };
-const TIER_NOTE = { normal: 'asked here', confirm: 'a real decision: answered in the Lodge', never: 'answered outside the game' };
+const TIER_NOTE = { normal: 'answer it here to strike', confirm: 'touches something real: answered calmly in the Lodge',
+  never: 'answered outside the game' };
 const WYRM_MOVES = [
   w => `The Gloamwyrm coils. The Haze thickens around ${w}.`,
   w => `The Gloamwyrm breathes out grey. ${w} is waiting.`,
@@ -181,6 +182,11 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     const r = l.riddles.find(x => x.id === id);
     return l.works.find(w => w.id === r?.workId)?.title || id;
   };
+  // who is stuck on it: the Keeper on its Work, or a villager when no Keeper has it
+  const askerOf = (l, id) => {
+    const w = l.works.find(x => x.id === l.riddles.find(r => r.id === id)?.workId);
+    return l.keepers.find(k => k.id === w?.keeperId)?.name || 'A villager';
+  };
 
   async function panelFor(l) {
     const b = play.battle;
@@ -203,7 +209,7 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     for (const id of unresolved(b)) {
       const r = l.riddles.find(x => x.id === id);
       const waiting = r?.state === 'open' && (r.asks || []).some(a => !a.reply);
-      const f = btn(`Face: ${titleOf(l, id)}`, `${TIER_NOTE[riskTier(r || {}, rules)]} · weight ${b.weights?.[id] ?? 1}${waiting ? ' · waiting on a reply' : ''}`);
+      const f = btn(`Face: ${titleOf(l, id)}`, `${askerOf(l, id)} is stuck on this · ${TIER_NOTE[riskTier(r || {}, rules)]}${waiting ? ' · waiting on a reply' : ''}`);
       f.disabled = busy;
       f.addEventListener('click', () => onFace(id));
       list.append(f);
@@ -227,7 +233,7 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     const out = [];
     out.push(el('p', 'qbt-note', tier === 'never'
       ? `This one is never answered in the game. Answer it outside, on "${w?.title || r?.workId}" in ${m?.name || 'its project'}.`
-      : 'A real decision: the fight waits while you answer it in the Lodge, plainly, with no Haze and no timer.'));
+      : 'This one touches something real (money, a release, deleting things), so the fight waits while you answer it calmly in the Lodge: no Haze, no timer.'));
     out.push(el('p', 'qbt-real', r?.text ?? '')); // the real words, verbatim, plain text
     const row = el('div', 'qbt-row');
     if (tier !== 'never') {
@@ -370,7 +376,7 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
       view = 'turn';
       mash = 0;
       const n = unresolved(play.battle).length;
-      await draw(`The Haze gathers into the Gloamwyrm. ${n} question${n === 1 ? '' : 's'} feed${n === 1 ? 's' : ''} it. Face one, or fall back.`);
+      await draw(`Your Keepers are stuck on ${n} question${n === 1 ? '' : 's'} from their work, and the doubt has gathered into the Gloamwyrm. Answer one to strike it, or fall back.`);
       body.querySelector('button')?.focus();
     },
     close,

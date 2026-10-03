@@ -115,6 +115,8 @@ collecting (PLAN-adventure §5 rewritten).
   work waiting on you; each Face button names who asks and on which Work instead of "asked here · weight 1"; the Lodge
   pause says why it pauses (money, deploys and the like are answered calmly, not mid-fight). Then replay fight 1 on a
   static server with `?playtest`.
+  **Done (2026-10-03):** the three lines are in `battle.js` and checked in a fight on 4793. Next: the player replays
+  fight 1. The player also said the fight "has to be interesting"; that's a bigger design question, not scoped yet.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
