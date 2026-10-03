@@ -5,7 +5,9 @@
   "description": "GBA-style overworld that turns Claude Code activity into towns, missions and decisions. Local models only.",
   "scripts": {
     "start": "node app.js",
-    "install-hook": "node hook/install.js"
+    "install-hook": "node hook/install.js",
+    "test": "node --test test/*.test.js",
+    "static": "node dev/static.js"
   },
   "dependencies": {
     "mqtt": "^5.16.0",

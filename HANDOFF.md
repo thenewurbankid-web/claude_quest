@@ -23,6 +23,13 @@ collecting (PLAN-adventure §5 rewritten).
   in-game log (open + last 5 resolved), a Sealed Hall per Hall (locked/open), Keepers busy/free. Serve the static
   files with a dev-only file server and a throwaway ledger, never the real 4777 game. Then R1 Riddles, R2 the
   Gloamwyrm (playtest against the written criteria).
+- **R0 contract step done (2026-10-03):** `public/quest/contract.js` (ledger, Riddle, `/work` queue states, the
+  LedgerStore interface with `memoryStore` as the reference, the save format), `public/quest/sample-realm.json`
+  (one deliberate repair quest: w9 has no Hall), `npm test` (node:test, 8 pass), and the `quest-static` launch config
+  (`dev/static.js`, port 4790, no `/api`; the 3D view runs on it with no errors). **Next: R0's parallel round**, two
+  worktrees: (a) the IndexedDB LedgerStore (DB `quest-ledger`, separate from net.js's `claude-quest`) plus the Ledger
+  panel to add Halls and Works and load the sample; (b) the Beacon, in-game log, Sealed Hall locked/open and Keepers
+  free/busy, built on `memoryStore`. Then integration wires both into `public/3d/scene.js`.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.

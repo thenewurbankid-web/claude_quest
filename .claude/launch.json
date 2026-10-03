@@ -8,6 +8,15 @@
     "app.js"
    ],
    "port": 4777
+  },
+  {
+   "name": "quest-static",
+   "runtimeExecutable": "node",
+   "runtimeArgs": [
+    "dev/static.js",
+    "4790"
+   ],
+   "port": 4790
   }
  ]
 }
