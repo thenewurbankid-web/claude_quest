@@ -58,7 +58,7 @@ test('Beacon: unblocking Payment provider leaves the sample amber only if failur
 
 test('log: open items and the last 5 resolved, newest first', () => {
   const log = gameLog(sample());
-  assert.deepEqual(log.open.map(i => i.id), ['r2', 'w6', 'r1', 'w4']);
+  assert.deepEqual(log.open.map(i => i.id), ['r2', 'w6', 'r1', 'w4', 'r4']);
   assert.equal(log.open[0].text, 'The import dropped 12 rows with no Latin name. Keep them or skip them?');
   assert.deepEqual(log.resolved.map(i => i.id), ['w7', 'w10', 'w2', 'r3', 'w1']);
   assert.equal(log.resolved[1].text, 'Refund policy copy is cancelled');

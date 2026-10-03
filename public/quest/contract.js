@@ -4,7 +4,8 @@
 //   - the Riddle record and its states,
 //   - the /work queue states and their allowed moves,
 //   - the LedgerStore interface (the IndexedDB store implements it; memoryStore below is the reference version),
-//   - the save format (the split save's parts, held as one object until R5 packs them into a zip).
+//   - the save format (the split save's parts, held as one object until R5 packs them into a zip),
+//   - the lore rules' defaults (R1: outbox seconds, defer and fade delays, the never-in-game list).
 // Change a shape here first, in its own commit, and only then in the slices that use it.
 
 export const LEDGER_VERSION = 1;
@@ -27,7 +28,9 @@ export const MARK_SOURCE = ['project', 'task', 'agent', 'player'];
 
 // Riddle life: open → answered (sealed in the outbox, still recallable) → sealed (written back to its Work).
 // "Ask me later" is an answer: open → deferred, and it comes back to open after the lore rules' delay.
-// A stale Riddle fades with a note.
+// A stale Riddle fades with a note. An answered Riddle waits in the outbox until outboxUntil (the recall window);
+// sealing it writes a Decision onto its Work (safety rules 1, 4 and 9). Only the March's steward (or the Realm owner
+// when the March has none) seals; anyone else's answer is kept as a proposal (rule 10).
 export const RIDDLE_STATE = ['open', 'deferred', 'answered', 'sealed', 'faded'];
 export const RIDDLE_MOVES = {
   open: ['answered', 'deferred', 'faded'],
@@ -50,10 +53,31 @@ export const QUEUE_MOVES = {
 };
 
 // The local event log behind the success measures. It never leaves the machine.
-export const EVENT_KIND = ['riddle.raised', 'riddle.answered', 'riddle.deferred', 'agent.blocked', 'agent.unblocked',
-  'session.start', 'session.end'];
+// R1 adds the Riddle's later moves; question-to-answer time is riddle.raised → riddle.answered for the same ref.
+export const EVENT_KIND = ['riddle.raised', 'riddle.answered', 'riddle.deferred', 'riddle.recalled', 'riddle.sealed',
+  'riddle.returned', 'riddle.faded', 'riddle.proposed', 'agent.blocked', 'agent.unblocked', 'session.start',
+  'session.end'];
+
+// ---------- lore rules (defaults) ----------
+// A world's lore folder overrides these (PLAN-engine.md, "Customizable through lore files"); until Ink lore lands in
+// R6 the game uses them as they are.
+export const DEFAULT_RULES = {
+  logResolved: 5,          // resolved items kept in the in-game log
+  outboxSeconds: 10,       // the recall window before an answer is sealed
+  deferHours: 24,          // "ask me later": when a deferred Riddle returns
+  deferWeightGrowth: 0.5,  // extra weight per deferral, so deferring everything can't dodge the boss
+  fadeDays: 14,            // an open Riddle untouched this long fades with a note
+  // Risk tiers: a Riddle whose text matches one of these leaves the game for a plain confirm (risk: high);
+  // neverInGame ones are never answered in the game at all, only shown with where to answer them.
+  confirmWords: ['merge', 'deploy', 'release', 'delete', 'drop', 'budget', 'payment', 'billing'],
+  neverInGame: ['password', 'secret', 'api key', 'token', 'credential'],
+};
 
 export const canMove = (moves, from, to) => (moves[from] || []).includes(to);
+
+/** Who seals a March's decisions: its steward, or the Realm owner when it has none. */
+export const stewardOf = (ledger, marchId) =>
+  ledger.marches?.find(m => m.id === marchId)?.steward || ledger.realm?.owner || null;
 
 // ---------- record shapes ----------
 // Ids are strings, unique within their kind. Times are ISO strings. Optional fields may be null or missing.
@@ -66,8 +90,11 @@ export const canMove = (moves, from, to) => (moves[from] || []).includes(to);
  * @typedef {{ id: string, marchId: string, hallId: string|null, title: string, status: string, priority: string,
  *             size?: string|null, weight?: number|null, risk?: 'high'|null, keeperId?: string|null,
  *             blockedBy?: string[], failures?: number, createdAt: string, updatedAt: string,
- *             resolvedAt?: string|null, mark?: Mark }} Work
+ *             resolvedAt?: string|null, decisions?: Decision[], mark?: Mark }} Work
  *   hallId null is allowed but is a repair quest ("this Work belongs to no Hall")
+ * @typedef {{ riddleId: string, question: string, answer: string, sealed_by: string, at: string,
+ *             sent?: { to: 'paperclip', at: string, ref?: string|null }|null }} Decision
+ *   a sealed Riddle written back to its Work (rule 9); sent: set once the connector has posted it as a comment
  * @typedef {{ id: string, name: string, role: string, skills: string[], status: string }} Keeper
  * @typedef {{ status: string, source: string, sourceId: string, real: boolean, at: string }} Mark
  *   real: true for real work, false for game-only actions
@@ -75,10 +102,16 @@ export const canMove = (moves, from, to) => (moves[from] || []).includes(to);
  *             risk: string, state: string, steward: string|null, sealed_by?: string|null,
  *             answer?: { text: string, by: string, at: string }|null,
  *             proposals?: { text: string, by: string, at: string }[],
- *             raisedAt: string, deferredUntil?: string|null, deferCount?: number, resolvedAt?: string|null,
- *             mark?: Mark }} Riddle
+ *             raisedAt: string, outboxUntil?: string|null, deferredUntil?: string|null, deferCount?: number,
+ *             fadeNote?: string|null, resolvedAt?: string|null, mark?: Mark }} Riddle
  *   text: the real words, shown verbatim as plain text (never HTML); line: the game's line shown above them
  *   proposals: teammates' answers, shown and never overwritten
+ *   outboxUntil: while answered, when the recall window closes and the answer may be sealed
+ * @typedef {{ start: number, end: number, why: 'addresses-reader'|'addresses-ai'|'instruction'|'link' }} Flag
+ *   True Sight's mark on a suspicious stretch of real text (character offsets into text); computed, never stored
+ * @typedef {{ since: string|null, raised: number, answered: number, sealed: number, returned: number,
+ *             faded: number, blocked: number, unblocked: number }} Digest
+ *   "while you were away", counted from the event log after the last session.end
  * @typedef {{ id: string, keeperId: string, workId: string, prompt: string, state: string,
  *             leaseUntil?: string|null, result?: { text: string, usage?: { input: number, output: number },
  *             at: string }|null, createdAt: string }} QueueItem
@@ -152,6 +185,10 @@ export function validateLedger(l) {
     oneOf(`${p}.size`, w.size, SIZE, true);
     oneOf(`${p}.risk`, w.risk, ['high'], true);
     ref(`${p}.keeperId`, w.keeperId, 'keepers', true);
+    (w.decisions || []).forEach((d, j) => {
+      ref(`${p}.decisions[${j}].riddleId`, d.riddleId, 'riddles');
+      text(`${p}.decisions[${j}].answer`, d.answer);
+    });
     (w.blockedBy || []).forEach((b, j) => ref(`${p}.blockedBy[${j}]`, b, 'works'));
     mark(`${p}.mark`, w.mark);
   });
@@ -168,6 +205,12 @@ export function validateLedger(l) {
     oneOf(`${p}.state`, r.state, RIDDLE_STATE);
     if (['answered', 'sealed'].includes(r.state) && !r.answer) bad(`${p}.answer`, `a ${r.state} Riddle needs its answer`);
     if (r.state === 'sealed' && !r.sealed_by) bad(`${p}.sealed_by`, 'a sealed Riddle records who sealed it');
+    if (r.state === 'answered' && !r.outboxUntil) bad(`${p}.outboxUntil`, 'an answered Riddle waits in the outbox');
+    if (r.state === 'deferred' && !r.deferredUntil) bad(`${p}.deferredUntil`, 'a deferred Riddle needs its return time');
+    if (r.state === 'faded' && !r.fadeNote) bad(`${p}.fadeNote`, 'a faded Riddle leaves a note');
+    const steward = r.steward || stewardOf(l, r.marchId);
+    if (r.state === 'sealed' && r.sealed_by && r.sealed_by !== steward)
+      bad(`${p}.sealed_by`, `only the steward (${steward}) seals; other answers are proposals`);
     mark(`${p}.mark`, r.mark);
   });
   l.queue.forEach((q, i) => {

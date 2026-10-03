@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  validateLedger, emptyLedger, memoryStore, makeSave, ledgerFromSave, canMove, RIDDLE_MOVES, QUEUE_MOVES,
+  validateLedger, emptyLedger, memoryStore, makeSave, ledgerFromSave, canMove, RIDDLE_MOVES, QUEUE_MOVES, stewardOf,
+  DEFAULT_RULES, EVENT_KIND,
 } from '../public/quest/contract.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -49,7 +50,7 @@ test('memoryStore: put, remove, replace and subscribe; snapshots are copies', as
   await s.remove('riddles', 'r2');
   const snap = await s.snapshot();
   assert.equal(snap.works[2].status, 'in_review');
-  assert.equal(snap.riddles.length, 2);
+  assert.equal(snap.riddles.length, 3);
   snap.works.length = 0;
   assert.equal((await s.snapshot()).works.length, 10);
   off();
@@ -73,4 +74,38 @@ test('export without the ledger keeps only manifest and play', () => {
   assert.deepEqual(save.manifest.parts, ['manifest.json', 'play.json']);
   assert.equal(ledgerFromSave(save), null);
   assert.throws(() => ledgerFromSave({ manifest: { kind: 'quest-save' } }));
+});
+
+test('R1: outbox, deferral and fading each carry their time or note', () => {
+  const l = sample();
+  l.riddles[0] = { ...l.riddles[0], state: 'answered', answer: { text: 'Stripe', by: 'player', at: '2026-10-03T09:00:00Z' } };
+  l.riddles[1] = { ...l.riddles[1], state: 'deferred' };
+  l.riddles[3] = { ...l.riddles[3], state: 'faded', deferredUntil: null };
+  const p = validateLedger(l).filter(p => !p.repair).map(p => p.path);
+  assert.deepEqual(p.sort(), ['riddles[0].outboxUntil', 'riddles[1].deferredUntil', 'riddles[3].fadeNote']);
+});
+
+test('R1: only the steward seals; the Realm owner stands in for a March without one', () => {
+  const l = sample();
+  assert.equal(stewardOf(l, 'ferry'), 'player');
+  assert.equal(stewardOf(l, 'orchard'), 'player'); // no steward: the Realm owner
+  l.marches[0].steward = 'tamsin';
+  l.riddles[2].steward = null;
+  assert.deepEqual(validateLedger(l).filter(p => !p.repair).map(p => p.path), ['riddles[2].sealed_by']);
+});
+
+test('R1: a decision written back to a Work points at its Riddle', () => {
+  const l = sample();
+  assert.equal(l.works[1].decisions[0].riddleId, 'r3');
+  l.works[1].decisions.push({ riddleId: 'r9', question: 'q', answer: '', sealed_by: 'player', at: 'x' });
+  const p = validateLedger(l).filter(p => !p.repair).map(p => p.path);
+  assert.deepEqual(p.sort(), ['works[1].decisions[1].answer', 'works[1].decisions[1].riddleId']);
+});
+
+test('R1: lore rule defaults and the events the Riddle slices log', () => {
+  assert.ok(DEFAULT_RULES.outboxSeconds > 0 && DEFAULT_RULES.deferHours > 0 && DEFAULT_RULES.fadeDays > 0);
+  assert.equal(DEFAULT_RULES.logResolved, 5);
+  for (const k of ['riddle.recalled', 'riddle.sealed', 'riddle.returned', 'riddle.faded', 'riddle.proposed'])
+    assert.ok(EVENT_KIND.includes(k), k);
+  assert.deepEqual(validateLedger(sample()).map(p => p.path), ['works[8].hallId']); // the sample's R1 examples are sound
 });

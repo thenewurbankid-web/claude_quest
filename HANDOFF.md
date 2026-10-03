@@ -31,6 +31,13 @@ collecting (PLAN-adventure §5 rewritten).
   `npm test` 20 pass; checked on `quest-static` (4790) with no console errors. Small follow-ups: `remove('events')`
   needs the hidden autoIncrement key, and loading the sample over a non-empty ledger takes a second click.
   **Next: R1 "Riddles"** (contract step first: anything R1 needs that the contract lacks).
+- **R1 contract step is done (2026-10-03):** `contract.js` now has `outboxUntil` (the recall window), `fadeNote`,
+  `Decision` on Works (a sealed Riddle written back, rule 9; `sent` for the later Paperclip comment), True Sight's
+  `Flag` shape (computed, never stored), the `Digest` shape, `stewardOf` (only the steward, or the Realm owner, seals;
+  others propose), `DEFAULT_RULES` (outbox seconds, defer/fade delays, confirm words, never-in-game list) and the
+  Riddle events (recalled, sealed, returned, faded, proposed). The sample adds a deferred Riddle (r4) and w2's
+  decision. `npm test` 24 pass. **Next: R1's parallel round** (conversation box ∥ Riddle logic ∥ outbox/write-back
+  ∥ tests/log/digest), each slice in its own worktree, then integration.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
