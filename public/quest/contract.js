@@ -343,6 +343,182 @@ export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
   return Math.max(0, rules.emberMax - tokens / rules.tokensPerEmber - summons * rules.summonCost);
 }
 
+// ---------- R4.5: the Bridge ----------
+// One optional local process (bridge/: aedes MQTT broker, the Paperclip reader and comment writer). With it off the game
+// runs on the Local Ledger and /work copy-paste exactly as before. Everything on the wire is data: plain strings that
+// are shown as plain text with True Sight and never obeyed. Topics are quest/<realmId>/...; who may publish or
+// subscribe where is fixed here (topicAllowed), so an agent can only speak for itself.
+//   game → bridge:  bell (stop handing out work), open (the player lets it hand out work again), offer is built by the bridge
+//   agent → bridge: register (the Keeper registration record), report (one report per message)
+//   bridge → agent: work (one offer for that Keeper), status
+// The Bell halts the Bridge until the player opens it again; an agent can never open it.
+export const BRIDGE_VERSION = 1;
+export const BRIDGE_HOST = '127.0.0.1'; // the only address it binds to and answers
+export const BRIDGE_TOPIC = ['register', 'work', 'report', 'status', 'bell', 'open'];
+export const BRIDGE_REPORT_KEYS = ['v', 'queueId', 'kind', 'summary', 'question', 'branch', 'input_tokens', 'output_tokens'];
+export const BRIDGE_CREDENTIAL = ['mqtt', 'webhook', 'paperclip'];
+export const PAPERCLIP_WRITES = ['comment']; // write-back is comments only (user, 2026-10-04); status changes stay manual
+const BRIDGE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const ONE_LINE = v => typeof v === 'string' && v.length > 0 && v.length <= 500 && !/[\r\n\0]|```/.test(v);
+
+/** quest/<realmId>/<kind> for game-wide topics, quest/<realmId>/<kind>/<keeperId> for a Keeper's own. */
+export function bridgeTopic(kind, realmId, keeperId = null) {
+  if (!BRIDGE_TOPIC.includes(kind)) throw new Error(`no Bridge topic ${kind}`);
+  if (!BRIDGE_ID.test(realmId || '')) throw new Error('bad realm id');
+  const own = ['register', 'work', 'report'].includes(kind);
+  if (own !== Boolean(keeperId)) throw new Error(`${kind} ${own ? 'needs' : 'takes no'} keeper id`);
+  if (keeperId && !BRIDGE_ID.test(keeperId)) throw new Error('bad keeper id');
+  return ['quest', realmId, kind, ...(keeperId ? [keeperId] : [])].join('/');
+}
+
+/** @returns {{ kind: string, realmId: string, keeperId: string|null }|null} null for anything not a Bridge topic */
+export function parseBridgeTopic(topic) {
+  const [root, realmId, kind, keeperId, ...rest] = String(topic ?? '').split('/');
+  if (root !== 'quest' || rest.length || !BRIDGE_TOPIC.includes(kind) || !BRIDGE_ID.test(realmId || '')) return null;
+  const own = ['register', 'work', 'report'].includes(kind);
+  if (own !== (keeperId !== undefined) || (own && !BRIDGE_ID.test(keeperId))) return null;
+  return { kind, realmId, keeperId: keeperId ?? null };
+}
+
+/**
+ * May this client publish or subscribe to this topic? who: { role: 'game'|'agent'|'bridge', keeperId?, realmId }.
+ * The game rings the Bell and opens the Bridge and listens to reports; an agent registers, reports and listens for work,
+ * only under its own Keeper id; the Bridge sends work and status and listens to the rest. Nothing else is allowed.
+ */
+export function topicAllowed(who, topic, action) {
+  const t = parseBridgeTopic(topic);
+  if (!t || t.realmId !== who.realmId || !['publish', 'subscribe'].includes(action)) return false;
+  const pub = action === 'publish';
+  if (who.role === 'game') return pub ? ['bell', 'open'].includes(t.kind) : ['report', 'register', 'status', 'work'].includes(t.kind);
+  if (who.role === 'bridge') return pub ? ['work', 'status'].includes(t.kind) : ['register', 'report', 'bell', 'open'].includes(t.kind);
+  if (who.role === 'agent') {
+    if (!who.keeperId || !BRIDGE_ID.test(who.keeperId)) return false;
+    if (t.kind === 'status') return !pub;
+    return t.keeperId === who.keeperId && (pub ? ['register', 'report'].includes(t.kind) : t.kind === 'work');
+  }
+  return false;
+}
+
+/**
+ * The Keeper registration record an agent publishes on its register topic. Registering never creates a Keeper: it only
+ * claims one the ledger already has, by id and name (registeredKeeper).
+ * @typedef {{ v: number, keeperId: string, name: string, skills: string[], client?: string }} Registration
+ */
+export function validateRegistration(r) {
+  const p = [], bad = (field, problem) => p.push({ field, problem });
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return [{ field: 'record', problem: 'not an object' }];
+  for (const k of Object.keys(r)) if (!['v', 'keeperId', 'name', 'skills', 'client'].includes(k)) bad(k, 'unknown field');
+  if (r.v !== BRIDGE_VERSION) bad('v', `must be ${BRIDGE_VERSION}`);
+  if (!BRIDGE_ID.test(r.keeperId || '')) bad('keeperId', 'a letter or digit first, then letters, digits, - or _');
+  if (!ONE_LINE(r.name)) bad('name', 'one line of plain text');
+  if (!Array.isArray(r.skills) || r.skills.length > 20 || !r.skills.every(ONE_LINE)) bad('skills', 'up to 20 one-line strings');
+  if (r.client !== undefined && !ONE_LINE(r.client)) bad('client', 'one line of plain text');
+  return p;
+}
+
+/** The ledger Keeper a valid registration claims, or null: it must exist, match by name, and not be released. */
+export function registeredKeeper(ledger, registration) {
+  if (validateRegistration(registration).length) return null;
+  const k = (ledger.keepers || []).find(x => x.id === registration.keeperId);
+  return k && k.name === registration.name && k.status !== 'released' ? k : null;
+}
+
+/**
+ * Safety (R4.5): may the Bridge hand work to this Keeper right now? Only a registered Keeper (registeredKeeper), never
+ * while the Bridge is halted by the Bell, never a resting or released one. { ok, why } so the game can say why not.
+ */
+export function bridgeMayOffer(ledger, registration, halted) {
+  if (halted) return { ok: false, why: 'the Recall Bell halted the Bridge' };
+  const k = registeredKeeper(ledger, registration);
+  if (!k) return { ok: false, why: 'not a registered Keeper' };
+  if (['resting', 'released'].includes(k.status)) return { ok: false, why: `${k.name} is ${k.status}` };
+  return { ok: true, why: null };
+}
+
+/** Halt state: the Bell halts it; only the game's open message clears it. Nothing an agent sends reaches here. */
+export const bridgeHalt = (halted, kind) => kind === 'bell' ? true : kind === 'open' ? false : halted;
+
+/**
+ * One work offer, bridge → agent, on that Keeper's work topic. prompt is buildPrompt's text (it ends with
+ * REPORT_INSTRUCTIONS); the agent answers with a report naming queueId.
+ * @typedef {{ v: number, queueId: string, workId: string, title: string, branch: string, prompt: string }} WorkOffer
+ */
+export const workOffer = (work, item, prompt) =>
+  ({ v: BRIDGE_VERSION, queueId: item.id, workId: work.id, title: work.title, branch: branchFor(work), prompt });
+
+/**
+ * A report as an agent publishes it, JSON on its report topic: the quest-report fields, plus the queue item it answers.
+ * @typedef {{ v: number, queueId: string, kind: string, summary: string, question?: string, branch?: string,
+ *             input_tokens?: number, output_tokens?: number }} BridgeReport
+ * It maps onto the R4 Report by the same rules as a paste: the fields become a quest-report block and go through
+ * parseReport, so every rule there holds (kinds progress/done/blocked, a blocked report asks its question, token counts
+ * come in pairs, no extra keys). The Report keeps relayed: 'bridge' and manual: false; text is the block, verbatim.
+ * @returns {{ queueId: string|null, report: object|null, problems: { field: string, problem: string, suggestions?: string[] }[] }}
+ */
+export function reportFromBridge(payload) {
+  const p = [];
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return { queueId: null, report: null, problems: [{ field: 'record', problem: 'not an object' }] };
+  for (const k of Object.keys(payload)) if (!BRIDGE_REPORT_KEYS.includes(k)) p.push({ field: k, problem: 'unknown field', suggestions: suggest(k, BRIDGE_REPORT_KEYS) });
+  if (payload.v !== BRIDGE_VERSION) p.push({ field: 'v', problem: `must be ${BRIDGE_VERSION}` });
+  if (!BRIDGE_ID.test(payload.queueId || '')) p.push({ field: 'queueId', problem: 'the queue item this answers' });
+  const lines = ['summary', 'question', 'branch', 'kind'];
+  for (const k of lines) if (payload[k] !== undefined && payload[k] !== '' && !ONE_LINE(payload[k])) p.push({ field: k, problem: 'one line of plain text' });
+  for (const k of ['input_tokens', 'output_tokens'])
+    if (payload[k] !== undefined && !(Number.isInteger(payload[k]) && payload[k] >= 0)) p.push({ field: k, problem: 'a whole number' });
+  if (p.length) return { queueId: null, report: null, problems: p };
+  const text = ['```' + REPORT_FENCE, ...REPORT_KEYS.filter(k => payload[k] !== undefined && payload[k] !== '').map(k => `${k}: ${payload[k]}`), '```'].join('\n');
+  const { report, problems } = parseReport(text);
+  return { queueId: payload.queueId, report: report && { ...report, text, relayed: 'bridge', manual: false }, problems };
+}
+
+/**
+ * The per-Realm credential record. It lives only in the Bridge's own file and the browser's settings (never in the
+ * ledger, a save, a prompt, a Riddle or a Bridge message), and is shown only as placeholders (credentialPlaceholder).
+ * mqtt is the broker login the game and agents use; webhook the token for the polling/webhook fallback; paperclip the
+ * Paperclip URL and key, which only the Bridge holds.
+ * @typedef {{ v: number, realmId: string, mqtt?: { username: string, password: string },
+ *             webhook?: { token: string }, paperclip?: { url: string, key: string } }} Credential
+ */
+export function validateCredential(c) {
+  const p = [], bad = (field, problem) => p.push({ field, problem });
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return [{ field: 'record', problem: 'not an object' }];
+  for (const k of Object.keys(c)) if (!['v', 'realmId', ...BRIDGE_CREDENTIAL].includes(k)) bad(k, 'unknown field');
+  if (c.v !== BRIDGE_VERSION) bad('v', `must be ${BRIDGE_VERSION}`);
+  if (!BRIDGE_ID.test(c.realmId || '')) bad('realmId', 'the Realm this belongs to');
+  const str = (obj, k, path) => { if (!ONE_LINE(obj?.[k])) bad(path, 'a one-line string'); };
+  if (c.mqtt !== undefined) { str(c.mqtt, 'username', 'mqtt.username'); str(c.mqtt, 'password', 'mqtt.password'); }
+  if (c.webhook !== undefined) str(c.webhook, 'token', 'webhook.token');
+  if (c.paperclip !== undefined) {
+    str(c.paperclip, 'url', 'paperclip.url'); str(c.paperclip, 'key', 'paperclip.key');
+    if (ONE_LINE(c.paperclip?.url) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(c.paperclip.url) && !/^https:\/\//.test(c.paperclip.url))
+      bad('paperclip.url', 'http only for this machine, else https');
+  }
+  if (!BRIDGE_CREDENTIAL.some(k => c[k] !== undefined)) bad('record', 'holds no credential');
+  return p;
+}
+
+/** Every secret value in the record (passwords, tokens, keys), for checking that none leaked. */
+export const credentialSecrets = c => [c?.mqtt?.password, c?.webhook?.token, c?.paperclip?.key].filter(Boolean);
+/** True when text contains any secret of the record: used to keep credentials out of prompts and Bridge messages. */
+export const credentialLeaks = (text, c) => credentialSecrets(c).some(s => String(text ?? '').includes(s));
+/** What a help panel shows in place of each secret. */
+export const credentialPlaceholder = c => ({ v: c.v, realmId: c.realmId,
+  ...(c.mqtt && { mqtt: { username: c.mqtt.username, password: '<mqtt password>' } }),
+  ...(c.webhook && { webhook: { token: '<webhook token>' } }),
+  ...(c.paperclip && { paperclip: { url: c.paperclip.url, key: '<paperclip key>' } }) });
+
+/**
+ * Where the Bridge may listen: 127.0.0.1 only. Anything else (0.0.0.0, a LAN address, localhost, which can resolve
+ * elsewhere) throws. Returns the host to bind.
+ */
+export function bridgeBindHost(host = BRIDGE_HOST) {
+  if (host !== BRIDGE_HOST) throw new Error(`the Bridge only listens on ${BRIDGE_HOST}, not ${host}`);
+  return host;
+}
+/** True for a connection that comes from this machine's loopback address; the Bridge drops every other peer. */
+export const isOwnMachine = address => address === BRIDGE_HOST || address === `::ffff:${BRIDGE_HOST}`;
+
 // ---------- record shapes ----------
 // Ids are strings, unique within their kind. Times are ISO strings. Optional fields may be null or missing.
 /**
@@ -396,7 +572,7 @@ export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
  *   prompt: what the player copies (the Work, the branch, REPORT_INSTRUCTIONS); copiedAt: when the lease started
  *   result: the final pasted text once returned (verbatim, plain text); reports: every paste, oldest first
  * @typedef {{ kind: string, summary: string, question?: string|null, branch?: string|null,
- *             usage?: { input: number, output: number }|null, text: string, relayed: 'player', manual: boolean,
+ *             usage?: { input: number, output: number }|null, text: string, relayed: 'player'|'bridge', manual: boolean,
  *             at: string }} Report
  *   R4: one paste on /work. text: the whole paste, verbatim; manual: no valid quest-report block was found, so the
  *   player picked the kind by hand (summary is then the paste's first line). A question raises a Riddle on the Work.

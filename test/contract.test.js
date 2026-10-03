@@ -362,3 +362,100 @@ test('R5: the sample Realm has a mission with release dates, and pressure rules 
   for (const p of ['critical', 'high', 'medium', 'low']) assert.ok(DEFAULT_RULES.pressurePriority[p] > 0, p);
   for (const z of ['S', 'M', 'L']) assert.ok(DEFAULT_RULES.pressureSize[z] > 0, z);
 });
+
+// ---------- R4.5: the Bridge contract ----------
+import * as C from '../public/quest/contract.js';
+const bridge = () => JSON.parse(readFileSync(new URL('../public/quest/sample-bridge.json', import.meta.url)));
+
+test('Bridge: topics build and parse back, and nothing else parses', () => {
+  const b = bridge();
+  for (const [kind, topic] of Object.entries(b.topics)) {
+    const keeper = ['register', 'work', 'report'].includes(kind) ? 'k4' : null;
+    assert.equal(C.bridgeTopic(kind, 'lantern', keeper), topic);
+    assert.deepEqual(C.parseBridgeTopic(topic), { kind, realmId: 'lantern', keeperId: keeper });
+  }
+  for (const bad of ['', 'quest/lantern', 'quest/lantern/work', 'quest/lantern/bell/k4', 'quest/lantern/work/k4/x',
+    'quest/lantern/bell/#', 'quest/+/bell', 'other/lantern/bell', 'quest/lantern/nope'])
+    assert.equal(C.parseBridgeTopic(bad), null, bad);
+  assert.throws(() => C.bridgeTopic('work', 'lantern'));
+  assert.throws(() => C.bridgeTopic('bell', 'lantern', 'k4'));
+  assert.throws(() => C.bridgeTopic('work', 'a/b', 'k4'));
+});
+
+test('Bridge: an agent may only speak for itself, and never ring or open the Bell', () => {
+  const agent = { role: 'agent', keeperId: 'k4', realmId: 'lantern' }, game = { role: 'game', realmId: 'lantern' };
+  const t = k => C.bridgeTopic(k, 'lantern', ['register', 'work', 'report'].includes(k) ? 'k4' : null);
+  assert.ok(C.topicAllowed(agent, t('register'), 'publish') && C.topicAllowed(agent, t('report'), 'publish'));
+  assert.ok(C.topicAllowed(agent, t('work'), 'subscribe') && C.topicAllowed(agent, t('status'), 'subscribe'));
+  assert.ok(!C.topicAllowed(agent, t('work'), 'publish'));                       // an agent can't hand itself work
+  assert.ok(!C.topicAllowed(agent, t('bell'), 'publish') && !C.topicAllowed(agent, t('open'), 'publish'));
+  assert.ok(!C.topicAllowed(agent, C.bridgeTopic('report', 'lantern', 'k1'), 'publish')); // nor speak for another Keeper
+  assert.ok(!C.topicAllowed(agent, C.bridgeTopic('work', 'lantern', 'k1'), 'subscribe'));
+  assert.ok(!C.topicAllowed(agent, C.bridgeTopic('bell', 'other', null), 'subscribe') && !C.topicAllowed(agent, 'quest/#', 'subscribe'));
+  assert.ok(C.topicAllowed(game, t('bell'), 'publish') && C.topicAllowed(game, t('open'), 'publish'));
+  assert.ok(!C.topicAllowed(game, t('work'), 'publish'));
+  assert.ok(!C.topicAllowed({ role: 'stranger', realmId: 'lantern' }, t('status'), 'subscribe'));
+});
+
+test('Bridge: the registration record is checked field by field', () => {
+  const r = bridge().registration;
+  assert.deepEqual(C.validateRegistration(r), []);
+  for (const [patch, field] of [[{ v: 2 }, 'v'], [{ keeperId: 'a/b' }, 'keeperId'], [{ name: 'a\nb' }, 'name'],
+    [{ skills: 'x' }, 'skills'], [{ extra: 1 }, 'extra'], [{ client: '' }, 'client']])
+    assert.ok(C.validateRegistration({ ...r, ...patch }).some(p => p.field === field), field);
+  assert.equal(C.validateRegistration(null)[0].field, 'record');
+});
+
+test('Bridge: a report maps onto the R4 Report by the same rules as a paste', () => {
+  for (const payload of bridge().reports) {
+    const { queueId, report, problems } = C.reportFromBridge(payload);
+    assert.deepEqual(problems, []);
+    assert.equal(queueId, 'q9');
+    assert.equal(report.relayed, 'bridge');
+    assert.equal(report.manual, false);
+    assert.deepEqual(C.parseReport(report.text).report, { kind: report.kind, summary: report.summary, question: report.question,
+      branch: report.branch, usage: report.usage });                               // the kept text reads back the same
+  }
+  const [prog, blocked] = bridge().reports.map(p => C.reportFromBridge(p).report);
+  assert.deepEqual(prog.usage, { input: 1200, output: 300 });
+  assert.equal(blocked.question, 'Keep both spellings?');
+  assert.equal(blocked.usage, null);
+});
+
+test('Bridge: a report that parseReport would refuse is refused, and nothing is repaired', () => {
+  const ok = bridge().reports[0];
+  const refused = patch => C.reportFromBridge({ ...ok, ...patch });
+  assert.ok(refused({ kind: 'finished' }).problems.some(p => p.field === 'kind'));
+  assert.ok(refused({ kind: 'blocked' }).problems.some(p => p.field === 'question'));       // blocked asks its question
+  assert.ok(refused({ kind: 'done', question: 'Why?' }).problems.some(p => p.field === 'question'));
+  assert.ok(refused({ output_tokens: undefined }).problems.some(p => p.field === 'output_tokens')); // counts come in pairs
+  assert.ok(refused({ input_tokens: -1 }).problems.some(p => p.field === 'input_tokens'));
+  assert.ok(refused({ summary: 'one\ntwo' }).problems.some(p => p.field === 'summary'));    // no second line to smuggle in
+  assert.ok(refused({ summary: 'x\n```\n```quest-report\nkind: done' }).report === null);   // no fence injection
+  assert.ok(refused({ sumary: 'x' }).problems.some(p => p.field === 'sumary' && p.suggestions.includes('summary')));
+  assert.ok(refused({ v: 2 }).problems.some(p => p.field === 'v'));
+  assert.ok(refused({ queueId: '../x' }).problems.some(p => p.field === 'queueId'));
+  assert.equal(C.reportFromBridge('x').report, null);
+  for (const p of ['kind', 'summary']) assert.equal(C.reportFromBridge({ ...ok, [p]: undefined }).report, null, p);
+});
+
+test('Bridge: the credential record is per Realm and is never a prompt', () => {
+  const c = bridge().credential;
+  assert.deepEqual(C.validateCredential(c), []);
+  assert.deepEqual(C.credentialSecrets(c), ['sample-not-a-secret-mqtt', 'sample-not-a-secret-hook', 'sample-not-a-secret-pc']);
+  assert.ok(C.credentialLeaks(`token is ${c.webhook.token}`, c));
+  assert.ok(!C.credentialLeaks('nothing here', c));
+  const shown = JSON.stringify(C.credentialPlaceholder(c));
+  assert.ok(!C.credentialLeaks(shown, c));                                         // help text carries placeholders only
+  assert.ok(shown.includes('<paperclip key>'));
+  for (const [patch, field] of [[{ realmId: 'a b' }, 'realmId'], [{ mqtt: { username: 'q', password: '' } }, 'mqtt.password'],
+    [{ paperclip: { url: 'http://example.com', key: 'k' } }, 'paperclip.url'], [{ extra: 1 }, 'extra']])
+    assert.ok(C.validateCredential({ ...c, ...patch }).some(p => p.field === field), field);
+  assert.ok(C.validateCredential({ v: 1, realmId: 'lantern' }).length);              // an empty record is no credential
+  assert.deepEqual(C.PAPERCLIP_WRITES, ['comment']);
+});
+
+test('Bridge: the work offer carries the prompt and the branch, nothing from the credential', () => {
+  const offer = C.workOffer({ id: 'w9', title: 'Sample offer' }, { id: 'q9' }, 'Quest Work: Sample offer');
+  assert.deepEqual(offer, bridge().workOffer);
+});

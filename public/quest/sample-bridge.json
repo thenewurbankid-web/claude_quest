@@ -1,0 +1,19 @@
+{
+  "realmId": "lantern",
+  "topics": {
+    "register": "quest/lantern/register/k4",
+    "work": "quest/lantern/work/k4",
+    "report": "quest/lantern/report/k4",
+    "status": "quest/lantern/status",
+    "bell": "quest/lantern/bell",
+    "open": "quest/lantern/open"
+  },
+  "registration": { "v": 1, "keeperId": "k4", "name": "Wren", "skills": ["frontend", "tests"], "client": "claude-code" },
+  "workOffer": { "v": 1, "queueId": "q9", "workId": "w9", "title": "Sample offer", "branch": "quest/w9", "prompt": "Quest Work: Sample offer" },
+  "reports": [
+    { "v": 1, "queueId": "q9", "kind": "progress", "summary": "Wrote the first test", "branch": "quest/w9", "input_tokens": 1200, "output_tokens": 300 },
+    { "v": 1, "queueId": "q9", "kind": "blocked", "summary": "Two spellings in use", "question": "Keep both spellings?" }
+  ],
+  "credential": { "v": 1, "realmId": "lantern", "mqtt": { "username": "quest", "password": "sample-not-a-secret-mqtt" },
+    "webhook": { "token": "sample-not-a-secret-hook" }, "paperclip": { "url": "http://127.0.0.1:3100", "key": "sample-not-a-secret-pc" } }
+}
