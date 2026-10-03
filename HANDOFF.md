@@ -4,6 +4,18 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**In progress (2026-10-04, after /compact): a local Paperclip dashboard (user).** A page on localhost (not an artifact)
+that reads Paperclip at 127.0.0.1:3100 directly and refreshes every few seconds.
+- Pulse: Quest Dev running, idle or blocked, its current run and when it was last seen.
+- Overall progress: the CLA issues per release, R4.5 to R9+.
+- A feed of outcome comments, plus the latest commits on `3d-world`.
+
+User: "unify with and retire, keep whats needed in the new one". Read the three Quest artifacts first (Quest
+3bQdUCKJXB7rcynecnmsu3, Quest Engine Council AAGAmGpWg3xcvDj3XgX577, Ember Hollow Sprite Lab KXfCSDFdAg5UmzaeFCnYfP),
+carry over what's still needed, then republish each as a short "retired" page that points to the local dashboard.
+Paperclip sends no CORS header, so the page needs a tiny same-origin proxy (a dev/ static server route); check
+`dev/static.js` first. Quest Dev (Paperclip) is building R5 as CLA-2..4; don't edit its files while it runs.
+
 **R5 integration done (CLA-4, 2026-10-04):** `boot.js` loads missions with `playFromSave` (warns, never refuses), runs `tickMission`/`joinSummoned`/the gate on every ledger change and every 30 s, mounts the HUD and the board's Missions tab (Go on it → briefing by the Keeper; debrief when all Works resolve). Gated: lore riddles refuse `quest:talk`, Town news shows the Haze line, and `scene.js` keeps the player inside the old town (`quest:explore`). A finished saga opens its Sealed Hall through `sealedHalls` (no extra wiring). `npm test` 170 pass. **Untested in the browser:** everything here: the Missions tab, Go on it → briefing, debrief, HUD position (top-left, may overlap other HUDs), the explore lock at the town edge (set a Hall `dueAt` soon so pressure >= 0.75), summoned Keeper joining, 375px. **Next:** R5 browser check on `quest-static` (4790), then R4.5 The Bridge.
 **R5 UI built (CLA-3, 2026-10-04):** `mission-hud.js` (HUD, `briefingLines`/`debriefLines` spoken by the Work's Keeper through `conversation.say`, `talk`), a Missions tab in `town-board.js` (opts `missions`, `gated`, `onBegin`; gated Town news shows the Haze line), and `dev-missions.html`. No `boot.js`/`scene.js` edits. `npm test` 170 pass. **Untested in the browser:** the whole Missions tab, HUD position (top-left, may sit near other HUDs), briefing/debrief boxes, 375px. **Next:** CLA-4, R5 integration (also: the gated Town news must hide lore quests too; open the Sealed Hall on a finished saga).
 **R5 Keepers built (CLA-2, `f637232`, 2026-10-04):** `keeper-controls.js` adds `summon` (spends `summonCost` Ember, refuses a poor Well, empty or taken name), `joinSummoned` (a summoned Keeper joins when a Work it holds is `done`; integration must call it on every ledger change) and `release` (never deletes; refused while a live run exists). `keeper-hud.js` has Summon (form, then a confirm naming the Ember) and Release (press twice) in the Keepers dialog. `npm test` 168 pass. **Untested in the browser:** the Summon form and Release buttons (`dev-keepers.html`), 375px layout. **Next:** CLA-3, R5 UI (Missions tab, mission HUD).
