@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- Dev page for the "While you were away" digest (R1): the sample Realm in a memoryStore with the Beacon HUD, the
+     digest card beside it, session tracking, and buttons that add events. Serve with: node dev/static.js 4795 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Digest dev</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; }
+    body { min-height: 100vh; background: radial-gradient(ellipse at 30% 70%, #2f5d3a 0%, #1b2f3f 45%, #0c1220 100%);
+      color: #eef0f4; font: 14px/1.4 system-ui, -apple-system, sans-serif; }
+    .dev { position: fixed; left: 16px; bottom: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .dev button { padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.1); color: inherit; font: inherit; cursor: pointer; }
+    .dev button:hover { background: rgba(255,255,255,.2); }
+    .stats { position: fixed; left: 16px; bottom: 110px; max-width: calc(100vw - 32px); color: #a3a9b6; font-size: 12px; }
+    @media (max-width: 720px) { .stats { bottom: 300px; } }
+  </style>
+</head>
+<body>
+  <div class="stats" id="stats"></div>
+  <div class="dev" aria-label="Dev controls">
+    <button type="button" data-act="away">Pretend I was away (end, add events, remount)</button>
+    <button type="button" data-act="raise">Raise a Riddle</button>
+    <button type="button" data-act="answer">Answer it</button>
+    <button type="button" data-act="since-all">Remount with since = null</button>
+    <button type="button" data-act="unmount">Unmount / remount card</button>
+    <button type="button" data-act="reset">Reset sample Realm</button>
+  </div>
+  <script type="module">
+    import { memoryStore } from './contract.js';
+    import { mountBeaconHud } from './beacon-hud.js';
+    import { mountDigest, trackSession, answerTimes, lastSessionEnd } from './digest.js';
+
+    const sample = await (await fetch('./sample-realm.json')).json();
+    const store = memoryStore(sample);
+    mountBeaconHud(document.body, store);
+    // Mount the card before tracking starts, as the game should; resolveSince reads the log as it is at mount anyway.
+    let card = mountDigest(document.body, store);
+    trackSession(store);
+    window.questStore = store; // for poking at from the console
+
+    const stats = document.getElementById('stats');
+    const showStats = l => {
+      const t = answerTimes(l);
+      stats.textContent = `Answered Riddles: ${t.count}; median question-to-answer: ` +
+        `${t.medianMinutes === null ? 'n/a' : `${Math.round(t.medianMinutes)} min`}; last session end: ` +
+        `${lastSessionEnd(l.events) || 'none'}`;
+    };
+    store.subscribe(showStats);
+    showStats(await store.snapshot());
+
+    const iso = (ms = 0) => new Date(Date.now() + ms).toISOString();
+    let n = 0;
+    const put = (kind, ref) => store.put('events', { at: iso(), kind, ref });
+    const remount = opts => { if (card) card.unmount(); card = mountDigest(document.body, store, opts); };
+    const acts = {
+      async away() {
+        await store.put('events', { at: iso(-1000), kind: 'session.end', ref: null });
+        await put('riddle.raised', 'dev-a'); await put('riddle.raised', 'dev-b');
+        await put('riddle.sealed', 'r3'); await put('riddle.returned', 'r4'); await put('agent.blocked', 'w4');
+        remount();
+      },
+      async raise() { await put('riddle.raised', `dev-${++n}`); },
+      async answer() { if (n) await put('riddle.answered', `dev-${n}`); },
+      'since-all'() { remount({ since: null }); },
+      unmount() { if (card) { card.unmount(); card = null; } else card = mountDigest(document.body, store); },
+      async reset() { await store.replace(sample); remount(); },
+    };
+    document.querySelector('.dev').addEventListener('click', e => {
+      const act = e.target.closest('button')?.dataset.act;
+      if (act) acts[act]();
+    });
+  </script>
+</body>
+</html>
