@@ -44,11 +44,12 @@ back next time is heavier; retreat works from any turn and keeps every answer.
   without answering, asking back, or leaving the Lodge pause costs nothing, so reading carefully is never punished.
 - A guard takes `guardBlock` (1) off the beat's total bite, not a whole head's bite.
 - Bites: snap 1; dim 1 + one per started day waiting (max 3, from 12 h); echo 1 + times put off, +1 per beat alive.
-- Lantern = 6 + 1 per head. "Tend the Lantern" spends the light meter for up to +2 instead of the hit bonus.
+- Lantern = 3 + 1 per head (was 6 + 1; the user asked for losing to be reachable). "Tend the Lantern" spends the
+  light meter for up to +2 instead of the hit bonus, which is how a bad order can still be rescued.
 - The playtest backlog's ages are now 6, 18 and 30 h (one snap and two dim heads); the heavier one puts p1 off twice
-  and p2 once (two echo heads, one dim). Simulated Lantern cost over every order: first session 2 to 5 of 9
-  (cutting heavy heads first is cheapest), heavier 5 to 7 of 9. Neither can empty it in three straight answers;
-  push-backs need more heads. Tune in the replay.
+  and p2 once (two echo heads, one dim). Simulated over every order with Lantern 6 (no tending): first session costs 2 to 5,
+  so no order loses (the worst ends at 1 of 6); heavier session, three of six orders are pushed back (anything
+  that leaves the twice-put-off plant head for last but one), the others win. Tune in the replay.
 
 ## Scope (if approved)
 - Contract step: `contract.js` adds `heads`, `lantern` and `freed` to the Battle record, plus the head kinds and

@@ -79,7 +79,7 @@ export const DEFAULT_RULES = {
   mashBonus: 0.15,         // the most extra damage mashing adds to a hit, as a share of that hit
   // Heads and the Lantern (PLAN-fight.md): one head per Work in the fight; after each turn that lands a hit, every
   // living head bites the Lantern, and each Keeper freed by a cut head guards one point of it.
-  lanternBase: 6,          // lantern = lanternBase + lanternPerHead * heads
+  lanternBase: 3,          // lantern = lanternBase + lanternPerHead * heads (tuned so a careless order can lose)
   lanternPerHead: 1,
   dimHours: 12,            // a head whose question has waited this long is Dim: it bites 1 + one per started day, at most dimMax
   dimMax: 3,

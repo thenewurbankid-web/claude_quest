@@ -230,3 +230,21 @@ test('recalling an answer gives back the Lantern its bite took, as well as the h
   assert.equal(back.play.battle.lantern, back.play.battle.lanternMax);
   assert.deepEqual(validateBattle(back.play.battle), []);
 });
+
+test('losing is reachable: in the heavier session a careless order is pushed back, a good one wins', async () => {
+  const run = async order => {
+    let l = realm({ heavier: true }), play = summon(l, emptyBossPlay(), T0).play;
+    for (const id of order) {
+      l = await resolveAll(l, [id]);
+      play = settle(l, face(play, id), {}, T0).play;
+      if (play.battle.phase !== 'fighting') break;
+      play = beat(play, T0, DEFAULT_RULES, [id]).play;
+      if (play.battle.phase !== 'fighting') break;
+    }
+    return play.battle;
+  };
+  const careless = await run(['p2', 'p3', 'p1']), good = await run(['p1', 'p2', 'p3']);
+  assert.equal(careless.phase, 'retreated');
+  assert.equal(careless.pushed, true);
+  assert.equal(good.phase, 'won');
+});

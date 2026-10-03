@@ -123,7 +123,9 @@ collecting (PLAN-adventure §5 rewritten).
   pushes you back to the Lodge with no strength penalty (`boss.pushed`). "Tend the Lantern" spends light. `boss.js`
   `beat`/`tend`/`headsOf`; `battle.js` Lantern bar and head lines; `gloamwyrm.js` extra heads drop when cut. Playtest
   ages changed (6/18/30 h; heavier defers p1 twice, p2 once). `npm test` 96 pass; checked on 4793 (dev-battle: a
-  full fight, 375px, no console errors). The push-back screen is unit-tested only. **Next: the player replays fight 1
+  full fight, 375px, no console errors). Then Claude played `?playtest` (fixed: a recall gives the bite's Lantern
+  back; a put-off question no longer says its Keeper is going again) and tuned the Lantern to 3 + 1 per head so a
+  careless order in `?playtest=heavier` is pushed back (checked in the browser). 98 tests. **Next: the player replays fight 1
   with `?playtest`** (PLAYTEST-R2.md), then tune the numbers. R3 (Lore quests): the Battle record now carries
   `heads`, `lantern`, `lanternMax`, `pushed`.
 - **R3 is now "Lore quests" (user, 2026-10-03):** players with no work get game-only quests from shared area lore
