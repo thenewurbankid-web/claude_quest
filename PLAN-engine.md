@@ -325,7 +325,10 @@ feature list; releases pick from them.
   repo; the user installs it into Paperclip (`paperclipai plugin install --local`).
   *Bell and restarts (user, 2026-10-04):* the Bridge always **starts halted**; only the game's `open` clears it, so a Bell
   rung while it was off is never lost. Identity comes from the connection: every connection needs the per-Realm login,
-  and WebSocket upgrades from any page but the game's own origin are refused (review of `152c47e`, comments on CLA-7/8).
+  and WebSocket upgrades and the Bridge's HTTP writes from any page but the game's own origin are refused (review of
+  `152c47e`/`83edeaf`). *Logins (user, 2026-10-04):* one shared Realm login, as built; anyone with the Realm password can
+  claim any client id, and the user accepts that. *Keepers (user, 2026-10-04):* the game publishes only the opted-in
+  Keepers and their status on a retained topic; the Bridge never holds the full ledger.
 - **R5 "Missions and the first Sealed Hall"** (user, 2026-10-03): missions (a parent Work and its children; the saga is
   their Hall), backlog pressure against the release date and its gate on side content, the Sealed Hall as the saga's
   finale and its Sigil, and Keepers summoned with Ember, joining and released. The R4 controls already respect
