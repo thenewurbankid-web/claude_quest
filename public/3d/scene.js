@@ -315,7 +315,8 @@ function play(a, name) {
 }
 // Ducks keep to the water; everyone else keeps off water, solid cells and the trees standing inside the map.
 const treeCells = new Set();
-const free = (c, r, a) => (a?.swims ? at(c, r) === '~' : !SOLID.has(at(c, r)) && !treeCells.has(c + ',' + r)) && !actors.some(o => (o.c === c && o.r === r));
+const free = (c, r, a) => (a?.swims ? at(c, r) === '~' : !SOLID.has(at(c, r)) && !treeCells.has(c + ',' + r)) && !actors.some(o => (o.c === c && o.r === r))
+  && !(villager.visible && villagerCell && villagerCell[0] === c && villagerCell[1] === r);
 function tryMove(a, dir) {
   a.dir = dir;
   const [c, r] = grid.step(a.c, a.r, dir);
@@ -353,19 +354,82 @@ function updateActor(a, dt) {
   a.mixer?.update(dt * LOOK.people.animSpeed);
 }
 
+// ---------- Riddles carried by Keepers (R1; the rules and the conversation live in public/quest/) ----------
+// boot.js sends 'quest:riddlers' ([{ riddleId, slot }], slot = the ledger Keeper's index, or null for no Keeper). A
+// Keeper carrying a Riddle stops wandering and shows a '!'; Riddles with no Keeper wait with a placeholder villager by
+// the Lodge. Standing next to one sends 'quest:near' ({ riddleId } or null), and E sends 'quest:talk'.
+// 'quest:input' ({ locked }) stops the player moving while the conversation box is open.
+const keeperActors = [];
+let riddlers = [], nearRiddle = null, inputLocked = false;
+const bangMat = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2c14e'; g.beginPath(); g.arc(32, 32, 28, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#1b1406'; g.font = 'bold 44px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('!', 32, 35);
+  return new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false });
+})();
+const villager = (() => {
+  const m = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.5, 4, 10), new THREE.MeshStandardMaterial({ color: 0xb9a37e }));
+  m.position.y = 0.48; m.castShadow = true; m.visible = false; scene.add(m);
+  return m;
+})();
+let villagerCell = null;
+function placeVillager(show) {
+  villager.visible = show;
+  if (!show) { villagerCell = null; return; }
+  if (villagerCell) return;
+  const [lc, lr] = lodgeCell;
+  for (const [dc, dr] of [[0, 2], [1, 2], [-1, 1], [2, 1], [-1, 0], [2, 0], [0, 3], [1, 3]]) {
+    const c = lc + dc, r = lr + dr;
+    if (grid.inside(c, r) && !SOLID.has(at(c, r)) && !treeCells.has(c + ',' + r)) { villagerCell = [c, r]; break; }
+  }
+  villagerCell ||= [lc, lr + 2];
+  const { x, z } = grid.toWorld(...villagerCell);
+  villager.position.x = x; villager.position.z = z;
+}
+const bangs = [];
+function setRiddlers(list) {
+  riddlers = Array.isArray(list) ? list : [];
+  for (const a of keeperActors) a.riddleId = null;
+  let orphan = null;
+  for (const { riddleId, slot } of riddlers) {
+    const a = slot == null || !keeperActors.length ? null : keeperActors[slot % keeperActors.length];
+    if (a && !a.riddleId) a.riddleId = riddleId; else orphan ||= riddleId;
+  }
+  villager.riddleId = orphan;
+  placeVillager(!!orphan);
+  const carriers = [...keeperActors.filter(a => a.riddleId).map(a => a.obj.position), ...(orphan ? [villager.position] : [])];
+  while (bangs.length < carriers.length) { const b = new THREE.Sprite(bangMat); b.scale.setScalar(0.42); scene.add(b); bangs.push(b); }
+  bangs.forEach((b, i) => { b.visible = i < carriers.length; b.userData.at = carriers[i]; });
+}
+addEventListener('quest:riddlers', e => setRiddlers(e.detail));
+addEventListener('quest:input', e => { inputLocked = !!e.detail?.locked; if (inputLocked) { held.clear(); order.length = 0; tapped = null; } });
+function riddleTick(t) {
+  for (const b of bangs) if (b.visible) b.position.set(b.userData.at.x, 2.1 + (reduceMotion ? 0 : Math.sin(t * 3) * 0.06), b.userData.at.z);
+  let near = null;
+  if (player) {
+    const by = (c, r) => Math.abs(c - player.c) + Math.abs(r - player.r) <= 1;
+    near = keeperActors.find(a => a.riddleId && a.k >= 1 && by(a.c, a.r))?.riddleId
+      || (villager.riddleId && villagerCell && by(...villagerCell) ? villager.riddleId : null);
+  }
+  if (near !== nearRiddle) { nearRiddle = near; dispatchEvent(new CustomEvent('quest:near', { detail: near ? { riddleId: near } : null })); }
+}
+
 // ---------- player input ----------
 const held = new Set();
 const order = []; // held directions, newest last, so the latest key wins when two are down
 const newestHeld = () => order.filter(d => held.has(d)).pop();
 let tapped = null; // a quick tap still takes one step, even if the key is up before the next frame
 const KEY = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right' };
-addEventListener('keydown', e => { const k = KEY[e.key]; if (k) { e.preventDefault(); if (!held.has(k)) order.push(k); held.add(k); tapped = k; } if (e.key === 't' || e.key === 'T') { fastTime = !fastTime; if (!fastTime && pinned == null) skyClock = 0; }
+addEventListener('keydown', e => { if (inputLocked) return; const k = KEY[e.key]; if (k) { e.preventDefault(); if (!held.has(k)) order.push(k); held.add(k); tapped = k; } if (e.key === 't' || e.key === 'T') { fastTime = !fastTime; if (!fastTime && pinned == null) skyClock = 0; }
   if (e.key === 'r' || e.key === 'R') atmos.cycle(e.shiftKey ? -1 : 1);
+  if ((e.key === 'e' || e.key === 'E') && nearRiddle) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: nearRiddle } })); }
   audio.unlock(); });
 addEventListener('keyup', e => { const k = KEY[e.key]; if (k) { held.delete(k); order.splice(0, order.length, ...order.filter(d => d !== k)); } });
 for (const b of document.querySelectorAll('[data-dir]')) {
   const d = b.dataset.dir;
-  b.addEventListener('pointerdown', e => { e.preventDefault(); order.push(d); held.add(d); tapped = d; audio.unlock(); });
+  b.addEventListener('pointerdown', e => { e.preventDefault(); if (inputLocked) return; order.push(d); held.add(d); tapped = d; audio.unlock(); });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => held.delete(d));
 }
 
@@ -543,7 +607,9 @@ async function build() {
     const m = await person('keeper', c, r, 0xd97757, sunny?.HAIR[(i + 1) % sunny.HAIR.length], i);
     const a = makeActor(m.obj, m.clips, c, r, 2.6 * LOOK.move.npcPace, m.sprite);
     a.npc = true; a.wait = Math.random() * 2;
+    keeperActors.push(a);
   }
+  setRiddlers(window.__questRiddlers || riddlers); // boot may have sent them before the Keepers existed
   // Animals wander slowly; ducks paddle around the pond.
   if (sunny) {
     const land = [], pond = [];
@@ -576,13 +642,14 @@ function loop() {
   wind.value = reduceMotion ? 0 : t;
   const day = updateSky(dt);
   if (player) {
-    if (player.k >= 1 && (held.size || tapped)) {
+    if (inputLocked) tapped = null;
+    if (player.k >= 1 && !inputLocked && (held.size || tapped)) {
       const dir = held.size ? newestHeld() : tapped;
       tapped = null;
       if (tryMove(player, dir)) lastStepK = 0;
     }
     for (const a of actors) {
-      if (a.npc && a.k >= 1 && (a.wait -= dt * (a.pace ?? LOOK.move.npcPace)) <= 0) {
+      if (a.npc && !a.riddleId && a.k >= 1 && (a.wait -= dt * (a.pace ?? LOOK.move.npcPace)) <= 0) {
         const dirs = ['up', 'down', 'left', 'right'].sort(() => Math.random() - 0.5);
         for (const d of dirs) if (tryMove(a, d)) break;
         a.wait = 0.8 + Math.random() * 2.5;
@@ -601,6 +668,7 @@ function loop() {
   if (!reduceMotion) { fire(t); sparks(t); fireflies.tick(t); }
   wellLight.intensity *= reduceMotion ? 1 : 0.9 + Math.sin(t * 11) * 0.05 + Math.sin(t * 23) * 0.05;
   beaconGlow(t);
+  riddleTick(t);
   water.opacity = LOOK.water.opacity - 0.05 + Math.sin(t * 1.2) * 0.05;
   if (water.map && !reduceMotion) water.map.offset.set(t * LOOK.water.flow * 0.05, t * LOOK.water.flow * 0.02);
   if (player) atmos.update(dt, t, look, day, reduceMotion);

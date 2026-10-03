@@ -114,7 +114,7 @@ test('answerRiddle: refuses empty text, unknown or closed Riddles, and never-tie
   assert.throws(() => answerRiddle(s, 'r4', { text: 'CSV first', by: 'player' }, NOW), /deferred, not open/);
   riddle(s, 'r2').text = 'Which password should the import use?';
   assert.throws(() => answerRiddle(s, 'r2', { text: 'hunter2', by: 'player' }, NOW), /never answered in the game/);
-  assert.throws(() => answerRiddle(s, 'r2', { text: ASK_LATER, by: 'player' }, NOW), /never answered in the game/);
+  assert.equal(answerRiddle(s, 'r2', { text: ASK_LATER, by: 'player' }, NOW).events[0].kind, 'riddle.deferred'); // deferring isn't answering
 });
 
 test('ask me later, then the Riddle returns when due, and its weight has grown', async () => {

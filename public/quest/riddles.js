@@ -82,14 +82,16 @@ const change = (record, kind, at) => ({ puts: [{ kind: 'riddles', record }], eve
 
 /**
  * Answers an open Riddle. "Ask me later" defers it; the steward's answer goes to the outbox; anyone else's answer is
- * kept as a proposal and the Riddle stays open (rule 10). Throws if it isn't open, the text is empty, or it is never-tier.
+ * kept as a proposal and the Riddle stays open (rule 10). Throws if it isn't open, the text is empty, or it is never-tier
+ * (a never-tier Riddle can still be deferred).
  */
 export function answerRiddle(ledger, riddleId, { text, by } = {}, now = new Date(), rules = DEFAULT_RULES) {
   const r = clone(findRiddle(ledger, riddleId));
   if (r.state !== 'open') throw new Error(`Riddle ${riddleId} is ${r.state}, not open`);
   const words = typeof text === 'string' ? text.trim() : '';
   if (!words) throw new Error('an answer needs text');
-  if (riskTier(r, rules) === 'never') throw new Error(`Riddle ${riddleId} is never answered in the game`);
+  // Deferring isn't answering, so a never-tier Riddle may still be put off; any other answer is refused.
+  if (words !== ASK_LATER && riskTier(r, rules) === 'never') throw new Error(`Riddle ${riddleId} is never answered in the game`);
   const at = now.toISOString(), t = now.getTime();
 
   if (words === ASK_LATER) {

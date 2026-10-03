@@ -36,8 +36,19 @@ collecting (PLAN-adventure §5 rewritten).
   `Flag` shape (computed, never stored), the `Digest` shape, `stewardOf` (only the steward, or the Realm owner, seals;
   others propose), `DEFAULT_RULES` (outbox seconds, defer/fade delays, confirm words, never-in-game list) and the
   Riddle events (recalled, sealed, returned, faded, proposed). The sample adds a deferred Riddle (r4) and w2's
-  decision. `npm test` 24 pass. **Next: R1's parallel round** (conversation box ∥ Riddle logic ∥ outbox/write-back
-  ∥ tests/log/digest), each slice in its own worktree, then integration.
+  decision. `npm test` 24 pass.
+- **R1 "Riddles" is done (2026-10-03):** four slices built side by side and merged: `riddles.js` (risk tiers, True
+  Sight flags, Riddle NPCs, answer/propose/defer, return and fade, boss weight), `conversation.js` (the docked box),
+  `outbox.js` (Lumi's recall window, sealing, write-back, unblocking), `digest.js` (session log, "while you were
+  away", question-to-answer time), each with a dev page. Integration: `boot.js` wires them; `scene.js` makes Keepers
+  carrying an open Riddle stop and show a "!", with a placeholder villager by the Lodge for Riddles with no Keeper;
+  E (or the Talk button) opens the Riddle, movement is locked while the box is open. A never-tier Riddle can still be
+  deferred. `test/safety.test.js` covers rules 1, 2, 3, 4, 8, 9, 10. `npm test` 70 pass; checked on 4790: answer →
+  outbox → sealed → decision on the Work, and the confirm view for the high-risk Riddle; no console errors.
+  Gaps: nothing raises new Riddles yet (the Ledger panel can't add one; the sample's come preloaded), the Keepers'
+  stats board in the Lodge isn't built (answerTimes exists), and the Beacon log's Riddle rows aren't clickable.
+  **Next: R2 "The Gloamwyrm"**: write the playtest criteria first (PLAN-engine.md, Risks: "written playtest criteria
+  before R2"), then the contract step.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
