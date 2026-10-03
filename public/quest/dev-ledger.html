@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- Dev page for the R0 Ledger panel on the IndexedDB store. Serve with: node dev/static.js 4791 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quest Ledger (dev)</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { background: radial-gradient(circle at 60% 40%, #2b3a55, #0d0f18); color: #ccc; font: 13px system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <script type="module">
+    import { openLedger } from './ledger-idb.js';
+    import { mountLedgerPanel } from './ledger-panel.js';
+    const store = await openLedger();
+    window.questLedger = store; // for poking at it from the console
+    mountLedgerPanel(document.body, store, { sampleUrl: 'sample-realm.json' });
+  </script>
+</body>
+</html>
