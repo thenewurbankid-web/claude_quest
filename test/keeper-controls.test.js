@@ -3,8 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { memoryStore, applyChanges, validateLedger, DEFAULT_RULES } from '../public/quest/contract.js';
-import { startable, wake, rest, resume, cancel, ringBell, tokenReadout, LIVE } from '../public/quest/keeper-controls.js';
+import { memoryStore, applyChanges, validateLedger, DEFAULT_RULES, emberLeft } from '../public/quest/contract.js';
+import { startable, wake, rest, resume, cancel, ringBell, tokenReadout, summon, joinSummoned, release, LIVE } from '../public/quest/keeper-controls.js';
 import { keepers as keepersSplit } from '../public/quest/status.js';
 
 const read = f => JSON.parse(readFileSync(new URL(`../public/quest/${f}`, import.meta.url)));
@@ -141,4 +141,58 @@ test('cancels and the bell stamp cancelledAt; Works in review are not startable'
   const at = T0.toISOString();
   assert.ok(ringBell(l, T0).puts.filter(p => p.kind === 'queue').every(p => p.record.cancelledAt === at));
   assert.ok(!startable(l).some(w => w.status === 'in_review'));
+});
+
+test('summon spends Ember through emberLeft, starts summoned, and refuses a poor Well or a bad name', async () => {
+  const before = emberLeft(sample(), T0);
+  const c = summon(sample(), { name: ' Ash ', role: 'builder', skills: ['code', ' '] }, T0);
+  assert.equal(c.problem, undefined);
+  const k = c.puts[0].record;
+  assert.deepEqual([k.name, k.role, k.skills, k.status, k.summonedAt, k.joinedAt], ['Ash', 'builder', ['code'], 'summoned', T0.toISOString(), null]);
+  assert.deepEqual(c.events, [{ at: T0.toISOString(), kind: 'keeper.summoned', ref: k.id }]);
+  const l = await applied(sample(), c);
+  assert.deepEqual(hard(l), []);
+  assert.equal(emberLeft(l, T0), before - DEFAULT_RULES.summonCost);
+  assert.equal(emberLeft(l, new Date('2026-10-05T13:00:00Z')), emberLeft(sample(), new Date('2026-10-05T13:00:00Z'))); // comes back
+  refused(summon(sample(), { name: '  ' }, T0));
+  refused(summon(sample(), { name: 'wren' }, T0)); // taken
+  const poor = sample();
+  poor.queue[0].reports.push({ ...poor.queue[0].reports[0], usage: { input: 950000, output: 0 }, at: '2026-10-03T11:00:00Z' });
+  refused(summon(poor, { name: 'Ash' }, T0));
+});
+
+test('a summoned Keeper joins only when a Work it holds is approved (done), and rests stay rested', async () => {
+  let l = await applied(sample(), summon(sample(), { name: 'Ash' }, T0));
+  const k = l.keepers.find(x => x.name === 'Ash');
+  assert.deepEqual(joinSummoned(l, T0).puts, []);
+  l.works.find(w => w.id === 'w9').keeperId = k.id;
+  l.works.find(w => w.id === 'w9').status = 'in_review'; // not approved yet
+  assert.deepEqual(joinSummoned(l, T0), { puts: [], events: [] });
+  l.works.find(w => w.id === 'w9').status = 'done';
+  const later = new Date('2026-10-04T09:00:00Z');
+  const c = joinSummoned(l, later);
+  assert.deepEqual(c.events, [{ at: later.toISOString(), kind: 'keeper.joined', ref: k.id }]);
+  const j = await applied(l, c);
+  assert.deepEqual(hard(j), []);
+  const ash = j.keepers.find(x => x.id === k.id);
+  assert.deepEqual([ash.status, ash.joinedAt], ['free', later.toISOString()]);
+  assert.deepEqual(joinSummoned(j, later), { puts: [], events: [] }); // joins once
+  l.keepers.find(x => x.id === k.id).status = 'resting';
+  assert.equal(joinSummoned(l, later).puts[0].record.status, 'resting');
+  assert.ok(joinSummoned(sample(), T0).puts.length === 0); // old Keepers have no summonedAt
+});
+
+test('release retires a Keeper to the Hall of Champions, never deletes, and waits for live runs', async () => {
+  const l = sample();
+  const c = release(l, 'k2', T0);
+  assert.deepEqual(c.events, [{ at: T0.toISOString(), kind: 'keeper.released', ref: 'k2' }]);
+  const r = await applied(l, c);
+  assert.deepEqual(hard(r), []);
+  assert.equal(r.keepers.length, l.keepers.length);
+  assert.deepEqual([r.keepers.find(k => k.id === 'k2').status, r.keepers.find(k => k.id === 'k2').releasedAt], ['released', T0.toISOString()]);
+  assert.equal(r.works.length, l.works.length);
+  refused(release(r, 'k2', T0));
+  refused(release(l, 'nobody', T0));
+  refused(release(l, 'k1', T0)); // k1 holds a leased run
+  assert.ok(wake(r, 'k2', 'w9', {}, T0).problem);
 });

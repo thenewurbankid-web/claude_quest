@@ -99,6 +99,54 @@ export function cancel(ledger, itemId, now = new Date()) {
 }
 
 /**
+ * Summon a new Keeper (PLAN-engine.md R5): spends rules.summonCost Ember (emberLeft counts it from summonedAt) and
+ * records `keeper.summoned`. It starts 'summoned' and joins the Lodge on its first approved Work (joinSummoned).
+ * Refused with no name or too little Ember. Plain text only: name, role and skills are shown by textContent.
+ */
+export function summon(ledger, { name, role = '', skills = [] } = {}, now = new Date(), rules = DEFAULT_RULES) {
+  const n = typeof name === 'string' ? name.trim().slice(0, 40) : '';
+  if (!n) return refuse('A Keeper needs a name.');
+  if ((ledger.keepers || []).some(k => k.name.toLowerCase() === n.toLowerCase())) return refuse(`A Keeper named ${n} already exists.`);
+  if (emberLeft(ledger, now, rules) < rules.summonCost) return refuse(`Summoning costs ${rules.summonCost} Ember and the Well has less.`);
+  const at = now.toISOString();
+  const k = { id: crypto.randomUUID(), name: n, role: String(role).trim().slice(0, 40) || 'agent',
+    skills: skills.map(x => String(x).trim()).filter(Boolean).slice(0, 8), status: 'summoned', summonedAt: at, joinedAt: null, releasedAt: null };
+  return { puts: [{ kind: 'keepers', record: k }], events: [{ at, kind: 'keeper.summoned', ref: k.id }] };
+}
+
+/**
+ * A summoned Keeper joins the Lodge when a Work it was given is approved (status 'done'; only a person moves a Work
+ * out of review). It gets joinedAt and, if it was only 'summoned', becomes free or busy; a resting or wandered one
+ * stays so. Returns changes for every Keeper that qualifies, none otherwise. Safe to call on every ledger change.
+ */
+export function joinSummoned(ledger, now = new Date()) {
+  const puts = [], events = [], at = now.toISOString();
+  for (const k of ledger.keepers || []) {
+    if (!k.summonedAt || k.joinedAt || k.status === 'released') continue;
+    if (!(ledger.works || []).some(w => w.keeperId === k.id && w.status === 'done')) continue;
+    const leased = (ledger.queue || []).some(q => q.keeperId === k.id && q.state === 'leased');
+    const status = k.status === 'summoned' ? (leased ? 'busy' : 'free') : k.status;
+    puts.push({ kind: 'keepers', record: { ...clone(k), status, joinedAt: at } });
+    events.push({ at, kind: 'keeper.joined', ref: k.id });
+  }
+  return { puts, events };
+}
+
+/**
+ * Release a Keeper to the Hall of Champions: status 'released' and releasedAt, with `keeper.released`. Never deletes:
+ * its Works, reports and events stay. Refused while it still holds a queued, leased or lapsed run (cancel it first).
+ */
+export function release(ledger, keeperId, now = new Date()) {
+  const k = keeperOf(ledger, keeperId);
+  if (!k) return refuse(`No Keeper ${keeperId}.`);
+  if (k.status === 'released') return refuse(`${k.name} is already released.`);
+  if (liveFor(ledger, q => q.keeperId === k.id).length) return refuse(`${k.name} still has a live run. Cancel it first.`);
+  const at = now.toISOString();
+  return { puts: [{ kind: 'keepers', record: { ...clone(k), status: 'released', releasedAt: at } }],
+    events: [{ at, kind: 'keeper.released', ref: k.id }] };
+}
+
+/**
  * The Recall Bell (safety rule 11): every Keeper resting (released ones stay released) and every queued, leased or
  * lapsed item cancelled, from
  * anywhere, with one bell.rung. Returned and cancelled items are left alone. It never refuses.

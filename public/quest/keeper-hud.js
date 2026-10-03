@@ -5,8 +5,8 @@
 // WASD and Space are taken), always behind an in-page confirm, never a native one.
 // The Ember meter and the bell share a dock at the bottom left, clear of the Beacon HUD (top right) and the outbox.
 // Safety: ledger text is real text, so it only ever goes in through textContent, never innerHTML. Styles under qkh-.
-import { applyChanges } from './contract.js';
-import { LIVE, startable, wake, rest, resume, cancel, ringBell, tokenReadout } from './keeper-controls.js';
+import { applyChanges, DEFAULT_RULES } from './contract.js';
+import { LIVE, startable, wake, rest, resume, cancel, ringBell, tokenReadout, summon, release } from './keeper-controls.js';
 
 const STYLE_ID = 'qkh-styles';
 const CSS = `
@@ -179,7 +179,7 @@ function modal(container, label, onClose) {
  */
 export function mountStartWork(container, store, { now = () => new Date(), rules, workUrl = 'work.html' } = {}) {
   injectStyles();
-  let done = null, queued = null, view = null, said = ''; // view: a keeper id, or null for the list
+  let done = null, queued = null, view = null, summoning = null, said = ''; // view: a keeper id, or null for the list
   let draft = { workId: null, note: '' }; // kept across re-renders, so a store change never wipes what was typed
   const m = modal(container, 'Wake a Keeper', () => { const d = done; done = null; d?.(queued); });
 
@@ -223,6 +223,44 @@ export function mountStartWork(container, store, { now = () => new Date(), rules
     ? btn(k.status === 'resting' ? 'Resume' : 'Call back', 'qkh-go', async () =>
       act(resume(await store.snapshot(), k.id, now()), `${k.name} is back at the bench.`))
     : btn('Rest', '', async () => act(rest(await store.snapshot(), k.id, now()), `${k.name} rests. No prompts are offered until you resume them.`));
+
+  // Release asks once, in place, like Cancel: the first press turns the button into "Yes, release".
+  const releaseBtn = k => {
+    const b = btn('Release', '', null);
+    b.setAttribute('aria-label', `Release ${k.name} to the Hall of Champions`);
+    b.onclick = async () => {
+      if (b.dataset.sure !== 'true') { b.dataset.sure = 'true'; b.textContent = 'Yes, release'; return; }
+      await act(release(await store.snapshot(), k.id, now()), `${k.name} is released to the Hall of Champions. Their record is kept; they take no more work.`);
+    };
+    return b;
+  };
+  // Summon: a small form, then a confirm that names the Ember it spends. The Keeper joins on its first approved Work.
+  function summonForm(l) {
+    const box = el('div', 'qkh-readout');
+    const cost = (rules || DEFAULT_RULES).summonCost;
+    const field = (label, key, max) => {
+      const lab = el('label', 'qkh-h', label), input = el('input');
+      input.type = 'text';
+      input.maxLength = max;
+      input.value = summoning[key];
+      input.oninput = () => { summoning[key] = input.value; };
+      lab.append(input);
+      return lab;
+    };
+    const foot = el('div', 'qkh-foot');
+    const go = btn(`Spend ${cost} Ember`, 'qkh-go', async () => {
+      const c = summon(await store.snapshot(), { name: summoning.name, role: summoning.role,
+        skills: summoning.skills.split(',') }, now(), rules);
+      if (c.problem) { said = ''; render(await store.snapshot(), c.problem); return; }
+      const name = c.puts[0].record.name;
+      summoning = null;
+      await act(c, `${name} is summoned. They join the Lodge when their first Work is approved.`);
+    });
+    foot.append(btn('Not now', '', async () => { summoning = null; render(await store.snapshot()); }), go);
+    box.append(el('p', 'qkh-note', `Summoning costs ${cost} Ember and comes back as the Well refills. The new Keeper joins the Lodge once the first Work they do is approved.`),
+      field('Name', 'name', 40), field('Role (optional)', 'role', 40), field('Skills, comma separated (optional)', 'skills', 120), foot);
+    return box;
+  }
 
   function readout(l) {
     const r = tokenReadout(l, now(), rules);
@@ -301,6 +339,7 @@ export function mountStartWork(container, store, { now = () => new Date(), rules
       go.disabled = !works.length || out;
       foot.append(restBtn(k), go);
     }
+    if (k.status !== 'released') foot.append(releaseBtn(k));
     const live = runs(l, k.id);
     if (live) nodes.push(el('div', 'qkh-h', 'Live runs'), live);
     nodes.push(el('p', 'qkh-problem', problem || ''));
@@ -323,6 +362,7 @@ export function mountStartWork(container, store, { now = () => new Date(), rules
       st.dataset.s = k.status;
       who.append(st, el('div', 'qkh-meta', `${k.role}${k.skills?.length ? ` · ${k.skills.join(', ')}` : ''}`));
       row.append(who, restBtn(k));
+      row.append(releaseBtn(k));
       if (k.status !== 'resting') row.append(btn('Start work', 'qkh-go', async () => { view = k.id; said = ''; render(await store.snapshot()); }));
       li.append(row);
       const live = runs(l, k.id);
@@ -334,7 +374,8 @@ export function mountStartWork(container, store, { now = () => new Date(), rules
     s.setAttribute('role', 'status');
     const foot = el('div', 'qkh-foot');
     foot.append(btn('Close', '', () => m.close()));
-    return [...nodes, readout(l).box, ul, el('p', 'qkh-problem', problem || ''), s, foot];
+    const sm = summoning ? summonForm(l) : btn('Summon a Keeper', '', async () => { summoning = { name: '', role: '', skills: '' }; said = ''; render(await store.snapshot()); });
+    return [...nodes, readout(l).box, ul, sm, el('p', 'qkh-problem', problem || ''), s, foot];
   }
 
   function render(l, problem) {
@@ -357,6 +398,7 @@ export function mountStartWork(container, store, { now = () => new Date(), rules
     async open(keeperId = null) {
       if (m.open) m.close();
       view = keeperId;
+      summoning = null;
       queued = null;
       said = '';
       draft = { workId: null, note: '' };
