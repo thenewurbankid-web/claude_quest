@@ -176,11 +176,35 @@ Keepers, Lumi, the Ember Well and the Long Night.
 | Cross-project dependency | **a Fallen Bridge** between Marches until the other side finishes |
 | Retrospective / campaign ending | **an Embertale** around the campfire |
 | Wins | Sigils and trophies in the **Hall of Champions**; the **Champions League** by season |
-| Sealed decision / true view | **Warden's Seal** in wax; **True Sight** shows the plain words |
+| Sealed decision / true view | **Warden's Seal** in wax; **True Sight**: the game's line, with the real words always shown under it |
 | Outbox recall | Lumi waits at the gate a moment before flying; call her back |
 | Emergency stop | **ring the Recall Bell**: every Keeper comes home |
 | Stale question | the Riddle "fades" with a note |
 | Usage limit hit | **the Long Night** (already in the game) |
+
+## No server, except the Paperclip connector (user, 2026-10-03)
+**The game runs entirely in the browser, with no server of any kind,** ours or hosted, **except a small optional
+Paperclip connector** (below). It is static files (GitHub
+Pages, or opened locally) plus browser storage. This overrides every mention below of the Quest server, the polling
+endpoint, the local runner and server-side file writes.
+- **Project data:** the Local Ledger (IndexedDB) is the only live source, and R0 starts on it.
+- **Paperclip: a small JS connector, and only that** (user, 2026-10-03). Paperclip sends no CORS header (checked
+  2026-10-03: no `Access-Control-Allow-Origin` from `127.0.0.1:3100`), so a page can't read it directly. We ship a
+  small Node script that the player starts only if they use Paperclip. It is only a connector: it passes the game's
+  Paperclip reads through (adding the header for the game's origin) and posts sealed decisions as comments. It holds
+  the Paperclip key, answers only the player's own machine, and does nothing else: no agents, no runner, no saves, no
+  game logic. With it off, the game runs on the Local Ledger. There is no agent-relay path to Paperclip. Built in R3
+  or later; until then the game uses the Local Ledger only.
+- **Agents:** only through the `/work` copy-paste page. The player copies a prompt into their own agent and pastes
+  the result back. No polling, no local runner, and the game never starts a process.
+- **The game's LLM:** WebLLM and templates; Ollama only when the page is on `localhost` (Ollama allows localhost
+  origins by default). No `claude` CLI provider.
+- **Saves:** IndexedDB plus a downloaded save file; the atomic-write, checksum and fallback rules apply to the
+  IndexedDB copy.
+- **Outside relays we don't run:** Yjs over WebRTC (teammates) and the MQTT phone link still use public
+  signalling/broker servers.
+- **`app.js`** (the server the game runs on today, port 4777) keeps running the current game until the browser-only
+  version covers what it does, then retires. No new features go into it.
 
 ## Sources, schema and agents (2026-10-03)
 **Two sources behind one protocol** (no GitHub, user 2026-10-03) (`source` plugins); the game never knows which one is running:
@@ -188,7 +212,7 @@ Keepers, Lumi, the Ember Well and the Long Night.
    (IndexedDB, as `public/net.js` already does for saves). Teammates sync with **Yjs** over WebRTC (multiplayer
    plan); **isomorphic-git** gives history and an optional push to any git host. Halls, Works and Riddles are made
    in game, through conversations and the planner NPC.
-2. **Paperclip** (optional): company = world, project = March, goals = Halls, issues = Works (see Design).
+2. **Paperclip** (through the Paperclip connector, see No server): company = world, project = March, goals = Halls, issues = Works (see Design).
 
 **Schema enforcement.** Native fields first (goals/milestones, priority, status, parent). Then a small fixed label
 set (`size:S|M|L`, `weight:<n>`, `risk:high`, `quest:council`) where the source has no field. The adapter validates
@@ -197,57 +221,56 @@ becomes a **repair quest** ("this Work belongs to no Hall, where should it go?")
 fixes it at the source. The schema goes into agent instructions, and an audit routine can check for gaps. Sizes
 and weights are soft (derived when missing); only the structure (task → milestone → project) is required.
 
-**Agents are external workers** (user): an agent can run anywhere (the local server's `claude` CLI, a cloud
-runner, a teammate's machine). Each one **registers** with the protocol (name, skills) and polls the Quest server for its work (below); the game
-invokes an agent by queueing work for it. Messages are signed
-with a key per agent, and only registered agents are ever invoked. Agent controls in game (summon = wake, rest = pause, call back =
+**Agents are external workers** (user): an agent can run anywhere (Claude Code on your machine, a cloud runner, a
+teammate's machine). Each one is **registered** in the ledger (name, skills); the game invokes an agent by queueing
+work for it on the `/work` page, and only registered agents get work. Agent controls in game (summon = wake, rest = pause, call back =
 resume, recall one run = cancel, the Recall Bell = pause all) are protocol actions, so every source offers them;
 each one is a sealed decision with a token readout. 
 
-**How agents connect: a polling endpoint, nothing to install** (user, 2026-10-03). The Quest server exposes
-`GET /api/agents/work?agent=<id>` (pending tasks and sealed decisions) and `POST /api/agents/progress` (progress,
-results, new questions). Each agent gets a token when it registers. Any script, `curl` or agent framework can use it;
-connections are outgoing-only, so it works behind routers. No connector package, no webhooks, no WebRTC for agents.
-Work waits for the next poll (10–30 s), which is fine for agent work. Without the server, the player relays work by hand
-through the `/work` page below.
-Push delivery (Socket.IO or WebRTC) can be added later behind the same endpoints if polling ever feels slow.
-**Manual relay page for browser-only play** (user, 2026-10-03): a `/work` route on the game site (works on GitHub
+**How agents connect: the `/work` relay page** (user, 2026-10-03; the polling endpoint was dropped with the server).
+A `/work` route on the game site (works on GitHub
 Pages, no server) lists queued work per agent as ready-to-copy prompts. The player pastes a prompt into their own
 agent (e.g. Claude Code), then pastes the result back on the page, and it enters the protocol like any other
 progress report (marked as relayed by the player). Results still pass the same validation and safety rules.
 
 **LLM adapter (the game's own voice).** Separate from agents: agents do the work; the game's LLM writes NPC lines,
 recaps, plans, the Cartographer chat and lore. It is the studio's `provider` plugin (`plugins/provider/<name>/`,
-`lib/plugins.js`), extended with: `usage` (token counts per reply, for the token readout), `runs: server | browser`
-(WebLLM on the static site), and per-model capabilities (structured JSON, context size, vision). The lore rules route
+`lib/plugins.js`, moved into the browser), extended with: `usage` (token counts per reply, for the token readout),
+WebLLM, and per-model capabilities (structured JSON, context size, vision). The lore rules route
 each job to a model with fallbacks: flavour lines and recaps → small local model → WebLLM → **templates** (0 tokens);
 planner → bigger local model or Claude (asks first); Cartographer and lore → the chat panel's picker; Errand Trails,
 weights and boss triggers → **plain rules, no LLM**. Guardrails: never writes or rewords decision text; structured
 output is schema-checked before saving (fall back to templates); a filter keeps real product names out of lore;
-timeouts; cached per item. Providers: Ollama (done), WebLLM, Claude via the `claude` CLI, a cloud-connector slot.
+timeouts; cached per item. Providers: WebLLM, Ollama (localhost pages only), a cloud-connector slot.
 
-**Without Paperclip.** The Local Ledger holds Marches, Halls and Works (made in game). A small **agent registry** in
-the ledger (name, role, skills, status) fills in for Paperclip's org chart; agents join by registering on the polling
-endpoint. Work runs on the **built-in local runner** (the Quest server starts Claude Code through the `claude` CLI, as
-wake does today) or on outside agents (polling, or the `/work` page). Controls become flags agents see on their next
-poll: wake = queue work, pause = resting, cancel = run stopped; the Recall Bell rests everyone. Budget is our own
-count from agents' reported usage plus the LLM adapter's `usage`, spent as Ember. Trade-offs: outside agents stop
-only on their next poll (10–30 s; the local runner stops at once), and budgets are as accurate as agents' reports.
+**Without Paperclip (the default now).** The Local Ledger holds Marches, Halls and Works (made in game). A small
+**agent registry** in the ledger (name, role, skills, status) fills in for Paperclip's org chart. Controls become
+states on the `/work` page: wake = queue work, pause = resting (no prompts offered), cancel = run stopped (pasted
+results refused); the Recall Bell rests everyone. Budget is our own count from the usage agents report in pasted
+results plus the LLM adapter's `usage`, spent as Ember. Trade-offs: the game can't stop an agent that is already
+running (the player stops it in their own tool), and budgets are as accurate as agents' reports.
 
 **Seeing the source in game.** A Ledger panel in the Keeper's Lodge shows the protocol view (Marches, Halls, Works,
-Riddles, agents, the Beacon) for any source. With Paperclip present, the panel can switch to Paperclip's own page in
-a frame (localhost only; it doesn't block framing).
+Riddles, agents, the Beacon) for any source.
 
 ## Safety (all accepted)
 1. Only sealed choices reach the project.
-2. True Sight shows the real text, verbatim.
+2. True Sight shows the real text, verbatim, always: the game's line on one line and the real text right under it
+   (user, 2026-10-03). Both are clearly readable (full-size, full-contrast type, never faded or tucked behind a
+   toggle), and real text is always shown as plain text, never as HTML. When a conversation is split into several
+   bubbles, the player can step back to earlier bubbles as well as forward. The conversation box sits docked at the
+   bottom of the screen, not floating over the speaker. It is wide (most of the screen width) with the speaker's
+   sprite or head beside the text, animated as if talking while the line appears (user, 2026-10-03). Until real
+   portraits exist, use the character's existing 2D sprite or a placeholder (see missing art). In a Riddle, the
+   Warden's Seal appears only on the last bubble, so the whole question is read before sealing (user, 2026-10-03).
 3. Risk tiers: merge, deploy, delete and budget changes leave the game for a plain confirm; a never-in-game list.
 4. An outbox with a recall window.
 5. The budget is stamina: when it's empty, work pauses.
 6. No XP for saying yes.
 7. Autoplay never decides.
 8. Stale questions expire.
-9. Each sealed decision is written back to the issue as a comment.
+9. Each sealed decision is written back to its Work in the ledger, and for Paperclip Works to the issue as a comment
+   through the Paperclip connector.
 10. Teammates' answers are shown, never overwritten.
 11. The Recall Bell stops all work, from anywhere.
 12. Agents work on branches, and merging always takes a human.
@@ -255,34 +278,73 @@ a frame (localhost only; it doesn't block framing).
 ## Releases (build order, user 2026-10-03; replaces "M0 first")
 Playable slices first; the shared-core refactor waits until the fun is proven. The milestones below stay as the
 feature list; releases pick from them.
-- **R0 (today's MVP): "The Beacon lights up".** 3D view, read-only, from the Paperclip snapshot already in
-  `world.guild`: the Beacon (unified status), the in-game log (open items + last 5 resolved), one Sealed Hall per
-  Paperclip goal shown locked/open, Keepers busy/free. Nothing writes to Paperclip. Check against MAX FE.
-- **R1 "Riddles":** blocked / review-needed issues become NPCs with Riddles; answer with the Warden's Seal, True
-  Sight, outbox recall; write-back as a Paperclip comment.
+- **R0 (today's MVP): "The Beacon lights up".** 3D view, browser only, from the Local Ledger (user, 2026-10-03):
+  a minimal ledger in IndexedDB, a Ledger panel to add Halls and Works by hand, and a sample Realm to load. The Beacon
+  (unified status), the in-game log (open items + last 5 resolved), one Sealed Hall per Hall shown locked/open,
+  Keepers busy/free.
+- **R1 "Riddles":** blocked / review-needed Works become NPCs with Riddles; answer with the Warden's Seal, True
+  Sight, outbox recall; write-back to the Work in the ledger.
 - **R2 "The Gloamwyrm":** a simple turn-based boss from the weighted backlog score, pausing per real question, with
   retreat. Vertical slice complete: **playtest the fun here**.
-- **R3 "Bring your Keeper":** agent polling endpoint, `/work` copy-paste page, local Claude runner, start work from
-  an NPC with a token readout.
+- **R3 "Bring your Keeper":** the `/work` copy-paste page and agent registry, the Paperclip connector (R3 or later,
+  user 2026-10-03), start work from an NPC with a token
+  readout.
 - **R4 "The first Sealed Hall":** one hand-made dungeon themed from its milestone, and a Sigil.
-- **R5 "Your own Realm":** Local Ledger (no Paperclip), New Game / Load, split save with archiving.
+- **R5 "Your own Realm":** the full Local Ledger (planner NPC, teammates), New Game / Load, split save with archiving.
 - **R6+:** shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes, 2D parity.
 Cost accepted: R0–R4 are built straight into the 3D code and partly moved into the core later.
+**How a release runs** (user, 2026-10-03): (1) a short **contract** step fixes the shared shapes in code (the ledger
+schema, the Riddle record, the `/work` queue states, the save format) plus a sample data file; (2) every slice is built
+**side by side** in its own git worktree against that contract; (3) an **integration** step joins them into `3d-world`
+and runs the safety tests. Each feature lives in its own module; only integration edits `public/3d/scene.js`. A round
+is one session long. Exceptions: R2's tuning and playtest run in order after its parallel round, and R6's shared core
+is built alone. The R2 playtest is the gate: nothing from R3 on starts before it passes.
 
 ## Risks and gaps (2026-10-03)
-Risks: the fun is unproven (hence releases); boss pressure could push hasty real decisions (no timers on question
-pauses, "ask me later" always available, answers never affect combat power); scope keeps growing (re-scope per
-release); prompt injection from task text and pasted results (treat as data, NPC LLM gets no tools); Local Ledger
-loss when browser data is cleared (autosave plus a "download your save" nudge); missing art (Tanglers, Gloamwyrm,
-Wardens, dungeon kits); 2D + 3D doubles view work; Paperclip API drift (read only the fields we need).
+Decided by the user on 2026-10-03, through the Quest Engine Council page (one pick per item).
+
+**Risks and their mitigations:**
+- *The fun is unproven:* releases, plus **written playtest criteria before R2**. If R2 misses them, rethink before R3.
+- *Boss pressure could push hasty real decisions:* no timers on question pauses, "ask me later" always available,
+  answers never affect combat power, **and risk:high Riddles never appear in combat**: they pause the fight and are
+  answered in the Lodge.
+- *Scope keeps growing:* **each release is time-boxed to one session**; whatever isn't done moves to the next release.
+- *Prompt injection from task text and pasted results:* treat it as data, the NPC LLM gets no tools, real text is
+  always shown as plain text (never HTML), **and True Sight flags suspicious lines** (text that addresses the reader
+  or the AI) before sealing.
+- *Local Ledger lost when browser data is cleared:* autosave plus a "download your save" nudge (kept as is).
+- *Missing art (Tanglers, Gloamwyrm, Wardens, dungeon kits):* **Three.js placeholders for R0–R2, CC0 packs (Kenney,
+  Quaternius) by R4.**
+- *2D + 3D doubles view work:* **2D is frozen until R6.** It keeps working, but gets no new features.
+- *Paperclip API drift:* read only the fields we need, **and validate each snapshot against the protocol**. On a
+  mismatch, keep the last good world and light a warning on the Beacon.
+
 **"Ask me later" counts as an answer** (user): in a boss fight or a Riddle, deferring is a valid response; it lands
 the hit and clears the item for now, marked `deferred`. The item returns after a delay set in the lore rules, and its
 weight keeps growing with age, so deferring everything can't dodge the next boss.
-Gaps to design: agents claiming work (a renewable claim that lapses when an agent goes quiet); who accepts a
-milestone without Paperclip (a sealed decision that breaks the Hall's seal); team conflicts (sealed decisions need
-one authority, the shared ledger only merges); notifications when the game is closed; local counters for the success
-measures; an automated test suite for the safety rules. Still open with the user: does "no GitHub" also cover GitHub
-Pages hosting and the save repos / Marketplace in PLAN-settlements; the pack licences vs open source.
+
+**Gaps, now designed:**
+- *Agents claiming work (R3):* a **lease** (user picked "renewed by any poll or progress post"; with no server it
+  starts when the player copies the prompt on `/work`, and pasting a progress report renews it). The length is set in
+  the lore rules. When it lapses, the work goes back on the board and the Keeper shows as "wandered off".
+- *Who accepts a milestone without Paperclip (R5):* **a council vote for big milestones (`quest:council`), the
+  March's steward otherwise.** When every Work is done, a "Is this milestone shipped?" Riddle appears; sealing it
+  breaks the Hall's seal.
+- *Team conflicts (R1 field, used later):* **each March has a steward who seals its decisions, with the Realm owner as
+  fallback.** Teammates' answers show as proposals (safety rule 10). Store `sealed_by` and `steward` from R1.
+- *Notifications when the game is closed:* **only a "while you were away" digest on the Beacon when you open the game.**
+  No push, desktop or email notifications for now.
+- *Success measures:* **a local event log in the save** (Riddle raised, answered or deferred; agent blocked or
+  unblocked; play session start and end), shown as a stats board in the Keeper's Lodge. It never leaves the machine.
+  Starts in R1 with question-to-answer time.
+- *Safety rule tests:* **`node:test`, one test per rule, added in the release that introduces the rule**, against a fake
+  Paperclip fixture. No new dependency.
+
+**Open questions, answered:**
+- "No GitHub" means GitHub is not a work source. **GitHub Pages hosting is fine.**
+- **The Marketplace stays on GitHub** (`thenewurbankid-web/claude-quest-marketplace`); **saves can push to any git
+  host**, optionally.
+- Pack licences vs open source: **decide when the Marketplace is built.**
 
 ## Milestones
 Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
@@ -294,10 +356,10 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Both views import the core, and the 2D page moves to modules.
   - Done when both views play exactly as before.
 - **M1 Protocol + sources (read-only).** Local Ledger and Paperclip adapters; schema validation and
-  repair-quest detection; agent registry (read-only); the Ledger panel and the Paperclip frame.
-  - `lib/protocol.js` (types and marks) and a `source` plugin kind in `lib/plugins.js`.
-  - `plugins/source/paperclip`, built on `lib/paperclip.js` (`snapshot`, goals, issues).
-  - `GET /api/protocol` plus the existing SSE stream; it computes weights, the backlog score and the Beacon.
+  repair-quest detection; agent registry (read-only); the Ledger panel.
+  - A browser protocol module (types and marks) and a `source` plugin kind, both in `public/`.
+  - `plugins/source/paperclip`, reading through the Paperclip connector (`snapshot`, goals, issues).
+  - The protocol module computes weights, the backlog score and the Beacon in the page (no `/api/protocol`).
   - In both views: the Beacon chip and the in-game log (open items plus the last 5 resolved).
   - Nothing writes to Paperclip yet.
 - **M2 Lore runtime.** Plus the LLM adapter additions (`usage`, `runs`, capabilities, job routing, templates).
@@ -312,20 +374,20 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Fallen Bridges for cross-project dependencies.
   - Keepers shown free or busy.
   - 3D first, using `3d/scene.js` and `hub.js`; 2D reads the same core.
-- **M4 Questions, decisions, safety.** Plus the agent polling endpoint (register, work, progress) and the in-game
-  agent controls.
+- **M4 Questions, decisions, safety.** Plus the `/work` relay page (register, queued prompts, pasted results) and the
+  in-game agent controls.
   - Seal UI, True Sight and the outbox with recall.
   - Risk tiers and the never-in-game list.
-  - Paperclip write-back (`comment`, `patchIssue`).
+  - Write-back to the Work in the ledger, and to Paperclip through the connector.
   - A teammate's existing answer is shown instead of overwritten; stale questions expire.
   - The Recall Bell, built from today's "send the guild home".
-  - Ember as stamina from the company budget.
+  - Ember as stamina from our own budget count.
   - Riddle batches answered through NPCs.
   - An Errand Trail generator.
   - Speaking Stones and Lumi for delivery.
   - An interruption scheduler with tiers, frequency, quiet hours and never mid-battle.
   - Reuse the 2D `ui.js` dialog flows.
-- **M5 Starting work.** Plus the built-in local runner and the agent registry for play without Paperclip.
+- **M5 Starting work.** Plus the agent registry for play without Paperclip (no local runner: no server).
   - Talking to an NPC or summoning a Keeper creates a task or project, after a confirm and with a token readout.
   - Uses the studio chat providers (`public/studio/chat.js`, `lib/plugins.js`).
 - **M6 Battle core, hybrid mode.**
@@ -349,25 +411,27 @@ Each is shippable and tested on its own. Reuse what exists; don't rebuild it.
   - Multiplayer with shared team state (PLAN-settlements Phase F).
   - Task sizing by agents.
 
-## Effort estimate
-In working sessions like today's (one focused build-and-test session each). Rough, with the risky parts named.
+## Effort estimate (by release, parallel, 2026-10-03)
+A round is one session long (3–4 h, from commit times on 2026-10-02/03). Work = sessions of effort across all
+parallel slices, including the contract and integration steps (about one session per release).
 
-| Milestone | Sessions | Main risk |
-|---|---|---|
-| M0 Shared core | 1–2 | `world.js` is 1,527 lines of globals; moving it to modules without breaking 2D |
-| M1 Protocol + two sources | 2–3 | two adapters (Local Ledger, Paperclip) mapping cleanly onto one schema |
-| M2 Lore runtime (Ink) | 2 | moving all hard-coded text without changing what players see |
-| M3 Map from protocol | 2–3 | laying out regions that grow and unfog nicely |
-| M4 Questions + safety + agents | 4–5 | the largest: many flows, write-back, scheduler, agent link; must be bulletproof |
-| M5 Starting work | 1 | small; reuses the studio chat |
-| M6 Battle core, hybrid | 3–4 | combat feel needs tuning; boss and foe art (Blender plugin helps) |
-| M7 Sealed Halls as dungeons | 3–4 | generating puzzles that are actually fun |
-| M8 Progression | 2 | balancing difficulty against real work pace |
-| M9 More modes + 2D parity | 2–3 | doing everything twice in 2D |
-| **Total** | **~22–30** | |
+| Release | Rounds | Work (sessions) | Built side by side | Main risk |
+|---|---|---|---|---|
+| R0 The Beacon lights up | 2 | 3 | ledger store ∥ Beacon/panel | the 3D view has no UI layer yet |
+| R1 Riddles | 2 | 5 | conversation box ∥ Riddle logic ∥ outbox/write-back ∥ tests/log/digest | getting the safety flows exactly right |
+| R2 The Gloamwyrm | 3 | 5 | boss ∥ weights ∥ placeholder art, then tuning, then **playtest (gate)** | combat feel; the fun itself |
+| R3 Bring your Keeper | 2 | 4 | `/work` + lease ∥ start work/Ember/Recall Bell ∥ Paperclip connector | relayed results passing validation |
+| R4 The first Sealed Hall | 2 | 5 | layout ∥ puzzles ∥ Warden ∥ Sigil/Embertale | puzzles that are fun |
+| R5 Your own Realm | 2 | 5 | planner NPC ∥ New Game/Load ∥ split save ∥ acceptance | save migrations |
+| R6+ | ~6 | ~12 | shared core alone, then Ink/LLM ∥ progression/league ∥ modes/2D parity | `world.js` is 1,527 lines of globals |
+| **Total** | **~19** | **~39** | | |
 
-The first playable version of the full loop (work → questions → boss → hall) is M0–M6: about 15–21 sessions.
-Art for bosses and halls, and how much tuning the fun needs, are the biggest unknowns; feel tuning can add 20–30%.
+**ETA at 5 rounds a week from 2026-10-04:** playtest (7 rounds) 2026-10-13; R5 (13) 2026-10-21; everything (~19)
+2026-10-29. With the 30% tuning/art buffer: R5 2026-10-27, everything 2026-11-06.
+**Hours** at 3–4 h a session: playtest 39–52 h, R0–R5 81–108 h, everything 117–156 h (150–200 h with the buffer).
+Parallel finishes in about 60% of the calendar time of one-at-a-time (~31 sessions, 2026-11-16) but costs about
+25% more work and tokens per day, and several streams to review at once. The Quest Engine Council artifact compares
+both modes for any start date, cadence and session length.
 
 ## Open questions (ask when their milestone comes up)
 - Towns inside a March: one per Sealed Hall, or per agent workplace? (M3)
@@ -375,11 +439,11 @@ Art for bosses and halls, and how much tuning the fun needs, are the biggest unk
 - Licences for inkjs and Tiled; whether Tiled maps are worth it over the code-built grid. (M2, M3)
 
 ## Verification
-Per milestone, on the side server (a `claude-quest-studio`-style launch config with a scratchpad copy of `data/`,
-never the real 4777 game), checked in the browser pane with no console errors:
+Per milestone, served as static files by a dev-only file server (a launch config; the game itself needs no server),
+with a throwaway ledger in its own browser profile, never the real 4777 game, and checked in the browser pane with no
+console errors:
 - **M0:** both views behave as before (walk, NPCs, dialogue in 2D; weather and actors in 3D).
-- **M1:** compare `/api/protocol` against MAX FE in Paperclip. Weights, the Beacon and the log match the issues
-  and goals.
-- **M4:** use a throwaway Paperclip company for write-back tests. Covers recall, the risk-tier confirm, and stale
+- **M1:** load the sample Realm; weights, the Beacon and the log match its Halls and Works.
+- **M4:** use a throwaway ledger for write-back tests. Covers recall, the risk-tier confirm, and stale
   and teammate cases.
 - **M6–M7:** script a boss with three fake questions. Check it pauses, the input lock works and retreat works.

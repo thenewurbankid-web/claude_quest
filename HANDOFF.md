@@ -11,13 +11,21 @@ boss that pauses for each real question. A Quest protocol sits between the game 
 first `source` plugin). One render-free shared core for the 2D and 3D views. Ink for lore files. 12 safety rules.
 Each project is a campaign win; Sigils, trophies and the Champions League live in the save file. No creature
 collecting (PLAN-adventure §5 rewritten).
-- **Next: R0 "The Beacon lights up"** (see Releases in PLAN-engine.md; releases replaced "M0 first"): in the 3D
-  view, read-only from the Paperclip snapshot in `world.guild`: the Beacon, the in-game log (open + last 5 resolved),
-  a Sealed Hall per Paperclip goal (locked/open), Keepers busy/free. Test on a side server with a scratchpad copy of
-  `data/`, against MAX FE. Then R1 Riddles, R2 the Gloamwyrm (playtest the fun).
-- Later decisions in PLAN-engine.md: no GitHub source (Local Ledger + Paperclip), agents poll the Quest server
-  (`/work` page for hand relay), saves carry the full ledger, split into parts with archiving, LLM adapter routing.
-- **The game server on 4777 is down** (the app quit); restart it with the `claude-quest` launch config.
+- **No server except a Paperclip connector** (user, 2026-10-03; see "No server" in PLAN-engine.md): the game becomes
+  browser-only (static files + IndexedDB). Paperclip goes through a small optional Node connector that only passes
+  reads through and posts sealed comments (Paperclip sends no CORS header), built in R3 or later. Agents come in only through the `/work`
+  copy-paste page,
+  and `app.js` keeps running today's game until the browser version replaces it. No new features go into `app.js`.
+- **Releases run in parallel** (see "How a release runs" in PLAN-engine.md): contract step first, then each slice in
+  its own worktree side by side, then integration with the safety tests. Only integration edits `public/3d/scene.js`.
+- **Next: R0 "The Beacon lights up"** (see Releases in PLAN-engine.md): in the 3D view, browser only, from the Local
+  Ledger: a minimal ledger in IndexedDB, a Ledger panel to add Halls and Works, a sample Realm, then the Beacon, the
+  in-game log (open + last 5 resolved), a Sealed Hall per Hall (locked/open), Keepers busy/free. Serve the static
+  files with a dev-only file server and a throwaway ledger, never the real 4777 game. Then R1 Riddles, R2 the
+  Gloamwyrm (playtest against the written criteria).
+- Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
+  Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
+  LLM adapter routing.
 - The game-studio plugin work below continues alongside (step 2, the Blender plugin, is scoped but not started).
 - The real game on 4777 was restarted from this session on 2026-10-03 and now runs the studio code.
 
