@@ -51,8 +51,9 @@ cool street theme". They picked **new setting, same physics**: `CombatSimulation
   (one stutters), a sodium street lamp, string lights, three fire barrels (flames, smoke, flickering light), two cars
   with headlight spots and flares, a chain-link fence, a dumpster, pallets, a steaming manhole and rain. The onlookers
   are thin-instanced people in three rows, open on the hard camera's side.
-- Lighting: moonlight hemi, a work lamp over the fight (the key and the shadow caster) and a wide flood. 13 lights in
-  all, so every material gets `maxSimultaneousLights = 14`. A `ReflectionProbe` (refreshed every 30 frames) stands in
+- Lighting: moonlight hemi, a work lamp over the fight (the key and the shadow caster) and a wide flood. 15 lights in
+  all; at night each ranged light is limited to the meshes it reaches (`limitLights`), a mesh in reach of more keeps its
+  strongest, and every material gets `maxSimultaneousLights = 8` (phones allow ~16 uniform blocks). A `ReflectionProbe` (refreshed every 30 frames) stands in
   for an HDRI on glass, car paint and skin sweat. Post: ACES, exposure 1.2, vignette 1.4, light chromatic aberration,
   sharpen.
 - `boxer-model.js`: `colors.wraps` gives taped fists instead of gloves and low sneakers instead of high-tops (white on
@@ -136,6 +137,12 @@ and crowd are unchanged. Approved changes from the plan: no roughness maps (a ba
 Built in 9717ad6 (WIP) and finished here. `boxer-model.js`: `LOOK_OPTIONS`, `normalizeLook`, skin tones (medium = light texture tinted in `paintOutfit`). `look-preview.js`: live preview, one `ModelBoxer` rebuilt on each change. `index.html`: Look panel; the look is saved in the Dexie `fighters` row and re-normalized on boot. New `profile.js`: `profileOf` (ships `look: normalizeLook(...)`, render-only, `FighterModel` ignores it) and `receivedProfile`, which `startMatch` applies to both corners, so a P2P look always goes through `normalizeLook` before the arena. The AI corner has no look and wears the blue photo outfit; a peer without one gets its corner's photo outfit. Tests: `normalizeLook`, `profileOf`/`receivedProfile`, and a look doesn't change a fight. `npm test` 96 pass.
 - **Untested in a browser** (nothing here has been run): the Look panel at 375px, the preview scene (lighting, framing, rebuild without leaking textures or breaking the arena's shared assets), skin tones, a reload keeping the look, two tabs of P2P showing each other's look, the AI opponent's outfit.
 - Not done: archetype AI opponents all share the blue photo outfit; the primitive fallback fighters ignore looks.
+
+## Done (2026-10-04): night shader on phone GPUs (BOX-6)
+
+`arena-babylon.js`: `limitLights()` sets `includedOnlyMeshes` on each ranged night light (point/spot) to the meshes whose bounds reach its range (beyond it the light is black anyway). A mesh in reach of more than 8 (ground, roofs, crowd) keeps the strongest 8 counting the moon and work lamp; the crowd's thin-instance bounds are refreshed first. `maxSimultaneousLights` is now 8 for every material (day too; it has 2 lights). All 15 lights stay. Measured at night in headless Chromium at 400 px: `scene.isReady()` true, max 8 lights on any mesh, no shader errors, card gone in ~6 s (software GL). Screenshots, same camera: `public/boxing/qa/box-6-night-before.png` / `-after.png`.
+- **Look change**: slightly darker than before, mostly the crowd rim and the far ground, where the weakest lights no longer reach. Raise light intensities if you want it back; I didn't, as that is an art call.
+- **Untested**: the real phone failure (this machine's GL allows 72 uniform buffers, so the old code compiled here too), lights on fighters as they move to the ring edge (margin 3 m from setup bounds), day view.
 
 ## Done (2026-10-04): night load card (BOX-2)
 

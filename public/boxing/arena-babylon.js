@@ -1229,6 +1229,35 @@ const TACTIC_LABEL = { pressure: 'Pressure', outbox: 'Box outside', counter: 'Co
 
 // ─── Public entry point ──────────────────────────────────────────────────────
 
+
+const MAX_LIGHTS = 8;
+
+/** Each ranged light lights only the meshes it reaches (it is black beyond its range anyway). A mesh that still
+ *  has more than MAX_LIGHTS in reach, like the ground, keeps the strongest ones at its nearest point. */
+function limitLights(B, scene) {
+  const meshes = scene.meshes.filter((m) => m.getTotalVertices() > 0 && m.material && m.material.maxSimultaneousLights !== undefined && !m.material.disableLighting);
+  const ranged = scene.lights.filter((l) => l.isEnabled() && l.range < 1e6 && l.position);
+  const free = scene.lights.filter((l) => l.isEnabled()).length - ranged.length;
+  const kept = new Map(ranged.map((l) => [l, []]));
+  for (const m of meshes) {
+    m.computeWorldMatrix(true);
+    if (m.thinInstanceCount) m.thinInstanceRefreshBoundingInfo(true);   // the crowd's bounds are those of one person until told
+    const { minimumWorld: lo, maximumWorld: hi } = m.getBoundingInfo().boundingBox;
+    const margin = m.skeleton ? 3 : 0;   // fighters move about
+    const reach = [];
+    for (const l of ranged) {
+      const p = l.position;
+      const d = Math.hypot(Math.max(lo.x - p.x, 0, p.x - hi.x), Math.max(lo.y - p.y, 0, p.y - hi.y), Math.max(lo.z - p.z, 0, p.z - hi.z)) - margin;
+      if (d >= l.range) continue;
+      const c = { x: Math.min(Math.max(0, lo.x), hi.x), y: Math.min(Math.max(1, lo.y), hi.y), z: Math.min(Math.max(0, lo.z), hi.z) };   // the mesh's point nearest the fight
+      reach.push({ l, w: l.intensity * Math.max(1 - Math.hypot(c.x - p.x, c.y - p.y, c.z - p.z) / l.range, 0) + 1e-3 * (1 - d / l.range) });
+    }
+    reach.sort((x, y) => y.w - x.w);
+    for (const { l } of reach.slice(0, Math.max(MAX_LIGHTS - free, 0))) kept.get(l).push(m);
+  }
+  for (const [l, list] of kept) { if (list.length) l.includedOnlyMeshes = list; else l.setEnabled(false); }
+}
+
 /**
  * Mounts the 3D view in `parent` and starts rendering. Returns { destroy }.
  * names: { red, blue } for the lower thirds. looks: { red, blue } from character creation (see normalizeLook); a
@@ -1312,8 +1341,10 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
     boxers = { red: new Boxer(B, scene, 'red', shadow), blue: new Boxer(B, scene, 'blue', shadow) };
   }
 
-  // The street has a dozen lights; StandardMaterial takes four unless told otherwise.
-  for (const m of scene.materials) if ('maxSimultaneousLights' in m) m.maxSimultaneousLights = 16;
+  // 15 lights at night, but a shader needs one uniform block per light and phones allow ~16 in all. Each ranged light
+  // only lights the meshes inside its range (it is black beyond it anyway), so no material needs more than 8.
+  if (night) limitLights(B, scene);
+  for (const m of scene.materials) if ('maxSimultaneousLights' in m) m.maxSimultaneousLights = MAX_LIGHTS;
 
   // Sweat and spit on clean shots.
   const spray = new B.ParticleSystem('spray', 400, scene);
