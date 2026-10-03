@@ -8,7 +8,7 @@
 //   real:false}. isGameOnly keeps them out of the boss, the Haze, the stats and the digest. A lore Work closes when its
 //   entry ends (its open Riddle fades) or once its Riddle is sealed.
 // Render-free and pure apart from fetchAreaLore, so it runs under node:test.
-import { validateAreaLore, validateAreaLoreIndex, noChanges, isGameOnly } from './contract.js';
+import { validateAreaLore, validateAreaLoreIndex, validateAreaLoreCells, noChanges, isGameOnly } from './contract.js';
 import { ASK_LATER } from './riddles.js';
 
 // ---------- geohash ----------
@@ -62,15 +62,19 @@ const ms = iso => Date.parse(iso);
 const live = (e, t) => ms(e.startsAt) <= t && ms(e.endsAt) > t;
 
 /**
- * Reads the live entries for `cells` from a lore folder at `base` (a URL ending in /). A cell with no index, a bad
- * index or a bad entry is skipped, never an error: lore is a nice-to-have.
+ * Reads the live entries for `cells` from a lore folder at `base` (a URL ending in /). It reads lore/cells.json first
+ * and asks only for cells listed there; with no list it asks only for the first (own) cell, so a missing cell never
+ * shows as a 404 in the console. A cell with no index, a bad index or a bad entry is skipped, never an error.
  * @returns {Promise<{ entries: import('./contract.js').AreaLoreEntry[], reached: string[] }>}
  *   reached: the cells whose index was read, so a caller can tell "nothing live" from "offline"
  */
 export async function fetchAreaLore(base, cells, { now = new Date(), fetchFn = globalThis.fetch } = {}) {
   const t = now.getTime(), entries = [], reached = [];
   const get = async url => { const r = await fetchFn(url); if (!r.ok) throw new Error(`${r.status}`); return r.json(); };
-  await Promise.all(cells.map(async cell => {
+  let listed = null;
+  try { const c = await get(new URL('cells.json', base)); if (!validateAreaLoreCells(c).length) listed = new Set(c.cells); } catch {}
+  const ask = listed ? cells.filter(c => listed.has(c)) : cells.slice(0, 1);
+  await Promise.all(ask.map(async cell => {
     let ix;
     try { ix = await get(new URL(`${cell}/index.json`, base)); } catch { return; }
     if (validateAreaLoreIndex(ix).length || ix.cell !== cell) return;

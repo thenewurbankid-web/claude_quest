@@ -52,6 +52,7 @@ test('fetchAreaLore: a bad entry or one filed under the wrong cell is dropped', 
     'gcpv/bad.json': { id: 'bad', cell: 'gcpv', kind: 'politics' },
     'gcpv/moved.json': { ...JSON.parse(readFileSync(new URL('gcpv/bards-at-the-lodge.json', LORE))), id: 'moved', cell: 'gcpu' },
   };
+  files['cells.json'] = { version: 1, updatedAt: NOW.toISOString(), cells: ['gcpv'] };
   const fetchFn = async url => {
     const k = String(url).split('/lore/')[1];
     return files[k] ? { ok: true, json: async () => files[k] } : { ok: false, status: 404 };
@@ -141,4 +142,16 @@ test('safety: lore never moves the Gloamwyrm, the Haze, the Beacon, the stats bo
   assert.deepEqual(realmStats(l, NOW).all, before.stats.all);
   assert.deepEqual(digest(l, null), before.digest);
   assert.deepEqual(answerTimes(l), before.times);
+});
+
+test('fetchAreaLore: asks only for cells in cells.json, or only its own cell when there is no list', async () => {
+  const asked = [];
+  const spy = async url => { asked.push(String(url).split('sample-lore/')[1]); return fileFetch(url); };
+  await fetchAreaLore(LORE, cellAndNeighbours('gcpv'), { now: NOW, fetchFn: spy });
+  assert.ok(asked.every(a => a === 'cells.json' || a.startsWith('gcpv/')), asked.join(' '));
+  asked.length = 0;
+  const noList = async url => (String(url).endsWith('cells.json') ? { ok: false, status: 404 } : spy(url));
+  const { entries } = await fetchAreaLore(LORE, cellAndNeighbours('gcpv'), { now: NOW, fetchFn: noList });
+  assert.equal(entries.length, 3);
+  assert.ok(asked.every(a => a.startsWith('gcpv/')));
 });
