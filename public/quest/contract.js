@@ -57,7 +57,7 @@ export const QUEUE_MOVES = {
 // R1 adds the Riddle's later moves; question-to-answer time is riddle.raised → riddle.answered for the same ref.
 export const EVENT_KIND = ['riddle.raised', 'riddle.answered', 'riddle.deferred', 'riddle.recalled', 'riddle.sealed',
   'riddle.returned', 'riddle.faded', 'riddle.proposed', 'agent.blocked', 'agent.unblocked', 'session.start',
-  'session.end', 'riddle.asked', 'riddle.replied', 'boss.summoned', 'boss.retreated', 'boss.defeated'];
+  'session.end', 'riddle.asked', 'riddle.replied', 'boss.summoned', 'boss.retreated', 'boss.defeated', 'boss.pushed'];
 
 // ---------- lore rules (defaults) ----------
 // A world's lore folder overrides these (PLAN-engine.md, "Customizable through lore files"); until Ink lore lands in
@@ -77,6 +77,14 @@ export const DEFAULT_RULES = {
   bossHpPerWeight: 10,     // maxHp = round(score * this * strength)
   bossReturnGrowth: 0.25,  // each retreat: strength + this, so it returns stronger
   mashBonus: 0.15,         // the most extra damage mashing adds to a hit, as a share of that hit
+  // Heads and the Lantern (PLAN-fight.md): one head per Work in the fight; after each turn that lands a hit, every
+  // living head bites the Lantern, and each Keeper freed by a cut head guards one point of it.
+  lanternBase: 6,          // lantern = lanternBase + lanternPerHead * heads
+  lanternPerHead: 1,
+  dimHours: 12,            // a head whose question has waited this long is Dim: it bites 1 + one per started day, at most dimMax
+  dimMax: 3,
+  guardBlock: 1,           // what each freed Keeper takes off the Gloamwyrm's bite
+  lanternFromLight: 2,     // what a full light meter gives back to the Lantern when you tend it
 };
 
 // ---------- R2: the battle ----------
@@ -84,9 +92,13 @@ export const DEFAULT_RULES = {
 // rules, and the battle only reads which Riddles got resolved. Phases:
 //   fighting: turns run; question: paused on a normal-tier Riddle, no timer, input locked until the box closes;
 //   lodge: paused because a confirm- or never-tier Riddle came up; it is answered in the Lodge, never in combat;
-//   won: every Riddle in the fight resolved (answered or deferred); retreated: the player fell back to the Lodge.
+//   won: every Riddle in the fight resolved (answered or deferred); retreated: the player fell back to the Lodge, or
+//   was pushed back there when the Lantern ran out (pushed: true; no strength penalty, answers kept).
 // Hits come only from resolving a Riddle (deferring counts). Mashing scales a hit by at most mashBonus and never
 // picks an answer. hp never reaches 0 while any of the fight's Riddles is unresolved.
+// Heads: one per Work, cut when all its Riddles are resolved, which frees its Keeper to guard. Heads only bite in the
+// beat after a hit, while fighting; never during a question or the Lodge, and never against a clock.
+export const HEAD_KIND = ['snap', 'dim', 'echo'];
 export const BATTLE_PHASE = ['fighting', 'question', 'lodge', 'won', 'retreated'];
 export const BATTLE_MOVES = {
   fighting: ['question', 'lodge', 'won', 'retreated'],
@@ -145,7 +157,12 @@ export const stewardOf = (ledger, marchId) =>
  * @typedef {{ id: string, startedAt: string, phase: string, score: number, strength: number, hp: number, maxHp: number,
  *             riddleIds: string[], lodgeIds: string[], resolvedIds: string[], current: string|null, turn: number,
  *             endedAt?: string|null, weights?: Record<string, number>,
- *             dealt?: Record<string, number> }} Battle
+ *             dealt?: Record<string, number>, heads?: Head[], lantern?: number, lanternMax?: number,
+ *             pushed?: boolean }} Battle
+ * @typedef {{ workId: string, workTitle: string, keeperId: string|null, keeper: string|null, riddleIds: string[],
+ *             kind: string, bite: number, beats: number }} Head
+ *   kind: snap (a plain question), dim (waited dimHours or more), echo (put off before: bites harder each beat alive);
+ *   bite: its base bite; beats: beats it has bitten so far (an echo head adds one per beat)
  *   dealt: the hp each resolved Riddle took off, given back if its answer is recalled from the outbox
  *   weights: each fight Riddle's weight when it was summoned, so a hit's size is its share of maxHp
  *   riddleIds: normal-tier Riddles asked in the fight; lodgeIds: confirm/never ones that pause it for the Lodge;
@@ -279,6 +296,17 @@ export function validateBattle(b) {
   if (b.phase === 'won' && open.length) bad('phase', 'won with Riddles unresolved');
   if (b.phase === 'question' && !(b.riddleIds || []).includes(b.current)) bad('current', 'a question pause shows one of the fight\'s Riddles');
   if ((b.lodgeIds || []).includes(b.current) && b.phase !== 'lodge') bad('current', 'confirm/never Riddles are never asked in combat');
+  if (b.heads !== undefined) {
+    if (!Array.isArray(b.heads)) bad('heads', 'not a list');
+    else b.heads.forEach((h, i) => {
+      if (!HEAD_KIND.includes(h.kind)) bad(`heads[${i}].kind`, `${JSON.stringify(h.kind)} is not one of ${HEAD_KIND.join(', ')}`);
+      if (!h.riddleIds?.length || h.riddleIds.some(id => !all.includes(id))) bad(`heads[${i}].riddleIds`, 'a head is made of the fight\'s Riddles');
+      if (!(h.bite >= 1)) bad(`heads[${i}].bite`, 'bites at least 1');
+    });
+    if (!(b.lanternMax > 0) || !(b.lantern >= 0) || b.lantern > b.lanternMax) bad('lantern', 'needs 0 <= lantern <= lanternMax, lanternMax > 0');
+    if (b.lantern === 0 && !['retreated', 'won'].includes(b.phase)) bad('lantern', 'an empty Lantern ends the fight');
+  }
+  if (b.pushed && b.phase !== 'retreated') bad('pushed', 'only a fight that ended in the Lodge was pushed back');
   return out;
 }
 

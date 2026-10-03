@@ -82,7 +82,7 @@ const median = xs => {
 
 const STAT_KINDS = { raised: 'riddle.raised', answered: 'riddle.answered', deferred: 'riddle.deferred',
   sealed: 'riddle.sealed', faded: 'riddle.faded', blocked: 'agent.blocked', unblocked: 'agent.unblocked',
-  sessions: 'session.start', won: 'boss.defeated', retreated: 'boss.retreated' };
+  sessions: 'session.start', won: 'boss.defeated', retreated: 'boss.retreated', pushed: 'boss.pushed' };
 
 /** Minutes played from `from` on: each session.start to the next session.end, an open session up to now. */
 function playMinutes(events, from, now) {

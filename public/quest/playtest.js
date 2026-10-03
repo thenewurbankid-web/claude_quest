@@ -1,7 +1,9 @@
 // The R2 playtest backlog (PLAN-engine.md, "R2 playtest criteria"): the sample Realm with its open Riddles swapped for
 // three fake questions (ids p1-p3, nothing real in them), one normal, one risk:high, one on the never-in-game list, which together with the sample's
 // deferred Riddle cross the boss threshold. Times are set from `now`, so the backlog never fades before it is played.
-// heavier: the second session's backlog, "a day later": every question a day older and put off once more.
+// heavier: the second session's backlog, "a day later": every question a day older, the first put off twice and the
+// second once (the third is on the never list and only waits).
+// Their ages (6, 18 and 30 hours) give the fight one plain head and two dim ones (PLAN-fight.md); heavier makes two of them echo.
 const HOUR = 3600e3;
 const clone = v => JSON.parse(JSON.stringify(v));
 
@@ -37,10 +39,10 @@ export function playtestRealm(sample, now = new Date(), { heavier = false } = {}
     if (k4) k4.status = 'busy';
   }
   PLAYTEST_RIDDLES.forEach((p, i) => {
-    l.riddles.push({ ...clone(p), state: 'open', steward: null, raisedAt: iso(t - (6 + i * 5 + age) * HOUR),
-      deferCount: heavier ? 1 : 0 });
+    l.riddles.push({ ...clone(p), state: 'open', steward: null, raisedAt: iso(t - (6 + i * 12 + age) * HOUR),
+      deferCount: heavier ? [2, 1, 0][i] : 0 });
   });
   l.events = [...(l.events || []), ...PLAYTEST_RIDDLES.map((p, i) =>
-    ({ at: iso(t - (6 + i * 5 + age) * HOUR), kind: 'riddle.raised', ref: p.id }))];
+    ({ at: iso(t - (6 + i * 12 + age) * HOUR), kind: 'riddle.raised', ref: p.id }))];
   return l;
 }

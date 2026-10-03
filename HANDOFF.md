@@ -117,10 +117,15 @@ collecting (PLAN-adventure §5 rewritten).
   static server with `?playtest`.
   **Done (2026-10-03):** the three lines are in `battle.js` and checked in a fight on 4793. Next: the player replays
   fight 1. The player also said the fight "has to be interesting"; that's a bigger design question, not scoped yet.
-- **Open, for a fresh session: make the fight interesting (user, 2026-10-03).** Today a turn is: pick a question,
-  answer it, optionally mash Space. Brainstorm with the user before any code; keep the safety rules (no timers on
-  questions, input lock, the Lodge for confirm/never, hits only from resolving Riddles). Replay fight 1 first if the
-  user wants a baseline with the new wording.
+- **The fight has heads and a Lantern (2026-10-03, PLAN-fight.md, approved and built):** one Gloamwyrm head per stuck
+  Work, named with its Keeper; after a turn that lands a hit, living heads bite your Lantern (snap / dim / echo from
+  why the Work is heavy); a cut head frees its Keeper, who guards. The order you cut is the tactic. An empty Lantern
+  pushes you back to the Lodge with no strength penalty (`boss.pushed`). "Tend the Lantern" spends light. `boss.js`
+  `beat`/`tend`/`headsOf`; `battle.js` Lantern bar and head lines; `gloamwyrm.js` extra heads drop when cut. Playtest
+  ages changed (6/18/30 h; heavier defers p1 twice, p2 once). `npm test` 96 pass; checked on 4793 (dev-battle: a
+  full fight, 375px, no console errors). The push-back screen is unit-tested only. **Next: the player replays fight 1
+  with `?playtest`** (PLAYTEST-R2.md), then tune the numbers. R3 (Lore quests): the Battle record now carries
+  `heads`, `lantern`, `lanternMax`, `pushed`.
 - **R3 is now "Lore quests" (user, 2026-10-03):** players with no work get game-only quests from shared area lore
   (local weather and happenings, written once per geohash-4 cell by Ollama on a self-hosted runner). Design and run
   order in PLAN-engine.md, "R3 Lore quests"; Bring your Keeper and everything after it moved down one (R4–R7+).

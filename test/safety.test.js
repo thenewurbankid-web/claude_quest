@@ -95,3 +95,12 @@ test('combat: no answer changes hit power, and only resolving a Riddle lands a h
   assert.equal(a[0].damage, c[0].damage);
   assert.deepEqual(settle(l0, face(fight, 'p1'), { mash: 1 }, T0).hits, []);
 });
+
+test('combat: the Gloamwyrm never bites while a question or the Lodge is open, and a push-back keeps answers', async () => {
+  const { playtestRealm } = await import('../public/quest/playtest.js');
+  const { summon, face, beat, emptyBossPlay } = await import('../public/quest/boss.js');
+  const { play: fight } = summon(playtestRealm(sample(), T0), emptyBossPlay(), T0);
+  for (const id of ['p1', 'p2', 'p3']) assert.throws(() => beat(face(fight, id), T0), /only bites while the fight is on/);
+  const pushed = beat({ ...fight, battle: { ...fight.battle, resolvedIds: [], lantern: 1 } }, T0).play;
+  assert.equal(pushed.retreats, fight.retreats || 0);
+});

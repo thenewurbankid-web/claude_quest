@@ -82,6 +82,7 @@ export function mountStatsBoard(container) {
         ['Keepers got going again', w.unblocked, a.unblocked],
         ['Gloamwyrms beaten', w.won, a.won],
         ['Retreats', w.retreated, a.retreated],
+        ['Pushed back (Lantern out)', w.pushed, a.pushed],
         ['Play sessions', w.sessions, a.sessions],
         ['Time played', duration(w.playMinutes), duration(a.playMinutes)],
       ];
