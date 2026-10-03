@@ -4,6 +4,7 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**R5 Keepers built (CLA-2, `f637232`, 2026-10-04):** `keeper-controls.js` adds `summon` (spends `summonCost` Ember, refuses a poor Well, empty or taken name), `joinSummoned` (a summoned Keeper joins when a Work it holds is `done`; integration must call it on every ledger change) and `release` (never deletes; refused while a live run exists). `keeper-hud.js` has Summon (form, then a confirm naming the Ember) and Release (press twice) in the Keepers dialog. `npm test` 168 pass. **Untested in the browser:** the Summon form and Release buttons (`dev-keepers.html`), 375px layout. **Next:** CLA-3, R5 UI (Missions tab, mission HUD).
 **Latest (2026-10-03, end of R4 session):** R4 tidy committed (`f08151c`); a parallel session merged its plan
 (`2b00dc3`: R4.5 The Bridge, R5 Missions, R6 Drama, R7 Own Realm, R8 The Source, R9+) and committed the R5 contract
 (`0e54f1d`). **User: build R5 Missions next, before R4.5** (after their R4 play notes). R5 plan: PLAN-engine.md
