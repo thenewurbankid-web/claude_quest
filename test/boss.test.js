@@ -32,7 +32,7 @@ test('weights: the score is the sum over open and deferred Riddles, grouped by W
   const r4 = s.parts.find(p => p.riddleId === 'r4');
   assert.match(whyLine(r4), /ask me later/);
   assert.ok(s.works.length && s.works[0].weight >= s.works.at(-1).weight);
-  assert.ok(bossSize(s.score) >= 1 && hazeLevel(s.score) > 0 && hazeLevel(0) === 0);
+  assert.ok(bossSize(s.score) >= 1 && hazeLevel(s.openScore) > 0 && hazeLevel(0) === 0);
 });
 
 test('summon: normal Riddles are asked in combat, confirm/never ones only pause it for the Lodge', () => {
@@ -111,4 +111,28 @@ test('retreat works from any turn, keeps answers, and the next one comes back st
   assert.equal(again.strength, 1.25);
   assert.ok(!again.riddleIds.includes('p1'));                         // and isn't asked again
   assert.equal(again.maxHp, Math.round(again.score * DEFAULT_RULES.bossHpPerWeight * 1.25));
+});
+
+test('the Haze follows open questions, so winning by putting everything off still clears the sky', async () => {
+  let l = realm();
+  assert.ok(hazeLevel(bossScore(l, T0).openScore) > 0.4);
+  for (const id of ['p1', 'p2', 'p3']) l = await apply(l, answerRiddle(l, id, { text: ASK_LATER, by: 'player' }, T0));
+  const s = bossScore(l, T0);
+  assert.ok(s.over);                         // put off, they still weigh: the next fight will come
+  assert.equal(hazeLevel(s.openScore), 0);   // but nothing is open, so the Haze lifts
+  assert.equal(shouldSummon(l, emptyBossPlay(), T0), false);
+});
+
+test('a recalled answer takes its hit back', async () => {
+  const { recallRiddle } = await import('../public/quest/outbox.js');
+  let l = realm();
+  let { play } = summon(l, emptyBossPlay(), T0);
+  l = await apply(l, answerRiddle(l, 'p1', { text: 'Keep both', by: 'player' }, T0));
+  const hit = settle(l, face(play, 'p1'), {}, T0);
+  l = await apply(l, recallRiddle(l, 'p1', new Date(T0.getTime() + 2000)));
+  const back = settle(l, hit.play, {}, T0);
+  assert.equal(back.healed[0].hp, hit.hits[0].damage);
+  assert.equal(back.play.battle.hp, back.play.battle.maxHp);
+  assert.ok(!back.play.battle.resolvedIds.includes('p1'));
+  assert.deepEqual(validateBattle(back.play.battle), []);
 });

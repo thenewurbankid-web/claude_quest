@@ -118,11 +118,18 @@ const battle = mountBattle(document.body, { store, talk, rules, play: loadPlay()
   onEnd: () => keep({ calmUntil: Date.now() + CALM_MINUTES * 60e3 }) });
 addEventListener('quest:battle', e => lock(!!e.detail?.open));
 
+// The scene's fog only reaches the far edge of the view, so the Haze also shows as a soft violet vignette over it.
+const veil = document.createElement('div');
+veil.setAttribute('aria-hidden', 'true');
+Object.assign(veil.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: 5, opacity: '0',
+  transition: 'opacity 3s ease', background: 'radial-gradient(ellipse at 50% 55%, rgba(120,96,190,0) 30%, rgba(120,96,190,.55) 75%, rgba(70,52,130,.85) 100%)' });
+document.body.append(veil);
 let lastHaze = null;
 const tellHaze = l => {
-  const h = hazeLevel(bossScore(l, new Date(), rules).score, rules);
+  const h = hazeLevel(bossScore(l, new Date(), rules).openScore, rules);
   if (h === lastHaze) return;
   lastHaze = h;
+  veil.style.opacity = String(h * 0.8);
   window.__questHaze = h;
   dispatchEvent(new CustomEvent('quest:haze', { detail: h }));
 };

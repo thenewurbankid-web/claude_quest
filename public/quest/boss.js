@@ -40,7 +40,8 @@ export function bossScore(ledger, now = new Date(), rules = DEFAULT_RULES) {
     byWork.set(p.workId, g);
   }
   const score = round2(parts.reduce((s, p) => s + p.weight, 0));
-  return { score, threshold: rules.bossThreshold, over: score >= rules.bossThreshold, parts,
+  const openScore = round2(parts.filter(p => p.state === 'open').reduce((s, p) => s + p.weight, 0));
+  return { score, openScore, threshold: rules.bossThreshold, over: score >= rules.bossThreshold, parts,
     works: [...byWork.values()].sort((a, b) => b.weight - a.weight) };
 }
 
@@ -55,9 +56,13 @@ export function whyLine(p) {
 /** How big the Gloamwyrm looks: 1 at the threshold, growing with the score, capped so it stays on screen. */
 export const bossSize = (score, rules = DEFAULT_RULES) => Math.min(2.2, Math.max(0.6, Math.sqrt(score / rules.bossThreshold)));
 
-/** How thick the Haze hangs over the world, 0 (clear) to 1, from the score. It starts building at half the threshold. */
-export const hazeLevel = (score, rules = DEFAULT_RULES) =>
-  round2(Math.min(1, Math.max(0, (score - rules.bossThreshold / 2) / (rules.bossThreshold * 1.5))));
+/**
+ * How thick the Haze hangs over the world, 0 (clear) to 1, from the weight of OPEN Riddles (bossScore's openScore):
+ * put-off ones still summon the Gloamwyrm, but a fight won by clearing every open question visibly clears the sky.
+ * It starts after the first question and is full at 1.5 times the threshold.
+ */
+export const hazeLevel = (openScore, rules = DEFAULT_RULES) =>
+  round2(Math.min(1, Math.max(0, (openScore - 1) / (rules.bossThreshold * 1.5 - 1))));
 
 // ---------- the battle ----------
 export const emptyBossPlay = () => ({ battle: null, retreats: 0 });
@@ -124,13 +129,22 @@ export function face(play, riddleId) {
  * After a pause closes: every fight Riddle the ledger now shows resolved lands a hit (deferring counts), sized by its
  * weight's share of maxHp. mash (0..1) adds at most rules.mashBonus of a hit and never picks an answer. hp only reaches
  * 0 with the last Riddle, and then the fight is won. A pause closed with no answer just goes back to fighting.
- * Returns { play, hits: [{ riddleId, damage, mashed }], events }.
+ * Returns { play, hits: [{ riddleId, damage, mashed }], healed: [{ riddleId, hp }], events }.
  */
 export function settle(ledger, play, { mash = 0 } = {}, now = new Date(), rules = DEFAULT_RULES) {
   const b = clone(play.battle);
   if (!active(b)) throw new Error('no fight is on');
   const riddles = new Map((ledger.riddles || []).map(r => [r.id, r]));
   const all = [...b.riddleIds, ...b.lodgeIds];
+  // An answer recalled from the outbox reopens its Riddle: the hit it landed is taken back.
+  const healed = [];
+  for (const id of b.resolvedIds.filter(id => !resolved(riddles.get(id)))) {
+    b.resolvedIds = b.resolvedIds.filter(x => x !== id);
+    const back = b.dealt?.[id] || 0;
+    b.hp = Math.min(b.maxHp, b.hp + back);
+    if (b.dealt) delete b.dealt[id];
+    healed.push({ riddleId: id, hp: back });
+  }
   const newly = all.filter(id => !b.resolvedIds.includes(id) && resolved(riddles.get(id)));
   const total = all.reduce((s, id) => s + (b.weights?.[id] || 1), 0);
   const m = Math.min(1, Math.max(0, Number(mash) || 0));
@@ -140,7 +154,9 @@ export function settle(ledger, play, { mash = 0 } = {}, now = new Date(), rules 
     const base = b.maxHp * (b.weights?.[id] || 1) / total;
     const left = all.length - b.resolvedIds.length;
     const damage = Math.round(base * (1 + m * rules.mashBonus));
+    const before = b.hp;
     b.hp = left ? Math.max(1, b.hp - damage) : 0;
+    b.dealt = { ...(b.dealt || {}), [id]: before - b.hp };
     hits.push({ riddleId: id, damage: left ? damage : Math.max(damage, 1), mashed: m > 0 });
   }
   const at = now.toISOString(), events = [];
@@ -156,7 +172,7 @@ export function settle(ledger, play, { mash = 0 } = {}, now = new Date(), rules 
     next = { battle: b, retreats: 0 }; // it's beaten: the next one starts at full strength again
   }
   check(b);
-  return { play: next, hits, events };
+  return { play: next, hits, healed, events };
 }
 
 /** Fall back to the Lodge, from any turn. Answers already given stay in the ledger; the Gloamwyrm comes back stronger. */

@@ -127,16 +127,17 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
   // Pressing Space or "Gather light" fills a meter that slowly drains; the next hit spends it. It adds at most
   // rules.mashBonus to that hit and is never read by anything that answers.
   const meterFill = el('i');
+  // It only drains on your turn (never while a question is open), slowly enough to charge during the Gloamwyrm's beat.
   const drain = () => {
     const now = performance.now();
-    mash = Math.max(0, mash - (now - mashAt) / 1000 * 0.18);
+    if (view === 'turn') mash = Math.max(0, mash - (now - mashAt) / 1000 * 0.06);
     mashAt = now;
     meterFill.style.width = `${Math.round(mash * 100)}%`;
   };
   const gather = () => {
-    if (root.hidden || view !== 'turn' || busy) return;
+    if (root.hidden || view !== 'turn') return; // the Gloamwyrm's beat included: something to do while it moves
     drain();
-    mash = Math.min(1, mash + 0.1);
+    mash = Math.min(1, mash + 0.08);
     meterFill.style.width = `${Math.round(mash * 100)}%`;
   };
   setInterval(() => !root.hidden && drain(), 200);
@@ -158,7 +159,10 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     hp.setAttribute('aria-valuenow', String(b.hp));
     hpNum.replaceChildren(el('span', '', `${b.hp} / ${b.maxHp}`), el('span', '', `turn ${b.turn}`));
     // Why it is the size it is: the score at the summons, and every Work feeding it with each Riddle's reasons.
-    const sum = el('summary', '', `Size ${b.score} (it rises past ${rules.bossThreshold}): fed by ${score.works.length} Work${score.works.length === 1 ? '' : 's'}`);
+    const names = score.works.slice(0, 2).map(w => w.workTitle).join(', ') + (score.works.length > 2 ? ` +${score.works.length - 2}` : '');
+    const sum = el('summary', '', score.works.length
+      ? `Size ${b.score} (it rises past ${rules.bossThreshold}), fed by ${names}. Why?`
+      : `Size ${b.score}: nothing feeds it any more.`);
     const list = el('ul');
     for (const w of score.works) {
       const li = el('li', '', `${w.workTitle} (${w.march}): ${w.weight}`);
@@ -203,7 +207,6 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     }
     const row = el('div', 'qbt-row');
     const light = btn('Gather light (Space)');
-    light.disabled = busy;
     light.addEventListener('pointerdown', e => { e.preventDefault(); gather(); });
     light.addEventListener('click', e => { if (e.detail === 0) gather(); }); // keyboard Enter
     const meter = el('div', 'qbt-meter');
@@ -292,6 +295,8 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     save(res.play);
     await logEvents(res.events);
     const dealt = res.hits.reduce((s, h) => s + h.damage, 0);
+    const regained = res.healed.reduce((s, h) => s + h.hp, 0);
+    if (regained && !line) line = `An answer was recalled. The Gloamwyrm regains ${regained}.`;
     if (dealt) { wyrm?.hit(Math.min(1, dealt / play.battle.maxHp * 3)); popDamage(dealt); }
     if (play.battle.phase === 'won') {
       view = 'won';
@@ -320,6 +325,15 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
     onEnd(play);
     await draw(`You fall back to the Lodge. ${note}`);
   }
+
+  // Answers sealed, recalled or put off elsewhere (the outbox strip stays usable mid-fight) are picked up on your turn.
+  store.subscribe(l => {
+    const b = play.battle;
+    if (root.hidden || view !== 'turn' || busy || !b || ['won', 'retreated'].includes(b.phase)) return;
+    const state = new Map(l.riddles.map(r => [r.id, r.state]));
+    const off = [...b.riddleIds, ...b.lodgeIds].some(id => (state.get(id) !== 'open') !== b.resolvedIds.includes(id));
+    if (off) onSettle();
+  });
 
   function close() {
     root.hidden = true;

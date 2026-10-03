@@ -74,6 +74,14 @@ collecting (PLAN-adventure §5 rewritten).
   4791 (`quest-static-2`; 4790 belonged to another chat): win, retreat (returns ×1.25), 375px, no console errors.
   Known gaps for tuning: light drains fast (0.18/s), a recalled answer keeps the hit it landed, the Haze is faint at
   night, the Lodge is the plain box rather than a place. **Next: tuning, then the playtest (gate).**
+- **R2 tuning pass (2026-10-03):** the Haze follows only OPEN Riddles (`bossScore().openScore`), so a fight won by
+  putting everything off still clears the sky (put-off ones keep summoning the next one); it also shows as a violet
+  vignette from `boot.js`, since the fog never reaches the close camera. A recalled answer takes its hit back
+  (`battle.dealt`, `settle().healed`), and answers sealed, recalled or put off mid-fight are picked up on your turn.
+  Light drains at 0.06/s only on your turn and can be gathered during the Gloamwyrm's beat. The "fed by" line names
+  the top Works. `npm test` 84 pass. Open: a fake three-question fight probably runs 1.5–3 min, under the 3–6 min
+  target; measure it in the playtest before padding anything. The Lodge stays the plain confirm (rule 3).
+  **Next: the playtest (gate):** `/?playtest` on a static server, then `/?playtest=heavier` a day later.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
