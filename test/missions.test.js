@@ -98,3 +98,27 @@ test('the gate: side content locks at the gate and opens again once pressure dro
   assert.equal(gated(l, late).gated, false);
   assert.deepEqual(GATED, ['lore-quests', 'lore-tab', 'explore']);
 });
+
+// ---------- R5 UI text helpers ----------
+import { hudView, briefingLines, debriefLines, speakerFor, findMission, countdown } from '../public/quest/mission-hud.js';
+
+test('mission hud: nothing without a current mission, else title, state, progress and countdown', () => {
+  const l = sample();
+  assert.equal(hudView(l, emptyMissionPlay(), NOW), null);
+  const mp = begin(emptyMissionPlay(), l, 'w3', NOW).mp;
+  const v = hudView(l, mp, NOW);
+  assert.deepEqual([v.title, v.state, v.progress], ['Pricing page', 'briefing', '1 of 4 done']);
+  assert.match(v.countdown, /to the release/);
+});
+
+test('mission talk: spoken by the Work\'s Keeper, plain facts only, debrief names what is left', () => {
+  const l = sample();
+  const mp = begin(emptyMissionPlay(), l, 'w3', NOW).mp;
+  assert.equal(speakerFor(l, findMission(l, mp, 'w3', NOW).mission).name, 'Bramble');
+  assert.equal(speakerFor(l, findMission(l, mp, 'w8', NOW).mission).name, 'The Hall steward');
+  const b = briefingLines(l, mp, 'w3', NOW);
+  assert.ok(b.some(x => x.includes('Pricing page')) && b.some(x => x.includes('4 pieces')));
+  assert.deepEqual(briefingLines(l, mp, 'nope', NOW), []);
+  assert.match(debriefLines(l, mp, 'w3', NOW).join(' '), /Sealed Hall/);
+  assert.match(countdown(findMission(l, mp, 'w8', NOW).saga), /No release date/);
+});

@@ -2,7 +2,8 @@
 // PLAN-settlements §16 lands. Opened from the board ('quest:board'); Close, Escape or a click outside closes it.
 // Each Town news row shows the in-world line with the real event as its hint (a tooltip, and a small line under it for
 // touch screens), and "Take it on" when its game-only Riddle is still open. show() resolves with the Riddle id picked,
-// or null. When the place is only guessed from the time zone, a button offers to use a rough location once.
+// or null. A Missions tab (R5) lists sagas with their countdown and pressure; "Go on it" calls opts.onBegin(missionId).
+// When the saga pressure gates side content (opts.gated), Town news shows the Haze line instead of lore. When the place is only guessed from the time zone, a button offers to use a rough location once.
 // Safety: lore text is plain text and goes in through textContent only. Styles are scoped under qtb-.
 
 const CSS = `
@@ -25,6 +26,11 @@ const CSS = `
 .qtb-text{flex:1;min-width:0}
 .qtb-line{font:15px/1.3 Georgia,serif;color:#f6e7bf}
 .qtb-hint{margin-top:2px;font-size:11px;color:#a89f8c}
+.qtb-saga{margin:10px 0 2px;font:600 13px Georgia,serif;color:#e8c77a}
+.qtb-saga:first-child{margin-top:0}
+.qtb-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:4px}
+.qtb-bar i{display:block;height:100%;background:#c9a24a}
+.qtb-bar.hot i{background:#a55bd0}
 .qtb-state{font-size:11px;color:#a89f8c;white-space:nowrap}
 .qtb button.qtb-go,.qtb-close,.qtb-here{min-height:36px;padding:6px 12px;border-radius:8px;cursor:pointer;
   font:600 12px system-ui,sans-serif;color:#f1ebe0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25)}
@@ -45,7 +51,8 @@ const el = (tag, cls, text) => {
 /**
  * @typedef {{ entry: import('./contract.js').AreaLoreEntry, riddleId: string|null, state: string|null }} BoardRow
  *   state: the lore Riddle's state (open, deferred, answered, sealed, faded), or null before it is in the ledger
- * @returns {{ show: (rows: BoardRow[], opts?: { guessed?: boolean, calendar?: boolean,
+ * @returns {{ show: (rows: BoardRow[], opts?: { missions?: object[], gated?: { gated: boolean, why: string }, gate?: number,
+ *   current?: string|null, tab?: 'news'|'missions', onBegin?: (id: string) => void, guessed?: boolean, calendar?: boolean,
  *   onUsePlace?: () => Promise<BoardRow[]|null> }) => Promise<string|null>, readonly open: boolean }}
  */
 export function mountTownBoard(container) {
@@ -79,17 +86,61 @@ export function mountTownBoard(container) {
     const tabs = el('div', 'qtb-tabs');
     tabs.setAttribute('role', 'tablist');
     const news = el('button', 'qtb-tab', 'Town news'), quests = el('button', 'qtb-tab', 'Quest boards');
+    const hasMissions = !!opts.missions;
+    const missionsTab = hasMissions ? el('button', 'qtb-tab', 'Missions') : null;
+    const tab = opts.tab === 'missions' && hasMissions ? 'missions' : 'news';
     news.type = quests.type = 'button';
     news.setAttribute('role', 'tab'); quests.setAttribute('role', 'tab');
-    news.setAttribute('aria-selected', 'true'); quests.setAttribute('aria-selected', 'false');
+    news.setAttribute('aria-selected', String(tab === 'news')); quests.setAttribute('aria-selected', 'false');
     quests.disabled = true;
     quests.title = 'Coming later';
-    tabs.append(news, quests);
+    tabs.append(news);
+    if (missionsTab) {
+      missionsTab.type = 'button';
+      missionsTab.setAttribute('role', 'tab');
+      missionsTab.setAttribute('aria-selected', String(tab === 'missions'));
+      missionsTab.onclick = () => render(rows, { ...opts, tab: 'missions' });
+      news.onclick = () => render(rows, { ...opts, tab: 'news' });
+      tabs.append(missionsTab);
+    }
+    tabs.append(quests);
 
     const list = el('ul');
     list.setAttribute('role', 'tabpanel');
     let first = null;
-    for (const { entry, riddleId, state } of rows) {
+    if (tab === 'missions') {
+      for (const saga of opts.missions) {
+        const li = el('li'), text = el('div', 'qtb-text');
+        text.append(el('div', 'qtb-saga', `${saga.hall} (${saga.march})`));
+        const p = saga.pressure;
+        text.append(el('div', 'qtb-hint', `${saga.dueAt ? (p.overdue ? 'Past its release date' : `${Math.max(1, Math.ceil(p.daysLeft))} day(s) to the release`) : 'No release date'} · pressure ${Math.round(p.level * 100)}%`));
+        const bar = el('div', `qtb-bar${p.level >= (opts.gate ?? 0.75) ? ' hot' : ''}`), fill = document.createElement('i');
+        fill.style.width = `${Math.round(p.level * 100)}%`;
+        bar.append(fill);
+        text.append(bar, el('div', 'qtb-hint', `Why? ${p.why}`));
+        li.append(text);
+        list.append(li);
+        for (const m of saga.missions) {
+          const row = el('li'), t = el('div', 'qtb-text');
+          t.append(el('div', 'qtb-line', m.title), el('div', 'qtb-hint', `${m.side ? 'Side mission' : 'Mission'} · ${m.resolved} of ${m.total} done`));
+          row.append(t);
+          if (m.state === 'done' || m.open === 0 && !m.state) row.append(el('span', 'qtb-state', 'Done'));
+          else if (opts.onBegin) {
+            const go = el('button', 'qtb-go', m.state === 'shelved' ? 'Resume' : m.state ? 'Current' : 'Go on it');
+            go.type = 'button';
+            go.setAttribute('aria-label', `${go.textContent}: ${m.title}`);
+            go.disabled = opts.current === m.id;
+            go.onclick = () => { opts.onBegin(m.id); close(); };
+            first ||= go;
+            row.append(go);
+          }
+          list.append(row);
+        }
+      }
+      if (!opts.missions.length) list.append(el('li', 'qtb-hint', 'No missions yet.'));
+    } else if (opts.gated?.gated) {
+      list.append(el('li', 'qtb-hint', `The Haze is too thick for idle news. ${opts.gated.why}`));
+    } else for (const { entry, riddleId, state } of rows) {
       const li = el('li'), text = el('div', 'qtb-text');
       const line = el('div', 'qtb-line', entry.line);
       line.title = entry.hint;
@@ -127,7 +178,7 @@ export function mountTownBoard(container) {
     foot.append(closeBtn);
 
     box.replaceChildren(el('h2', null, 'The notice board'), tabs, list,
-      el('p', 'qtb-sub', opts.calendar ? 'Nothing posted from your area right now, so the Hollow keeps its own calendar.'
+      el('p', 'qtb-sub', tab === 'missions' ? 'Real work. One mission at a time; the others wait.' : opts.calendar ? 'Nothing posted from your area right now, so the Hollow keeps its own calendar.'
         : 'Posted from what is on near you. These are game-only: they never touch your real work.'), foot);
     (first || closeBtn).focus();
   }

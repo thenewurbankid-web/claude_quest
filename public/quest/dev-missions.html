@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- Dev page for the R5 mission UI: the sample Realm, the notice board with its Missions tab, the mission HUD, and the
+     briefing/debrief spoken through conversation.js. Serve with: node dev/static.js 4796 (never 4777) -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Missions dev</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; }
+    body { min-height: 100vh; background: radial-gradient(ellipse at 30% 70%, #2f5d3a 0%, #1b2f3f 45%, #0c1220 100%);
+      color: #eef0f4; font: 14px/1.4 system-ui, -apple-system, sans-serif; }
+    .dev { position: fixed; top: 16px; left: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .dev button { min-height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.1); color: inherit; font: inherit; cursor: pointer; }
+    pre { position: fixed; left: 16px; bottom: 16px; width: min(420px, calc(100vw - 32px)); max-height: 24vh; overflow: auto;
+      margin: 0; padding: 8px; font-size: 11px; background: rgba(0,0,0,.4); border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="dev" aria-label="Dev controls">
+    <button type="button" data-act="board">Open the notice board</button>
+    <button type="button" data-act="gate">Toggle a gating release date</button>
+    <button type="button" data-act="finish">Resolve every Work in the current mission</button>
+    <button type="button" data-act="reset">Reset</button>
+  </div>
+  <pre id="state" aria-label="Mission play"></pre>
+  <script type="module">
+    import { emptyMissionPlay } from './contract.js';
+    import { begin, tickMission, hearBriefing, hearDebrief, missionsOf, gated } from './missions.js';
+    import { mountTownBoard } from './town-board.js';
+    import { mountMissionHud, hudView, talk } from './mission-hud.js';
+    import { mountConversation } from './conversation.js';
+
+    let ledger, mp;
+    const load = async () => { ledger = await (await fetch('./sample-realm.json')).json(); mp = emptyMissionPlay(); };
+    await load();
+    const board = mountTownBoard(document.body), hud = mountMissionHud(document.body), conv = mountConversation(document.body);
+    const out = document.getElementById('state');
+    const refresh = () => {
+      hud.update(hudView(ledger, mp));
+      out.textContent = JSON.stringify(mp, null, 1) + '\n' + JSON.stringify(gated(ledger));
+    };
+    const tick = () => { mp = tickMission(mp, ledger).mp; refresh(); };
+    const onBegin = async id => {
+      mp = begin(mp, ledger, id).mp; refresh();
+      if (await talk(conv, 'briefing', ledger, mp, id)) { mp = hearBriefing(mp).mp; tick(); }
+      if (mp.runs[id]?.state === 'debrief' && await talk(conv, 'debrief', ledger, mp, id)) { mp = hearDebrief(mp).mp; refresh(); }
+    };
+    const openBoard = () => board.show([], { tab: 'missions', missions: missionsOf(ledger, mp), gated: gated(ledger), current: mp.current, onBegin });
+    document.querySelector('.dev').addEventListener('click', async e => {
+      const act = e.target.dataset?.act;
+      if (act === 'board') openBoard();
+      if (act === 'gate') { const h = ledger.halls.find(x => x.id === 'ferry-b'); h.dueAt = h.dueAt ? null : new Date(Date.now() + 864e5).toISOString(); refresh(); }
+      if (act === 'finish' && mp.current) {
+        for (const w of ledger.works) if (w.id === mp.current || w.parentId === mp.current) w.status = 'done';
+        tick();
+        if (mp.runs[mp.current]?.state === 'debrief' && await talk(conv, 'debrief', ledger, mp, mp.current)) { mp = hearDebrief(mp).mp; refresh(); }
+      }
+      if (act === 'reset') { await load(); refresh(); }
+    });
+    refresh();
+  </script>
+</body>
+</html>
