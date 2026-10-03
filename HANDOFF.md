@@ -23,13 +23,14 @@ collecting (PLAN-adventure §5 rewritten).
   in-game log (open + last 5 resolved), a Sealed Hall per Hall (locked/open), Keepers busy/free. Serve the static
   files with a dev-only file server and a throwaway ledger, never the real 4777 game. Then R1 Riddles, R2 the
   Gloamwyrm (playtest against the written criteria).
-- **R0 contract step done (2026-10-03):** `public/quest/contract.js` (ledger, Riddle, `/work` queue states, the
-  LedgerStore interface with `memoryStore` as the reference, the save format), `public/quest/sample-realm.json`
-  (one deliberate repair quest: w9 has no Hall), `npm test` (node:test, 8 pass), and the `quest-static` launch config
-  (`dev/static.js`, port 4790, no `/api`; the 3D view runs on it with no errors). **Next: R0's parallel round**, two
-  worktrees: (a) the IndexedDB LedgerStore (DB `quest-ledger`, separate from net.js's `claude-quest`) plus the Ledger
-  panel to add Halls and Works and load the sample; (b) the Beacon, in-game log, Sealed Hall locked/open and Keepers
-  free/busy, built on `memoryStore`. Then integration wires both into `public/3d/scene.js`.
+- **R0 "The Beacon lights up" is done (2026-10-03):** contract (`public/quest/contract.js`, sample Realm), the
+  IndexedDB ledger (`ledger-idb.js`, DB `quest-ledger`) with the Ledger panel (`ledger-panel.js`), the rules
+  (`status.js`: Beacon red = blocked critical/high or failed Work, amber = open/deferred Riddles, other blocked or in
+  review, else gold; worst March wins; a Hall opens when achieved or all its Works are resolved) and the HUD
+  (`beacon-hud.js`). `quest/boot.js` mounts both on the 3D page and lights a Beacon above the Keeper's Lodge.
+  `npm test` 20 pass; checked on `quest-static` (4790) with no console errors. Small follow-ups: `remove('events')`
+  needs the hidden autoIncrement key, and loading the sample over a non-empty ledger takes a second click.
+  **Next: R1 "Riddles"** (contract step first: anything R1 needs that the contract lacks).
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.

@@ -36,6 +36,13 @@
   .links a { font: 400 12px system-ui, sans-serif; color: #fff; text-decoration: none; padding: 5px 10px;
     background: rgba(16,19,31,.42); border-radius: 999px; backdrop-filter: blur(6px); }
   .links a:hover { background: rgba(16,19,31,.6); }
+  /* Quest overlays (public/quest/): the Ledger toggle under the place name, the Beacon HUD under the links. */
+  body .qlp-toggle { top: calc(max(14px, env(safe-area-inset-top)) + 48px); left: max(16px, env(safe-area-inset-left)); }
+  body .qlp-panel { top: calc(max(14px, env(safe-area-inset-top)) + 84px); left: max(16px, env(safe-area-inset-left));
+    max-height: calc(100vh - 150px); }
+  body .qbh-root { top: calc(max(14px, env(safe-area-inset-top)) + 92px); right: max(16px, env(safe-area-inset-right));
+    max-height: calc(100vh - 160px); }
+  @media (pointer: coarse) { body .qbh-root { max-height: calc(100vh - 340px); } }
   .veil { position: fixed; inset: 0; background: #10131f; transition: opacity .8s ease; pointer-events: none; }
   body.ready .veil { opacity: 0; }
 </style>
@@ -56,5 +63,6 @@
 </div>
 <div class="veil"></div>
 <script type="module" src="3d/scene.js"></script>
+<script type="module" src="quest/boot.js"></script>
 </body>
 </html>

@@ -253,6 +253,33 @@ const fireAt = { x: wellPos.x, y: 0.35, z: wellPos.z }, sparkAt = { x: wellPos.x
 const fire = emitter({ map: fx('flame_03'), count: 26, color: 0xffa040, size: 0.55, origin: fireAt, spread: 0.22, rise: 0.9, life: 1.1 });
 const sparks = emitter({ map: fx('spark_04'), count: 18, color: 0xffd080, size: 0.16, origin: sparkAt, spread: 0.35, rise: 2.6, life: 2.4 });
 
+// ---------- the Beacon atop the Keeper's Lodge: the Realm's status (public/quest/boot.js) ----------
+// Gold burns steady, amber flickers, red pulses. Dark until a Realm exists in the ledger.
+const BEACON = { gold: 0xf2c14e, amber: 0xf08a24, red: 0xef4b4b };
+const lodgeCell = (() => { for (let r = 0; r < grid.rows; r++) { const c = rows[r].indexOf('C'); if (c >= 0) return [c, r]; } return [9, 2]; })();
+const lodgePos = grid.toWorld(...lodgeCell);
+const beaconFlame = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color: BEACON.gold }));
+const beaconLight = new THREE.PointLight(BEACON.gold, 0, 6, 1.6);
+const beaconGroup = new THREE.Group();
+beaconGroup.add(beaconFlame, beaconLight);
+beaconGroup.position.set(lodgePos.x + 0.5, 2.9, lodgePos.z - 0.5);
+beaconGroup.visible = false;
+scene.add(beaconGroup);
+let beaconColor = null;
+const setBeacon = color => {
+  beaconColor = BEACON[color] ? color : null;
+  beaconGroup.visible = !!beaconColor;
+  if (beaconColor) { beaconFlame.material.color.setHex(BEACON[color]); beaconLight.color.setHex(BEACON[color]); }
+};
+addEventListener('quest:beacon', e => setBeacon(e.detail));
+setBeacon(window.__questBeacon);
+const beaconGlow = t => {
+  if (!beaconColor) return;
+  const wave = reduceMotion ? 0 : beaconColor === 'red' ? Math.sin(t * 4) : beaconColor === 'amber' ? Math.sin(t * 13) * 0.4 + Math.sin(t * 29) * 0.3 : 0;
+  beaconLight.intensity = 3 + wave * 1.5;
+  beaconFlame.scale.setScalar(1 + wave * 0.15);
+};
+
 // ---------- fireflies at night ----------
 const fireflies = (() => {
   const n = 40, geo = new THREE.BufferGeometry(), pos = new Float32Array(n * 3), base = [];
@@ -573,6 +600,7 @@ function loop() {
   sunny?.update(dt, t, camera, reduceMotion, player?.obj.position);
   if (!reduceMotion) { fire(t); sparks(t); fireflies.tick(t); }
   wellLight.intensity *= reduceMotion ? 1 : 0.9 + Math.sin(t * 11) * 0.05 + Math.sin(t * 23) * 0.05;
+  beaconGlow(t);
   water.opacity = LOOK.water.opacity - 0.05 + Math.sin(t * 1.2) * 0.05;
   if (water.map && !reduceMotion) water.map.offset.set(t * LOOK.water.flow * 0.05, t * LOOK.water.flow * 0.02);
   if (player) atmos.update(dt, t, look, day, reduceMotion);
