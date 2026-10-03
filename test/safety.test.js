@@ -83,6 +83,23 @@ test('rule 10: teammates\' answers are shown as proposals, never overwritten', a
   assert.equal(sealDue(l, later(3600)).puts.length, 0);
 });
 
+// R4: rule 11. The bell is a ledger move with no preconditions, so it rings from any state; the UI binds it to a
+// button and a key that work over every panel.
+test('rule 11: the Recall Bell stops all work, from anywhere', async () => {
+  const { ringBell, wake, LIVE } = await import('../public/quest/keeper-controls.js');
+  const l0 = { ...sample(), queue: JSON.parse(readFileSync(new URL('../public/quest/sample-work.json', import.meta.url))).queue };
+  l0.keepers[1].status = 'wandered';
+  l0.keepers[2].status = 'resting';
+  l0.queue.push({ ...l0.queue[0], id: 'q4', keeperId: 'k2', workId: 'w9', state: 'lapsed' });
+  const l = await play(l0, x => ringBell(x, T0));
+  assert.ok(l.keepers.every(k => k.status === 'resting'));
+  assert.ok(!l.queue.some(q => LIVE.includes(q.state)));
+  assert.equal(l.queue.find(q => q.id === 'q2').state, 'returned');         // finished work is kept
+  for (const k of l.keepers) assert.ok(wake(l, k.id, 'w6', {}, T0).problem); // nobody takes new work after it
+  assert.deepEqual(l.events.at(-1), { at: T0.toISOString(), kind: 'bell.rung', ref: null });
+  assert.deepEqual(sound(l), []);
+});
+
 // R2: safety in combat (playtest criterion 4). The input lock itself lives in the conversation box (lockMs).
 test('combat: no answer changes hit power, and only resolving a Riddle lands a hit', async () => {
   const { playtestRealm } = await import('../public/quest/playtest.js');
