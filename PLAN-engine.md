@@ -193,7 +193,7 @@ endpoint, the local runner and server-side file writes.
   small Node script that the player starts only if they use Paperclip. It is only a connector: it passes the game's
   Paperclip reads through (adding the header for the game's origin) and posts sealed decisions as comments. It holds
   the Paperclip key, answers only the player's own machine, and does nothing else: no agents, no runner, no saves, no
-  game logic. With it off, the game runs on the Local Ledger. There is no agent-relay path to Paperclip. Built in R3
+  game logic. With it off, the game runs on the Local Ledger. There is no agent-relay path to Paperclip. Built in R4
   or later; until then the game uses the Local Ledger only.
 - **Agents:** only through the `/work` copy-paste page. The player copies a prompt into their own agent and pastes
   the result back. No polling, no local runner, and the game never starts a process.
@@ -286,18 +286,21 @@ feature list; releases pick from them.
   Sight, outbox recall; write-back to the Work in the ledger.
 - **R2 "The Gloamwyrm":** a simple turn-based boss from the weighted backlog score, pausing per real question, with
   retreat. Vertical slice complete: **playtest the fun here**.
-- **R3 "Bring your Keeper":** the `/work` copy-paste page and agent registry, the Paperclip connector (R3 or later,
+- **R3 "Lore quests":** play for days with no work: shared area lore from local weather and real local happenings
+  becomes game-only Riddles and errands, and the hub's board gets a Town news tab (user, 2026-10-03; see "R3 Lore
+  quests" below).
+- **R4 "Bring your Keeper":** the `/work` copy-paste page and agent registry, the Paperclip connector (R4 or later,
   user 2026-10-03), start work from an NPC with a token
   readout.
-- **R4 "The first Sealed Hall":** one hand-made dungeon themed from its milestone, and a Sigil.
-- **R5 "Your own Realm":** the full Local Ledger (planner NPC, teammates), New Game / Load, split save with archiving.
-- **R6+:** shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes, 2D parity.
-Cost accepted: R0–R4 are built straight into the 3D code and partly moved into the core later.
+- **R5 "The first Sealed Hall":** one hand-made dungeon themed from its milestone, and a Sigil.
+- **R6 "Your own Realm":** the full Local Ledger (planner NPC, teammates), New Game / Load, split save with archiving.
+- **R7+:** shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes, 2D parity.
+Cost accepted: R0–R5 are built straight into the 3D code and partly moved into the core later.
 **How a release runs** (user, 2026-10-03): (1) a short **contract** step fixes the shared shapes in code (the ledger
 schema, the Riddle record, the `/work` queue states, the save format) plus a sample data file; (2) every slice is built
 **side by side** in its own git worktree against that contract; (3) an **integration** step joins them into `3d-world`
 and runs the safety tests. Each feature lives in its own module; only integration edits `public/3d/scene.js`. A round
-is one session long. Exceptions: R2's tuning and playtest run in order after its parallel round, and R6's shared core
+is one session long. Exceptions: R2's tuning and playtest run in order after its parallel round, and R7's shared core
 is built alone. The R2 playtest is the gate: nothing from R3 on starts before it passes.
 
 ## R2 playtest criteria (approved by the user, 2026-10-03)
@@ -321,6 +324,47 @@ day later with a heavier backlog. **R2 passes only if every line holds;** a miss
    forward to.
 8. **Sound:** no console errors; playable at 375px width by touch and with reduced motion.
 
+## R3 Lore quests (user, 2026-10-03)
+The gap: every system that moves is fed by the ledger, so a player with no work can walk Ember Hollow but nothing
+spawns, the Haze stays at 0 and the Gloamwyrm never comes (Context, "Core gameplay"). R3 adds a second source of
+quests; the loop stays the same.
+- **Two sources, one loop.** Work comes from the ledger as now. **Area lore** comes from local weather and real local
+  happenings. Lore entries become a game-only Lore Hall, a Work per entry and a Riddle with
+  `mark {source:'lore', real:false}` (add `'lore'` to the mark sources in `contract.js`). One helper, `isGameOnly`,
+  keeps them out of `bossScore`, `shouldSummon`, `riddleWeight`, `realmStats` and `answerTimes`, so lore never feeds
+  the Haze, the Gloamwyrm, the stats board or Renown. "Area lore" is not the lore files of PLAN-settlements §12;
+  the code lives in `area-lore/` and `public/quest/area-lore.js` to keep the two apart.
+- **Only some events, written in-world with a hint.** Allowed: festivals, markets, sports, music, seasonal, weather.
+  Anything else is dropped, never filtered after the fact. "Bards gather at the Lodge tonight", with a tooltip naming
+  the real event.
+- **Shared per area.** An area is a geohash-4 cell (about 39x20 km). Each event is written once and reused by every
+  player in the cell until it ends. Clients read their cell plus the 8 neighbours, so a player near an edge still
+  sees what's over the line.
+- **Where it's written (user):** a scheduled GitHub Action on a **self-hosted runner on the user's Mac, using Ollama**
+  (no hosted API; the `askModel` pattern from `lib/story.js`). In-game lines keep the WebLLM-first storyteller of
+  PLAN-settlements §11; only the shared area lore uses Ollama. A missed run while the Mac is off only makes lore late.
+- **Three repos, because this one is public** and a self-hosted runner must never be attached to a public repo:
+  `claude_quest` (public) holds the generator code and the client; a new **private** `claude-quest-lore-gen` holds
+  the hand-kept `areas.json` (cells, and the iCal/RSS feed URLs for each), the workflow (schedule and manual triggers
+  only) and a deploy key; a new public `claude-quest-lore` with no workflows holds only
+  `lore/<cell>/<eventId>.json` and `lore/<cell>/index.json`, read by clients as static files.
+- **The board (user):** the hub's `B` board gets two tabs, Town news (area lore) now and Quest boards when
+  PLAN-settlements §16 lands. Wired like the Lodge: a box check in `riddleTick`, `quest:near {place:'board'}`,
+  E sends `quest:board`, a panel copied from `stats-board.js`.
+- **Never empty:** with no location, no network or nothing live, built-in clock and calendar entries (time of day,
+  season, weekend) fill the board. A rough location is asked for once and kept as `quest.place`, as the weather
+  already does in `atmosphere.js`.
+- **How R3 runs:** contract (the area-lore entry shape, a sample cell file, the mark source, `isGameOnly`) → side by
+  side: (a) the client source, ledger mapping, filters and calendar fallback ∥ (b) the board ∥ (c) the generator
+  (weather from Open-Meteo, feeds, Ollama writer with template fallback, `generate.js` writing to a folder) plus a
+  setup README for the two repos and the runner → integration (scene.js wiring, safety tests: lore never moves the
+  Haze or the stats; a browser check with a local lore folder through `?lore=`).
+- **After R3, not yet placed in the order (user):** a hub built roughly from the real map. OpenStreetMap through
+  Overpass, reduced to the 48x32 hub legend, the town on the densest built-up spot with the Lodge, board and Keeper
+  spots around it. Cell scale is shared (`map.json` from the generator); a finer geohash-5 map is the player's choice,
+  built in the browser and never published. Today's Ember Hollow stays as the fallback. First check scene.js and
+  boot.js for hard-coded coordinates.
+
 ## Risks and gaps (2026-10-03)
 Decided by the user on 2026-10-03, through the Quest Engine Council page (one pick per item).
 
@@ -335,8 +379,8 @@ Decided by the user on 2026-10-03, through the Quest Engine Council page (one pi
   or the AI) before sealing.
 - *Local Ledger lost when browser data is cleared:* autosave plus a "download your save" nudge (kept as is).
 - *Missing art (Tanglers, Gloamwyrm, Wardens, dungeon kits):* **Three.js placeholders for R0–R2, CC0 packs (Kenney,
-  Quaternius) by R4.**
-- *2D + 3D doubles view work:* **2D is frozen until R6.** It keeps working, but gets no new features.
+  Quaternius) by R5.**
+- *2D + 3D doubles view work:* **2D is frozen until R7.** It keeps working, but gets no new features.
 - *Paperclip API drift:* read only the fields we need, **and validate each snapshot against the protocol**. On a
   mismatch, keep the last good world and light a warning on the Beacon.
 
@@ -345,10 +389,10 @@ the hit and clears the item for now, marked `deferred`. The item returns after a
 weight keeps growing with age, so deferring everything can't dodge the next boss.
 
 **Gaps, now designed:**
-- *Agents claiming work (R3):* a **lease** (user picked "renewed by any poll or progress post"; with no server it
+- *Agents claiming work (R4):* a **lease** (user picked "renewed by any poll or progress post"; with no server it
   starts when the player copies the prompt on `/work`, and pasting a progress report renews it). The length is set in
   the lore rules. When it lapses, the work goes back on the board and the Keeper shows as "wandered off".
-- *Who accepts a milestone without Paperclip (R5):* **a council vote for big milestones (`quest:council`), the
+- *Who accepts a milestone without Paperclip (R6):* **a council vote for big milestones (`quest:council`), the
   March's steward otherwise.** When every Work is done, a "Is this milestone shipped?" Riddle appears; sealing it
   breaks the Hall's seal.
 - *Team conflicts (R1 field, used later):* **each March has a steward who seals its decisions, with the Realm owner as
@@ -441,16 +485,18 @@ parallel slices, including the contract and integration steps (about one session
 | R0 The Beacon lights up | 2 | 3 | ledger store ∥ Beacon/panel | the 3D view has no UI layer yet |
 | R1 Riddles | 2 | 5 | conversation box ∥ Riddle logic ∥ outbox/write-back ∥ tests/log/digest | getting the safety flows exactly right |
 | R2 The Gloamwyrm | 3 | 5 | boss ∥ weights ∥ placeholder art, then tuning, then **playtest (gate)** | combat feel; the fun itself |
-| R3 Bring your Keeper | 2 | 4 | `/work` + lease ∥ start work/Ember/Recall Bell ∥ Paperclip connector | relayed results passing validation |
-| R4 The first Sealed Hall | 2 | 5 | layout ∥ puzzles ∥ Warden ∥ Sigil/Embertale | puzzles that are fun |
-| R5 Your own Realm | 2 | 5 | planner NPC ∥ New Game/Load ∥ split save ∥ acceptance | save migrations |
-| R6+ | ~6 | ~12 | shared core alone, then Ink/LLM ∥ progression/league ∥ modes/2D parity | `world.js` is 1,527 lines of globals |
-| **Total** | **~19** | **~39** | | |
+| R3 Lore quests | 2 | 5 | area-lore client + filters ∥ Town news board ∥ generator on the self-hosted runner | events that feel local, not generic |
+| R4 Bring your Keeper | 2 | 4 | `/work` + lease ∥ start work/Ember/Recall Bell ∥ Paperclip connector | relayed results passing validation |
+| R5 The first Sealed Hall | 2 | 5 | layout ∥ puzzles ∥ Warden ∥ Sigil/Embertale | puzzles that are fun |
+| R6 Your own Realm | 2 | 5 | planner NPC ∥ New Game/Load ∥ split save ∥ acceptance | save migrations |
+| R7+ | ~6 | ~12 | shared core alone, then Ink/LLM ∥ progression/league ∥ modes/2D parity | `world.js` is 1,527 lines of globals |
+| **Total** | **~21** | **~44** | | |
 
-**ETA at 5 rounds a week from 2026-10-04:** playtest (7 rounds) 2026-10-13; R5 (13) 2026-10-21; everything (~19)
-2026-10-29. With the 30% tuning/art buffer: R5 2026-10-27, everything 2026-11-06.
-**Hours** at 3–4 h a session: playtest 39–52 h, R0–R5 81–108 h, everything 117–156 h (150–200 h with the buffer).
-Parallel finishes in about 60% of the calendar time of one-at-a-time (~31 sessions, 2026-11-16) but costs about
+**ETA at 5 rounds a week from 2026-10-04** (redone 2026-10-03 with R3 Lore quests added): playtest (7 rounds)
+2026-10-13; R6 Your own Realm (15) 2026-10-24; everything (~21) 2026-11-01. With the 30% tuning/art buffer: R6
+2026-10-30, everything 2026-11-09.
+**Hours** at 3–4 h a session: playtest 39–52 h, R0–R6 96–128 h, everything 132–176 h (170–230 h with the buffer).
+Parallel finishes in about 60% of the calendar time of one-at-a-time (~36 sessions, 2026-11-23) but costs about
 25% more work and tokens per day, and several streams to review at once. The Quest Engine Council artifact compares
 both modes for any start date, cadence and session length.
 

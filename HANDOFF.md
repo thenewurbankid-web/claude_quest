@@ -13,7 +13,7 @@ Each project is a campaign win; Sigils, trophies and the Champions League live i
 collecting (PLAN-adventure §5 rewritten).
 - **No server except a Paperclip connector** (user, 2026-10-03; see "No server" in PLAN-engine.md): the game becomes
   browser-only (static files + IndexedDB). Paperclip goes through a small optional Node connector that only passes
-  reads through and posts sealed comments (Paperclip sends no CORS header), built in R3 or later. Agents come in only through the `/work`
+  reads through and posts sealed comments (Paperclip sends no CORS header), built in R4 or later. Agents come in only through the `/work`
   copy-paste page,
   and `app.js` keeps running today's game until the browser version replaces it. No new features go into `app.js`.
 - **Releases run in parallel** (see "How a release runs" in PLAN-engine.md): contract step first, then each slice in
@@ -58,7 +58,7 @@ collecting (PLAN-adventure §5 rewritten).
   Work, plus "More about this task": status, priority, Keeper, blockers, age, earlier decisions; `riddleContext`),
   **Other…** for your own answer, and **Ask back…**: a question to the agent on the Work (`asks` on the Riddle,
   `askBack`/`replyToAsk`, events `riddle.asked`/`riddle.replied`); the Riddle stays open and shows "Waiting on
-  <Keeper>", and the reply is pasted by hand until R3's /work page delivers it. The Beacon panel and the "While you
+  <Keeper>", and the reply is pasted by hand until R4's /work page delivers it. The Beacon panel and the "While you
   were away" card both start folded to small chips with counts (the user found the open panel too invasive).
   `npm test` 74 pass.
 - **R2 parallel round + integration done (2026-10-03, built in one session, not in worktrees, user's choice):**
@@ -121,8 +121,11 @@ collecting (PLAN-adventure §5 rewritten).
   answer it, optionally mash Space. Brainstorm with the user before any code; keep the safety rules (no timers on
   questions, input lock, the Lodge for confirm/never, hits only from resolving Riddles). Replay fight 1 first if the
   user wants a baseline with the new wording.
-- **Lore quests (players without work)** are planned in another session (design: ~/.claude/plans/so-ho-do-wekeep-parsed-pie.md).
-  It may touch contract.js, boss.js, riddles.js, digest.js, scene.js and boot.js; check `git log` before editing those.
+- **R3 is now "Lore quests" (user, 2026-10-03):** players with no work get game-only quests from shared area lore
+  (local weather and happenings, written once per geohash-4 cell by Ollama on a self-hosted runner). Design and run
+  order in PLAN-engine.md, "R3 Lore quests"; Bring your Keeper and everything after it moved down one (R4–R7+).
+  It starts after the R2 playtest gate, like any R3. It touches contract.js, boss.js, riddles.js, digest.js, scene.js
+  and boot.js.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
