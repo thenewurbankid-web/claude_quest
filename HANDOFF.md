@@ -9,6 +9,24 @@ Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is 
 (`0e54f1d`). **User: build R5 Missions next, before R4.5** (after their R4 play notes). R5 plan: PLAN-engine.md
 "Missions, Keepers and the Bridge" and ~/.claude/plans/study-this-and-see-calm-giraffe.md ("Step 2").
 
+**R5 checklist (from the planning session, 2026-10-03).** Already in the contract (`0e54f1d`): `Work.parentId` (a
+mission is a parent Work and its children; the saga is their Hall), `MISSION_STATE`/`MISSION_MOVES`,
+`validateMissionPlay` (`play.missions`, one mission at a time), `Hall.dueAt`/`Work.dueAt`, `summonCost` in
+`emberLeft`, `summoned`/`released`, `suggest` in `parseReport`, the event hash chain (`chainEvent`/`verifyEvents`,
+stamped by both stores). To build:
+1. Contract: `rules.pressureGate` (start 0.75) and pressure weights; `play.missions` in `makeSave`, checked on load.
+2. `public/quest/missions.js`, pure, returning `{ play, events }` like `boss.js`: `missionsOf` (grouped by Hall, game-only
+   Works left out), `missionWorks`, `begin` (shelves the current one), `tickMission` (active ↔ cliffhanger on an open
+   real Riddle, → debrief when every Work is resolved), `hearBriefing`, `hearDebrief`.
+3. `pressure(ledger, hallId, now, rules)` (open Work weight against days left to `dueAt`, with a "Why?" line) and
+   `gated()`: locks lore quests, the lore tab and exploring past the hub; never `/work`, Riddles, the Lodge, the Bell
+   or saves (safety test).
+4. Keepers: summon (spends Ember), join on the first approved Work, release to the Hall of Champions; R4 controls
+   already respect the statuses (`f08151c`).
+5. UI: a Missions tab on `town-board.js` (by saga, countdown, pressure), briefing/debrief through `conversation.js`
+   spoken by the Work's Keeper, the current mission on the HUD; a finished saga opens its Sealed Hall (`status.js`).
+6. Tests: `test/missions.test.js` plus the gate's safety test; browser check on `quest-static` (4790), never 4777.
+
 **Latest (2026-10-03, R4 session, later): R4 Bring your Keeper is built and integrated.** Slices (a) `/work` page
 (`public/work.html`, `quest/work-queue.js`, `quest/work-page.js`; `work.html?sample` loads the sample) and (b) Keeper
 controls (`quest/keeper-controls.js`, `quest/keeper-hud.js`, `dev-keepers.html`) merged into 3d-world. Wiring: E next to
