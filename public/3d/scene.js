@@ -360,10 +360,11 @@ function updateActor(a, dt) {
 // Keeper carrying a Riddle stops wandering and shows a '!'; Riddles with no Keeper wait with a placeholder villager by
 // the Lodge. Standing next to one sends 'quest:near' ({ riddleId } or null), and E sends 'quest:talk'.
 // Standing at the Lodge with no Riddle near sends 'quest:near' ({ place: 'lodge' }), and E sends 'quest:lodge' (the
-// stats board).
+// stats board). R3: standing by the hub's notice board ('B') sends ({ place: 'board' }), and E sends 'quest:board'.
 // 'quest:input' ({ locked }) stops the player moving while the conversation box is open.
 const keeperActors = [];
-let riddlers = [], nearRiddle = null, nearLodge = false, inputLocked = false;
+let riddlers = [], nearRiddle = null, nearLodge = false, nearBoard = false, inputLocked = false;
+const boardCell = (() => { for (let r = 0; r < grid.rows; r++) { const c = rows[r].indexOf('B'); if (c >= 0) return [c, r]; } return null; })();
 const bangMat = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d');
@@ -414,8 +415,9 @@ addEventListener('quest:haze', e => { hazeTarget = Math.min(1, Math.max(0, Numbe
 addEventListener('quest:input', e => { inputLocked = !!e.detail?.locked; if (inputLocked) { held.clear(); order.length = 0; tapped = null; } });
 function riddleTick(t) {
   for (const b of bangs) if (b.visible) b.position.set(b.userData.at.x, 2.1 + (reduceMotion ? 0 : Math.sin(t * 3) * 0.06), b.userData.at.z);
-  let near = null, lodge = false;
+  let near = null, lodge = false, board = false;
   if (player) {
+    if (boardCell) board = Math.abs(player.c - boardCell[0]) <= 1 && Math.abs(player.r - boardCell[1]) <= 1;
     // the Lodge's 2x2 plot runs from (lc, lr - 1) to (lc + 1, lr), but the house draws larger and the camera looks
     // north, so it reads as "at the door" up to three rows in front and a step or two either side
     const [lc, lr] = lodgeCell;
@@ -425,9 +427,10 @@ function riddleTick(t) {
       || (villager.riddleId && villagerCell && by(...villagerCell) ? villager.riddleId : null);
   }
   lodge &&= !near; // a Riddle beside the Lodge comes first
-  if (near !== nearRiddle || lodge !== nearLodge) {
-    nearRiddle = near; nearLodge = lodge;
-    dispatchEvent(new CustomEvent('quest:near', { detail: near ? { riddleId: near } : lodge ? { place: 'lodge' } : null }));
+  board &&= !near && !lodge;
+  if (near !== nearRiddle || lodge !== nearLodge || board !== nearBoard) {
+    nearRiddle = near; nearLodge = lodge; nearBoard = board;
+    dispatchEvent(new CustomEvent('quest:near', { detail: near ? { riddleId: near } : lodge ? { place: 'lodge' } : board ? { place: 'board' } : null }));
   }
 }
 
@@ -441,6 +444,7 @@ addEventListener('keydown', e => { if (inputLocked) return; const k = KEY[e.key]
   if (e.key === 'r' || e.key === 'R') atmos.cycle(e.shiftKey ? -1 : 1);
   if ((e.key === 'e' || e.key === 'E') && nearRiddle) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: nearRiddle } })); }
   else if ((e.key === 'e' || e.key === 'E') && nearLodge) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:lodge')); }
+  else if ((e.key === 'e' || e.key === 'E') && nearBoard) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:board')); }
   audio.unlock(); });
 addEventListener('keyup', e => { const k = KEY[e.key]; if (k) { held.delete(k); order.splice(0, order.length, ...order.filter(d => d !== k)); } });
 for (const b of document.querySelectorAll('[data-dir]')) {

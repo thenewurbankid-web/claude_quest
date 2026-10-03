@@ -2,7 +2,7 @@
 // weighted backlog score. Pure functions, like riddles.js: the weights read a Ledger snapshot, and the battle moves take
 // and return BossPlay (the save's play.boss, never ledger data) plus the events to log. Answers never go through here;
 // they go through the Riddle rules, and the battle only reads which of its Riddles got resolved.
-import { DEFAULT_RULES, BATTLE_MOVES, canMove, validateBattle } from './contract.js';
+import { DEFAULT_RULES, BATTLE_MOVES, canMove, validateBattle, isGameOnly } from './contract.js';
 import { riddleWeight, riskTier } from './riddles.js';
 
 const DAY = 24 * 3600e3, HOUR = 3600e3;
@@ -14,14 +14,15 @@ const resolved = r => !r || r.state !== 'open';
 
 // ---------- weights ----------
 /**
- * The Gloamwyrm's score and where it comes from: the sum of riddleWeight over open and deferred Riddles.
+ * The Gloamwyrm's score and where it comes from: the sum of riddleWeight over open and deferred Riddles. Game-only
+ * Riddles (R3 area lore) never feed it, so they never thicken the Haze or join a fight.
  * parts: one per feeding Riddle, heaviest first, with why it weighs what it does (base 1, + per deferral, + per day).
  * works: the same grouped by Work, heaviest first, so the player can name which Works feed it.
  */
 export function bossScore(ledger, now = new Date(), rules = DEFAULT_RULES) {
   const works = new Map((ledger.works || []).map(w => [w.id, w]));
   const marches = new Map((ledger.marches || []).map(m => [m.id, m]));
-  const parts = (ledger.riddles || []).filter(r => FEEDING.includes(r.state)).map(r => {
+  const parts = (ledger.riddles || []).filter(r => FEEDING.includes(r.state) && !isGameOnly(r)).map(r => {
     const w = works.get(r.workId);
     const ageDays = Math.max(0, (now.getTime() - Date.parse(r.raisedAt)) / DAY) || 0;
     const deferrals = r.deferCount || 0;
@@ -80,7 +81,7 @@ const move = (b, to) => {
 /** Should the Gloamwyrm cut in: the score is over the threshold, no fight is on, and at least one Riddle is open to face. */
 export function shouldSummon(ledger, play = emptyBossPlay(), now = new Date(), rules = DEFAULT_RULES) {
   if (active(play.battle)) return false;
-  return bossScore(ledger, now, rules).over && (ledger.riddles || []).some(r => r.state === 'open');
+  return bossScore(ledger, now, rules).over && (ledger.riddles || []).some(r => r.state === 'open' && !isGameOnly(r));
 }
 
 /**

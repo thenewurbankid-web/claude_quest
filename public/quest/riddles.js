@@ -2,7 +2,7 @@
 // flags in the real text, and what answering, deferring, returning and fading do. Pure functions over a Ledger
 // snapshot (contract.js): they never touch a store and never mutate their input. Each move returns Changes
 // ({ puts, events }) that applyChanges writes, events last.
-import { DEFAULT_RULES, RIDDLE_MOVES, canMove, stewardOf, noChanges } from './contract.js';
+import { DEFAULT_RULES, RIDDLE_MOVES, canMove, stewardOf, noChanges, isGameOnly } from './contract.js';
 
 /** "Ask me later" counts as an answer: the Riddle is deferred and returns after rules.deferHours. */
 export const ASK_LATER = 'Ask me later';
@@ -154,7 +154,7 @@ export function tickRiddles(ledger, now = new Date(), rules = DEFAULT_RULES) {
 
 /** The Riddle's pull on R2's boss: grows with deferrals and age, so deferring can't dodge it. 0 once settled. */
 export function riddleWeight(riddle, now = new Date(), rules = DEFAULT_RULES) {
-  if (['sealed', 'faded'].includes(riddle.state)) return 0;
+  if (['sealed', 'faded'].includes(riddle.state) || isGameOnly(riddle)) return 0; // R3: lore never feeds the boss
   const age = Math.max(0, (now.getTime() - Date.parse(riddle.raisedAt)) / DAY) || 0;
   return 1 + (riddle.deferCount || 0) * rules.deferWeightGrowth + 0.1 * age;
 }

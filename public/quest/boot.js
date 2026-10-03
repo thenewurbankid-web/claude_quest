@@ -9,12 +9,16 @@
 // Gloamwyrm cuts in after a short warning (battle.js). After a fight ends it stays calm for a while, so retreating is a
 // real way out. The fight is play state, kept in localStorage ('quest-play'), never in the ledger.
 // ?playtest (or ?playtest=heavier) swaps in the R2 playtest backlog, after a confirm.
+// R3: Lore quests. Area lore for the player's geohash-4 cell and its neighbours (area-lore.js), or the built-in calendar,
+// becomes game-only Riddles in a Town news March. They are taken on from the hub's notice board ('quest:board'), not
+// carried by Keepers, and never feed the Beacon, the Haze, the boss or the stats. ?lore=<folder/> reads a lore folder
+// (?lore alone: the sample cell, with &cell=gcpv to stand in it); with no folder yet, only the calendar is posted.
 import { openLedger } from './ledger-idb.js';
 import { mountLedgerPanel } from './ledger-panel.js';
 import { mountBeaconHud } from './beacon-hud.js';
 import { mountStatsBoard } from './stats-board.js';
 import { beacon } from './status.js';
-import { applyChanges, DEFAULT_RULES } from './contract.js';
+import { applyChanges, DEFAULT_RULES, isGameOnly } from './contract.js';
 import { riddleNpcs, riddleContext, tickRiddles, trueSight, riddleStanding } from './riddles.js';
 import { mountConversation } from './conversation.js';
 import { startOutbox, mountOutbox } from './outbox.js';
@@ -22,6 +26,9 @@ import { mountDigest, trackSession, realmStats } from './digest.js';
 import { mountBattle, applyTalk } from './battle.js';
 import { bossScore, hazeLevel, shouldSummon, emptyBossPlay } from './boss.js';
 import { playtestRealm } from './playtest.js';
+import { geohash, cellAndNeighbours, fetchAreaLore, boardLore, loreChanges, riddleId as loreRiddleId, LORE_MARCH } from './area-lore.js';
+import { mountTownBoard } from './town-board.js';
+import { place } from '../3d/clock.js';
 
 const store = await openLedger();
 // An in-page prompt rather than confirm(): some embedded browsers block native dialogs and silently answer "no".
@@ -64,7 +71,7 @@ trackSession(store);
 
 let last;
 const tell = l => {
-  const color = l.marches.length ? beacon(l).color : null;
+  const color = l.marches.some(m => m.id !== LORE_MARCH.id) ? beacon(l).color : null; // dark until real work exists
   if (color === last) return;
   last = color;
   window.__questBeacon = color; // read by the scene if it builds after the first event
@@ -82,7 +89,8 @@ startOutbox(store);
 let lastRiddlers = '';
 const tellRiddlers = l => {
   const slots = new Map(l.keepers.map((k, i) => [k.id, i]));
-  const list = riddleNpcs(l).map(n => ({ riddleId: n.riddle.id, slot: n.keeper ? slots.get(n.keeper.id) ?? null : null }));
+  const list = riddleNpcs(l).filter(n => !isGameOnly(n.riddle)) // lore is taken on from the notice board
+    .map(n => ({ riddleId: n.riddle.id, slot: n.keeper ? slots.get(n.keeper.id) ?? null : null }));
   const key = JSON.stringify(list);
   if (key === lastRiddlers) return;
   lastRiddlers = key;
@@ -108,14 +116,15 @@ Object.assign(prompt.style, { position: 'fixed', left: '50%', bottom: '120px', t
   padding: '8px 16px', borderRadius: '999px', border: '1px solid rgba(255,255,255,.3)', background: 'rgba(14,16,24,.85)',
   color: '#eef0f4', font: '600 14px system-ui, sans-serif', cursor: 'pointer' });
 document.body.append(prompt);
-// near: a Riddle id, 'lodge' (the stats board) or null
+// near: a Riddle id, 'lodge' (the stats board), 'board' (the notice board) or null
 let near = null, talking = false;
+const PLACES = { lodge: 'Stats board (E)', board: 'Notice board (E)' };
 addEventListener('quest:near', e => {
-  near = e.detail?.riddleId || (e.detail?.place === 'lodge' ? 'lodge' : null);
-  prompt.textContent = near === 'lodge' ? 'Stats board (E)' : 'Talk (E)';
+  near = e.detail?.riddleId || (PLACES[e.detail?.place] ? e.detail.place : null);
+  prompt.textContent = PLACES[near] || 'Talk (E)';
   prompt.hidden = !near || talking;
 });
-prompt.addEventListener('click', () => near && dispatchEvent(near === 'lodge' ? new CustomEvent('quest:lodge')
+prompt.addEventListener('click', () => near && dispatchEvent(PLACES[near] ? new CustomEvent(`quest:${near}`)
   : new CustomEvent('quest:talk', { detail: { riddleId: near } })));
 
 const lock = locked => { talking = locked; prompt.hidden = locked || !near; dispatchEvent(new CustomEvent('quest:input', { detail: { locked } })); };
@@ -127,6 +136,51 @@ addEventListener('quest:lodge', async () => {
   lock(true);
   try { await board.show(realmStats(await store.snapshot())); } finally { lock(false); }
 });
+// ---------- R3: Lore quests ----------
+const qs = new URLSearchParams(location.search);
+const loreBase = qs.has('lore') ? new URL((qs.get('lore') || 'quest/sample-lore/').replace(/\/?$/, '/'), document.baseURI) : null;
+const loreCell = () => (/^[0-9b-hjkmnp-z]{4}$/.test(qs.get('cell') || '') ? qs.get('cell') : geohash(place().lat, place().lon));
+let loreShown = { entries: [], calendar: true };
+const refreshLore = async () => {
+  const cell = loreCell(), p = place();
+  const area = loreBase ? (await fetchAreaLore(loreBase, cellAndNeighbours(cell)).catch(() => ({ entries: [] }))).entries : [];
+  const entries = boardLore(area, cell, new Date(), { lat: p.lat });
+  loreShown = { entries, calendar: !area.length };
+  const c = loreChanges(await store.snapshot(), entries, new Date());
+  if (c.puts.length || c.events.length) await applyChanges(store, c);
+};
+await refreshLore().catch(err => console.warn('area lore:', err.message));
+setInterval(() => refreshLore().catch(() => {}), 10 * 60e3);
+// between fetches, close lore Works whose Riddle got sealed or whose entry ended
+setInterval(async () => {
+  const c = loreChanges(await store.snapshot(), loreShown.entries, new Date());
+  if (c.puts.length || c.events.length) await applyChanges(store, c);
+}, 30_000);
+
+const townBoard = mountTownBoard(document.body);
+const boardRows = async () => {
+  const byId = new Map((await store.snapshot()).riddles.map(r => [r.id, r]));
+  return loreShown.entries.map(entry => {
+    const r = byId.get(loreRiddleId(entry));
+    return { entry, riddleId: r?.id ?? null, state: r?.state ?? null };
+  });
+};
+// Asked once, only from the board's button: a rough location (about 10 km), kept as quest.place like the weather's.
+const usePlace = () => new Promise((ok, no) => navigator.geolocation
+  ? navigator.geolocation.getCurrentPosition(g => ok({ lat: +g.coords.latitude.toFixed(1), lon: +g.coords.longitude.toFixed(1) }), no, { timeout: 15000, maximumAge: 36e5 })
+  : no(new Error('no geolocation')))
+  .then(async p => { try { localStorage.setItem('quest.place', JSON.stringify(p)); } catch {} await refreshLore(); return boardRows(); });
+addEventListener('quest:board', async () => {
+  if (talking || battle.open) return;
+  lock(true);
+  let pick = null;
+  try {
+    pick = await townBoard.show(await boardRows(), { guessed: !!place().guessed && !qs.get('cell'), calendar: loreShown.calendar,
+      onUsePlace: usePlace });
+  } finally { lock(false); }
+  if (pick) dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: pick } }));
+});
+
 addEventListener('quest:talk', async e => {
   if (talking || battle.open) return; // a log click during a fight is ignored
   const l = await store.snapshot();

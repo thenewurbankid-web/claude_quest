@@ -3,8 +3,17 @@
 // append-only `events` list (contract.js Event: { at, kind, ref }); it never leaves the machine.
 // The pure functions run under node:test; mountDigest is the only part that needs a DOM.
 // Safety: text only ever goes in through textContent. Styles are scoped under the qdg- prefix and injected once.
+// R3: events about game-only Riddles and Works (area lore) are left out of every count here, so lore never moves the
+// digest, the stats board or question-to-answer time.
+import { isGameOnly } from './contract.js';
 
 const time = iso => { const t = Date.parse(iso); return Number.isNaN(t) ? null : t; };
+
+/** The ledger's events minus those whose ref is a game-only Riddle or Work. */
+function realEvents(ledger) {
+  const skip = new Set([...(ledger?.riddles || []), ...(ledger?.works || [])].filter(isGameOnly).map(r => r.id));
+  return (ledger?.events || []).filter(e => !(e?.ref && skip.has(e.ref)));
+}
 
 /** ISO string of the latest 'session.end' in the log, or null when there is none. */
 export function lastSessionEnd(events) {
@@ -29,7 +38,7 @@ export function digest(ledger, since) {
   for (const k of Object.keys(DIGEST_KINDS)) d[k] = 0;
   const after = since == null ? -Infinity : time(since) ?? -Infinity;
   const byKind = Object.fromEntries(Object.entries(DIGEST_KINDS).map(([k, v]) => [v, k]));
-  for (const e of ledger?.events || []) {
+  for (const e of realEvents(ledger)) {
     const k = byKind[e?.kind];
     if (!k) continue;
     const t = time(e.at);
@@ -62,7 +71,7 @@ export function digestLines(d) {
  */
 export function answerTimes(ledger) {
   const raised = new Map(), answered = new Map();
-  for (const e of ledger?.events || []) {
+  for (const e of realEvents(ledger)) {
     if (!e?.ref) continue;
     const t = time(e.at);
     if (t === null) continue;
@@ -103,7 +112,7 @@ function playMinutes(events, from, now) {
  * Riddles on a Work with no Keeper count under keeper null.
  */
 export function realmStats(ledger, now = new Date(), { days = 7 } = {}) {
-  const events = (ledger?.events || []).filter(e => e && typeof e.kind === 'string');
+  const events = realEvents(ledger).filter(e => e && typeof e.kind === 'string');
   const t = now.getTime(), from = t - days * 24 * 3600e3;
   const times = answerTimes(ledger);
   const window = since => {
@@ -120,7 +129,7 @@ export function realmStats(ledger, now = new Date(), { days = 7 } = {}) {
   const rows = new Map((ledger?.keepers || []).map(k => [k.id, { keeper: k.id, name: k.name, answered: 0, waits: [], waiting: 0 }]));
   const row = id => rows.get(id) ?? (rows.set(id, { keeper: id, name: id ? 'A Keeper' : 'No Keeper', answered: 0, waits: [], waiting: 0 }), rows.get(id));
   for (const i of times.items) { const r = row(keeperOf(i.ref)); r.answered++; r.waits.push(i.minutes); }
-  for (const r of riddle.values()) if (['open', 'deferred'].includes(r.state)) row(keeperOf(r.id)).waiting++;
+  for (const r of riddle.values()) if (['open', 'deferred'].includes(r.state) && !isGameOnly(r)) row(keeperOf(r.id)).waiting++;
   const keepers = [...rows.values()]
     .map(({ waits, ...r }) => ({ ...r, medianMinutes: median(waits) }))
     .sort((a, b) => b.answered + b.waiting - (a.answered + a.waiting) || String(a.name).localeCompare(b.name));
