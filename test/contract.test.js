@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import {
   validateLedger, emptyLedger, memoryStore, makeSave, ledgerFromSave, canMove, RIDDLE_MOVES, QUEUE_MOVES, stewardOf,
   DEFAULT_RULES, EVENT_KIND, applyChanges, mergeChanges, noChanges, validateBattle, BATTLE_MOVES,
+  isGameOnly, validateAreaLore, validateAreaLoreIndex, MARK_SOURCE,
 } from '../public/quest/contract.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -138,4 +139,40 @@ test('R2: confirm/never Riddles pause for the Lodge and are never asked in comba
   assert.ok(!canMove(BATTLE_MOVES, 'won', 'fighting'));
   assert.ok(DEFAULT_RULES.bossThreshold > 0 && DEFAULT_RULES.mashBonus < 1);
   for (const k of ['boss.summoned', 'boss.retreated', 'boss.defeated']) assert.ok(EVENT_KIND.includes(k), k);
+});
+
+const loreFile = name => JSON.parse(readFileSync(new URL(`../public/quest/sample-lore/gcpv/${name}.json`, import.meta.url)));
+
+test('R3: the sample lore cell is sound and its index lists every entry file', () => {
+  const ix = loreFile('index');
+  assert.deepEqual(validateAreaLoreIndex(ix), []);
+  for (const { id, kind } of ix.entries) {
+    const e = loreFile(id);
+    assert.deepEqual(validateAreaLore(e), [], id);
+    assert.equal(e.kind, kind);
+    assert.equal(e.cell, ix.cell);
+  }
+});
+
+test('R3: lore outside the allowed kinds, with bad times, or with a path in its id is refused', () => {
+  const e = loreFile('harvest-stalls');
+  assert.deepEqual(validateAreaLore({ ...e, kind: 'politics' }).map(p => p.path), ['kind']);
+  assert.deepEqual(validateAreaLore({ ...e, endsAt: e.startsAt }).map(p => p.path), ['endsAt']);
+  assert.deepEqual(validateAreaLore({ ...e, id: '../x' }).map(p => p.path), ['id']);
+  assert.deepEqual(validateAreaLore({ ...e, cell: 'gcpva' }).map(p => p.path), ['cell']);
+  assert.deepEqual(validateAreaLore({ ...e, line: '' }).map(p => p.path), ['line']);
+  const ix = loreFile('index');
+  assert.deepEqual(validateAreaLoreIndex({ ...ix, entries: [{ ...ix.entries[0], kind: 'calendar' }] }).map(p => p.path),
+    ['entries[0].kind']); // the calendar fallback is made in the client, never published
+});
+
+test('R3: a lore mark is valid in the ledger and game-only; real work is not', () => {
+  assert.ok(MARK_SOURCE.includes('lore'));
+  const l = sample();
+  l.riddles[0].mark = { status: 'sent', source: 'lore', sourceId: 'gcpv/harvest-stalls', real: false, at: '2026-10-03T06:00:00Z' };
+  assert.deepEqual(validateLedger(l).filter(p => !p.repair), []);
+  assert.ok(isGameOnly(l.riddles[0]));
+  assert.ok(isGameOnly({ mark: { source: 'player', real: false } }));
+  assert.ok(!isGameOnly(l.riddles[1]));
+  assert.ok(!isGameOnly({ mark: { source: 'task', real: true } }));
 });

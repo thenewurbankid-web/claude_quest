@@ -1,0 +1,10 @@
+{
+  "id": "bards-at-the-lodge", "cell": "gcpv", "kind": "music",
+  "line": "Bards gather at the Lodge tonight",
+  "hint": "Sample: a live music night nearby",
+  "question": "The bards ask which tale they should sing first.",
+  "options": ["The Gloamwyrm's fall", "The first Beacon", "Let them choose"],
+  "startsAt": "2026-10-03T00:00:00Z", "endsAt": "2030-01-01T00:00:00Z",
+  "writtenAt": "2026-10-03T06:00:00Z", "writer": "template",
+  "source": { "name": "sample", "url": null }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "harvest-stalls", "cell": "gcpv", "kind": "market",
+  "line": "Harvest stalls line the square",
+  "hint": "Sample: a weekend farmers' market",
+  "question": "A stallholder needs someone to carry three baskets to the Lodge.",
+  "startsAt": "2026-10-03T00:00:00Z", "endsAt": "2030-01-01T00:00:00Z",
+  "writtenAt": "2026-10-03T06:00:00Z", "writer": "template",
+  "source": { "name": "sample", "url": null }
+}

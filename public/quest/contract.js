@@ -6,7 +6,8 @@
 //   - the LedgerStore interface (the IndexedDB store implements it; memoryStore below is the reference version),
 //   - the save format (the split save's parts, held as one object until R5 packs them into a zip),
 //   - the lore rules' defaults (R1: outbox seconds, defer and fade delays, the never-in-game list; R2: the boss),
-//   - R2's battle record and its phases (play state, kept in the save's play part, not in the ledger).
+//   - R2's battle record and its phases (play state, kept in the save's play part, not in the ledger),
+//   - R3's area-lore entry and cell index (shared per geohash-4 cell), and isGameOnly, which keeps lore out of the boss.
 // Change a shape here first, in its own commit, and only then in the slices that use it.
 
 export const LEDGER_VERSION = 1;
@@ -25,7 +26,13 @@ export const BEACON = ['gold', 'amber', 'red'];
 
 // Every action and response carries a mark: where it is in its life, and where it came from.
 export const MARK_STATUS = ['sent', 'seen', 'working', 'answered', 'done', 'failed'];
-export const MARK_SOURCE = ['project', 'task', 'agent', 'player'];
+export const MARK_SOURCE = ['project', 'task', 'agent', 'player', 'lore'];
+
+/**
+ * Game-only records (R3 area lore, and any mark with real: false) never feed the Haze, the Gloamwyrm, the stats board
+ * or Renown: bossScore, shouldSummon, riddleWeight, realmStats and answerTimes skip them.
+ */
+export const isGameOnly = record => record?.mark?.real === false || record?.mark?.source === 'lore';
 
 // Riddle life: open → answered (sealed in the outbox, still recallable) → sealed (written back to its Work).
 // "Ask me later" is an answer: open → deferred, and it comes back to open after the lore rules' delay.
@@ -107,6 +114,66 @@ export const BATTLE_MOVES = {
   won: [],
   retreated: [],
 };
+
+// ---------- R3: area lore ----------
+// Shared lore for an area (PLAN-engine.md, "R3 Lore quests"): a geohash-4 cell, about 39x20 km. The generator writes
+// each entry once to lore/<cell>/<id>.json and lists it in lore/<cell>/index.json; every player in the cell (and its 8
+// neighbours) reads the same files until the entry ends. Only these kinds are written; anything else is dropped at the
+// source, never filtered after the fact. 'calendar' is the built-in fallback (time of day, season, weekend), made in
+// the client and never published.
+export const AREA_LORE_VERSION = 1;
+export const AREA_LORE_KIND = ['festival', 'market', 'sports', 'music', 'seasonal', 'weather', 'calendar'];
+export const AREA_LORE_WRITER = ['ollama', 'template', 'calendar'];
+export const GEOHASH_CELL = /^[0-9b-hjkmnp-z]{4}$/; // geohash-4: base32 without a, i, l, o
+/**
+ * @typedef {{ id: string, cell: string, kind: string, line: string, hint: string, question: string,
+ *             options?: string[], startsAt: string, endsAt: string, writtenAt: string, writer: string,
+ *             source?: { name: string, url?: string|null }|null }} AreaLoreEntry
+ *   line: the in-world headline ("Bards gather at the Lodge tonight"), plain text;
+ *   hint: the tooltip naming the real event ("Live music at the Corn Exchange, 8pm"), plain text;
+ *   question: the game-only Riddle it becomes; options: its choices (an errand has none);
+ *   source: where the real event came from (a feed's name, or Open-Meteo for weather)
+ * @typedef {{ version: number, cell: string, updatedAt: string,
+ *             entries: { id: string, kind: string, startsAt: string, endsAt: string }[] }} AreaLoreIndex
+ *   lore/<cell>/index.json: what is live or coming in the cell, so a client fetches only the entries it needs
+ */
+
+const ISO = v => typeof v === 'string' && !Number.isNaN(Date.parse(v));
+const LORE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/; // also the file name, so no dots or slashes
+
+/** Problems with an area-lore entry, empty when sound. A client drops an entry with any problem. */
+export function validateAreaLore(e) {
+  const out = [];
+  const bad = (path, problem) => out.push({ path, problem });
+  if (!e || typeof e !== 'object') return [{ path: '', problem: 'not an area-lore entry' }];
+  if (typeof e.id !== 'string' || !LORE_ID.test(e.id)) bad('id', 'needs a lowercase id of letters, digits and dashes');
+  if (!GEOHASH_CELL.test(e.cell)) bad('cell', 'needs a geohash-4 cell');
+  if (!AREA_LORE_KIND.includes(e.kind)) bad('kind', `${JSON.stringify(e.kind)} is not one of ${AREA_LORE_KIND.join(', ')}`);
+  if (!AREA_LORE_WRITER.includes(e.writer)) bad('writer', `${JSON.stringify(e.writer)} is not one of ${AREA_LORE_WRITER.join(', ')}`);
+  for (const k of ['line', 'hint', 'question']) if (typeof e[k] !== 'string' || !e[k].trim()) bad(k, 'needs text');
+  if (e.options !== undefined && (!Array.isArray(e.options) || e.options.some(o => typeof o !== 'string' || !o.trim())))
+    bad('options', 'a list of plain-text choices');
+  for (const k of ['startsAt', 'endsAt', 'writtenAt']) if (!ISO(e[k])) bad(k, 'needs an ISO time');
+  if (ISO(e.startsAt) && ISO(e.endsAt) && Date.parse(e.endsAt) <= Date.parse(e.startsAt)) bad('endsAt', 'ends after it starts');
+  return out;
+}
+
+/** Problems with a cell's index.json, empty when sound. */
+export function validateAreaLoreIndex(ix) {
+  const out = [];
+  const bad = (path, problem) => out.push({ path, problem });
+  if (!ix || typeof ix !== 'object') return [{ path: '', problem: 'not an area-lore index' }];
+  if (ix.version !== AREA_LORE_VERSION) bad('version', `expected ${AREA_LORE_VERSION}, got ${ix.version}`);
+  if (!GEOHASH_CELL.test(ix.cell)) bad('cell', 'needs a geohash-4 cell');
+  if (!ISO(ix.updatedAt)) bad('updatedAt', 'needs an ISO time');
+  if (!Array.isArray(ix.entries)) bad('entries', 'missing list');
+  else ix.entries.forEach((x, i) => {
+    if (typeof x?.id !== 'string' || !LORE_ID.test(x.id)) bad(`entries[${i}].id`, 'needs a lowercase id');
+    if (!AREA_LORE_KIND.includes(x?.kind) || x.kind === 'calendar') bad(`entries[${i}].kind`, 'not a published kind');
+    if (!ISO(x?.startsAt) || !ISO(x?.endsAt)) bad(`entries[${i}]`, 'needs startsAt and endsAt');
+  });
+  return out;
+}
 
 export const canMove = (moves, from, to) => (moves[from] || []).includes(to);
 
