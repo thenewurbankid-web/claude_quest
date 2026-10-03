@@ -26,6 +26,15 @@
     "4791"
    ],
    "port": 4791
+  },
+  {
+   "name": "boxing-static",
+   "runtimeExecutable": "node",
+   "runtimeArgs": [
+    "dev/static.js",
+    "4792"
+   ],
+   "port": 4792
   }
  ]
 }

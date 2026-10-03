@@ -31,6 +31,11 @@
       const plain = await subtle.decrypt({ name: 'AES-GCM', iv: u8.slice(0, 12) }, k, u8.slice(12));
       return JSON.parse(new TextDecoder().decode(await pipe(new Uint8Array(plain), new DecompressionStream('gzip'))));
     },
+    // Unsealed, compact strings for hand-carried payloads (copy-paste or a QR code): gzip JSON, base64url.
+    async pack(obj) { return b64.enc(await pipe(new TextEncoder().encode(JSON.stringify(obj)), new CompressionStream('gzip'))); },
+    async unpack(str) {
+      return JSON.parse(new TextDecoder().decode(await pipe(b64.dec(String(str || '').trim()), new DecompressionStream('gzip'))));
+    },
     DEFAULT_BROKER: 'wss://broker.emqx.io:8084/mqtt',
   };
   if (typeof module !== 'undefined') module.exports = LinkCrypto; else root.LinkCrypto = LinkCrypto;
