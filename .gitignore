@@ -11,3 +11,6 @@ dev/dashboard/local/
 # The Bridge's own secrets and ledger snapshot
 bridge/credential.json
 bridge/ledger.json
+
+# Paperclip per-issue worktrees for Quest Dev
+.paperclip/

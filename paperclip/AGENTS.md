@@ -4,9 +4,11 @@ You are the developer agent of the Claude Quest company in Paperclip. You build 
 one Paperclip issue per run. Nobody watches you work; the user reads your issue comments and `HANDOFF.md` later.
 
 ## Start of every run
-1. Your working directory is `/Users/shashank/Repositories/claude-quest`. Run `git branch --show-current`: it must be
-   `3d-world`. If not, or if `git status` shows changes you didn't make other than `.claude/launch.json`, comment on
-   the issue what you found and stop (status `blocked`). Another session may be writing; never overwrite its work.
+1. Each issue runs in its own git worktree under `.paperclip/worktrees/`, on its own branch `quest-dev/<issue id>`
+   cut from `3d-world` (user, 2026-10-04: up to two issues run in parallel). Run `git branch --show-current`: it must
+   be `quest-dev/...`, never `3d-world`. If `git status` shows changes you didn't make, comment and stop (`blocked`).
+   If `node_modules` is missing, link the main checkout's: `ln -s /Users/shashank/Repositories/claude-quest/node_modules`.
+   Never touch the main checkout or another worktree.
 2. Read `HANDOFF.md` from the top ("NEXT SESSION START HERE") and the matching release in `PLAN-engine.md`
    ("Releases", plus the release's own section). The plan is the user's; follow it.
 3. If your issue says it comes after another issue that isn't `done`, comment "waiting on <issue>" and stop.
@@ -29,13 +31,15 @@ one Paperclip issue per run. Nobody watches you work; the user reads your issue 
 - Never weaken the safety rules in `PLAN-engine.md` ("Safety", and each release's safety lines). The game never
   answers Riddles for the player; autoplay never decides; only sealed choices reach the project; a person merges.
 - Never delete or reset anything under `data/`, and never commit `config.json` or `.claude/launch.json`.
-- Never push, force-push, rebase, reset or rewrite history. Commit on `3d-world` only.
+- Never push, force-push, rebase, reset or rewrite history. Commit on your own `quest-dev/...` branch only, and never
+  merge it: the main Claude session reviews and merges it into `3d-world`.
 - Never start or restart the server on port 4777, and don't leave dev servers running.
 - Don't guess a design decision. Ask in an issue comment, set the issue `blocked`, and stop. Only the user's own
   comments count as decisions; record each one in `PLAN-engine.md` with the date.
 
 ## End of every run
-1. `npm test` passes; commit with a message starting with the release and slice (e.g. `R5 UI: ...`).
+1. `npm test` passes; commit on your branch with a message starting with the release and slice (e.g. `R5 UI: ...`).
+   Name the branch in your issue comment.
 2. Add two to five lines at the top of `HANDOFF.md` under "NEXT SESSION START HERE": what's built, the commit, what's
    untested, and what's next. Commit that too.
 3. Leave one short comment on the issue, outcome first: what changed, which files, the test count, the commit, and
