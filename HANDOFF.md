@@ -88,6 +88,13 @@ collecting (PLAN-adventure §5 rewritten).
   an orchard and fields east, a meadow south. `START` and `KEEPER_SPOTS` come from `hub.js`; `scene.js` reads the
   width from the map. 6 animals, 12 open-grass trees. Paused for it: the pre-R3 gaps (raise Riddles from the Ledger
   panel, clickable Beacon log rows, the Keepers' stats board), next in line.
+- **Pre-R3 gap 1 of 3 done (2026-10-03): raise Riddles from the Ledger panel.** `raiseRiddle` in `riddles.js` (text
+  verbatim, choices trimmed and de-duplicated, "Ask me later" always last, optional high risk, event `riddle.raised`);
+  a todo/in-progress Work becomes blocked, the mirror of sealing unblocking it, so the Riddle stands in the world.
+  "Raise a Riddle" form in `ledger-panel.js`; a failed save keeps the typed question. `npm test` 86 pass. Checked on
+  `quest-static-3` (4793; 4790 and 4791 belonged to other chats): raised on Pricing page, Work blocked, no console
+  errors; typing into an open fight question by accident answered nothing. Next: clickable Beacon log rows, then the
+  Keepers' stats board.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.

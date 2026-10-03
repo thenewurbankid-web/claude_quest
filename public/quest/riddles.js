@@ -81,6 +81,29 @@ const findRiddle = (ledger, id) => {
 const change = (record, kind, at) => ({ puts: [{ kind: 'riddles', record }], events: [{ at, kind, ref: record.id }] });
 
 /**
+ * Raises a new open Riddle on a Work (the Ledger panel by hand until R3's /work page brings agents' questions). The
+ * text is kept verbatim; options are trimmed, blanks and repeats dropped, and "Ask me later" is always offered last.
+ * A Work still in todo or in progress becomes blocked: it waits on the answer, which is what stands its Riddle in the
+ * world (riddleNpcs), and sealing unblocks it again (outbox.js). Throws if the Work is missing or resolved, or the
+ * text is empty.
+ */
+export function raiseRiddle(ledger, { workId, text, line = null, options = [], high = false } = {}, now = new Date()) {
+  const w = ledger.works.find(x => x.id === workId);
+  if (!w) throw new Error(`no Work ${workId}`);
+  if (['done', 'cancelled'].includes(w.status)) throw new Error(`Work ${workId} is ${w.status}`);
+  const words = typeof text === 'string' ? text.trim() : '';
+  if (!words) throw new Error('a Riddle needs its question');
+  const opts = [...new Set(options.map(o => String(o).trim()).filter(o => o && o !== ASK_LATER))];
+  const r = { id: crypto.randomUUID(), workId, marchId: w.marchId, text: words, line: line?.trim() || null,
+    options: [...opts, ASK_LATER], risk: high ? 'high' : 'normal', state: 'open', steward: null,
+    raisedAt: now.toISOString() };
+  const c = change(r, 'riddle.raised', r.raisedAt);
+  if (['todo', 'in_progress'].includes(w.status))
+    c.puts.push({ kind: 'works', record: { ...clone(w), status: 'blocked', updatedAt: r.raisedAt } });
+  return c;
+}
+
+/**
  * Answers an open Riddle. "Ask me later" defers it; the steward's answer goes to the outbox; anyone else's answer is
  * kept as a proposal and the Riddle stays open (rule 10). Throws if it isn't open, the text is empty, or it is never-tier
  * (a never-tier Riddle can still be deferred).

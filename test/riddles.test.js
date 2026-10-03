@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RULES, memoryStore, applyChanges, validateLedger } from '../public/quest/contract.js';
-import { ASK_LATER, riskTier, trueSight, riddleNpcs, answerRiddle, tickRiddles, riddleWeight } from '../public/quest/riddles.js';
+import { ASK_LATER, riskTier, trueSight, riddleNpcs, answerRiddle, tickRiddles, riddleWeight, raiseRiddle } from '../public/quest/riddles.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
 const NOW = new Date('2026-10-03T12:00:00Z');
@@ -199,4 +199,27 @@ test('riddleContext: project, milestone and task first, then the facts', async (
   assert.equal(f.Priority, 'critical');
   assert.equal(f.Keeper, 'Quill (builder)');
   assert.equal(f.Asked, '2026-10-02 (1 day ago)');
+});
+
+test('raiseRiddle: a new open Riddle on a live Work, logged as riddle.raised, that the rules then pick up', async () => {
+  const c = raiseRiddle(sample(), { workId: 'w3', text: '  Monthly or yearly toggle first? ',
+    options: ['Monthly', ' Yearly ', '', 'Monthly', ASK_LATER] }, NOW);
+  const r = c.puts[0].record;
+  assert.equal(r.text, 'Monthly or yearly toggle first?');
+  assert.deepEqual(r.options, ['Monthly', 'Yearly', ASK_LATER]);
+  assert.equal(r.marchId, 'ferry');
+  assert.deepEqual([r.state, r.risk, r.raisedAt], ['open', 'normal', NOW.toISOString()]);
+  assert.deepEqual(c.events, [{ at: NOW.toISOString(), kind: 'riddle.raised', ref: r.id }]);
+  const after = await apply(sample(), c);
+  assert.equal(after.works.find(w => w.id === 'w3').status, 'blocked');
+  assert.ok(riddleNpcs(after, NOW).some(n => n.riddle.id === r.id));
+  assert.equal(riskTier(raiseRiddle(sample(), { workId: 'w3', text: 'Which?', high: true }, NOW).puts[0].record), 'confirm');
+});
+
+test('raiseRiddle leaves a Work already waiting as it is, and refuses a missing or finished Work and an empty question', () => {
+  const l = sample(), w = l.works.find(x => x.status === 'in_review' || x.status === 'blocked');
+  assert.equal(raiseRiddle(l, { workId: w.id, text: 'Ok?' }, NOW).puts.length, 1);
+  assert.throws(() => raiseRiddle(sample(), { workId: 'nope', text: 'x' }, NOW), /no Work/);
+  assert.throws(() => raiseRiddle(sample(), { workId: 'w1', text: 'x' }, NOW), /done/);
+  assert.throws(() => raiseRiddle(sample(), { workId: 'w3', text: '   ' }, NOW), /question/);
 });

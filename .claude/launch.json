@@ -1,31 +1,40 @@
 {
- "version": "0.0.1",
- "configurations": [
-  {
-   "name": "claude-quest",
-   "runtimeExecutable": "node",
-   "runtimeArgs": [
-    "app.js"
-   ],
-   "port": 4777
-  },
-  {
-   "name": "quest-static",
-   "runtimeExecutable": "node",
-   "runtimeArgs": [
-    "dev/static.js",
-    "4790"
-   ],
-   "port": 4790
-  },
-  {
-   "name": "quest-static-2",
-   "runtimeExecutable": "node",
-   "runtimeArgs": [
-    "dev/static.js",
-    "4791"
-   ],
-   "port": 4791
-  }
- ]
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "claude-quest",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "app.js"
+      ],
+      "port": 4777
+    },
+    {
+      "name": "quest-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "dev/static.js",
+        "4790"
+      ],
+      "port": 4790
+    },
+    {
+      "name": "quest-static-2",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "dev/static.js",
+        "4791"
+      ],
+      "port": 4791
+    },
+    {
+      "name": "quest-static-3",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "dev/static.js",
+        "4793"
+      ],
+      "port": 4793
+    }
+  ]
 }
