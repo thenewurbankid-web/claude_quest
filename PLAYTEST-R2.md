@@ -3,7 +3,7 @@
 The gate before R3 (criteria in PLAN-engine.md, "R2 playtest criteria"). R2 passes only if every line holds.
 Run the static server (`node dev/static.js 4791`, or the `quest-static-2` preview), never the real 4777 game.
 
-## Session 1 (date: ______)
+## Session 1 (date: 2026-10-03)
 Open http://localhost:4791/?playtest and accept the confirm. Walk around for about 10 s; the Gloamwyrm cuts in.
 
 ### Fight 1: play it straight (criteria 1, 2, 3, 6)
@@ -20,6 +20,7 @@ Open http://localhost:4791/?playtest and accept the confirm. Walk around for abo
 
 ### Fight 2: try to break it (criteria 4, 5)
 Reload with `?playtest` to reset.
+- Note (2026-10-03): user played fight 2 and reported "working fine"; individual lines not yet confirmed.
 - [ ] Mashing Enter/Space as a question opens never picked an answer.
 - [ ] On Payment provider, mashing Enter on the confirm screen never sealed.
 - [ ] Answered one, then retreated mid-fight. After reloading with `?playtest`, it came back stronger, I can explain how,
