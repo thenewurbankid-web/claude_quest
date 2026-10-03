@@ -323,6 +323,9 @@ feature list; releases pick from them.
   `ctx.issues.createComment`, and no `issues.update` capability, so write-back stays comments only), and **standalone**
   (`npm run bridge`) for players without Paperclip, so Paperclip stays optional. The plugin is built and tested in the
   repo; the user installs it into Paperclip (`paperclipai plugin install --local`).
+  *Bell and restarts (user, 2026-10-04):* the Bridge always **starts halted**; only the game's `open` clears it, so a Bell
+  rung while it was off is never lost. Identity comes from the connection: every connection needs the per-Realm login,
+  and WebSocket upgrades from any page but the game's own origin are refused (review of `152c47e`, comments on CLA-7/8).
 - **R5 "Missions and the first Sealed Hall"** (user, 2026-10-03): missions (a parent Work and its children; the saga is
   their Hall), backlog pressure against the release date and its gate on side content, the Sealed Hall as the saga's
   finale and its Sigil, and Keepers summoned with Ember, joining and released. The R4 controls already respect
