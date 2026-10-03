@@ -12,6 +12,8 @@ Open http://localhost:4791/?playtest and accept the confirm. Walk around for abo
   later" at 06:20:14 instead of answered in the Lodge. Staging server (p3) never resolved. Retreated 06:20:16 with
   15/49 hp left, about 2 min in. The player first said "all lines held"; the log disagreed and the player confirmed
   this run as fight 1. Replay with `?playtest` (it resets the backlog and the retreat count).
+  Why (player): unclear what to do, so the Payment provider was put off and the fight abandoned. Possible miss against
+  criteria 1 and 3: check that the fight says how to land a hit and what the Lodge pause asks of you.
 - [ ] Time at cut-in: ______
 - [ ] Before facing anything, open "Why?" under the hp bar. I can name which Works feed it and why it's that size.
 - [ ] Plant catalogue (asked in the fight): picked a real answer.
@@ -51,3 +53,4 @@ Open http://localhost:4791/?playtest=heavier.
 ## Result
 - [ ] Every line holds: R2 passes, R3 may start.
 - Misses (rethink before R3, see PLAN-engine.md "Risks"):
+  - Possible: fight 1 attempt 1 was abandoned because it was unclear what to do (wording of the fight and the Lodge pause).
