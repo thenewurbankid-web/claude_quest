@@ -23,8 +23,32 @@ import { bossScore, hazeLevel, shouldSummon, emptyBossPlay } from './boss.js';
 import { playtestRealm } from './playtest.js';
 
 const store = await openLedger();
+// An in-page prompt rather than confirm(): some embedded browsers block native dialogs and silently answer "no".
+const askInPage = text => new Promise(resolve => {
+  const box = document.createElement('div');
+  box.setAttribute('role', 'alertdialog');
+  box.setAttribute('aria-label', text);
+  Object.assign(box.style, { position: 'fixed', left: '50%', top: '40%', transform: 'translate(-50%, -50%)', zIndex: 1200,
+    width: 'min(420px, calc(100vw - 32px))', padding: '16px', borderRadius: '12px', background: 'rgba(14,16,24,.95)',
+    color: '#eef0f4', font: '14px/1.4 system-ui, sans-serif', border: '1px solid rgba(255,255,255,.2)' });
+  const p = document.createElement('p');
+  p.style.margin = '0 0 12px';
+  p.textContent = text;
+  box.append(p);
+  for (const [label, yes] of [['Load it', true], ['Cancel', false]]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    Object.assign(b.style, { minHeight: '40px', padding: '8px 14px', marginRight: '8px', borderRadius: '8px', cursor: 'pointer',
+      border: '1px solid rgba(255,255,255,.25)', background: yes ? '#6b4fd8' : 'rgba(255,255,255,.08)', color: 'inherit', font: 'inherit' });
+    b.onclick = () => { box.remove(); resolve(yes); };
+    box.append(b);
+  }
+  document.body.append(box);
+  box.querySelector('button').focus();
+});
 const pt = new URLSearchParams(location.search).get('playtest');
-if (pt !== null && confirm('Replace this browser\'s ledger with the R2 playtest backlog (sample Realm + three fake questions)?')) {
+if (pt !== null && await askInPage(`Replace this browser's ledger with the R2 playtest backlog${pt === 'heavier' ? ' (heavier, a day later)' : ''}: the sample Realm plus three fake questions?`)) {
   const sample = await (await fetch(new URL('quest/sample-realm.json', document.baseURI))).json();
   await store.replace(playtestRealm(sample, new Date(), { heavier: pt === 'heavier' }));
   try { localStorage.removeItem('quest-play'); } catch {}
