@@ -348,13 +348,14 @@ export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
 // runs on the Local Ledger and /work copy-paste exactly as before. Everything on the wire is data: plain strings that
 // are shown as plain text with True Sight and never obeyed. Topics are quest/<realmId>/...; who may publish or
 // subscribe where is fixed here (topicAllowed), so an agent can only speak for itself.
-//   game → bridge:  bell (stop handing out work), open (the player lets it hand out work again), offer is built by the bridge
+//   game → bridge:  bell (stop handing out work), open (the player lets it hand out work again), keepers (retained: the
+//                   opted-in Keepers and their status, nothing else of the ledger); offers are built by the bridge
 //   agent → bridge: register (the Keeper registration record), report (one report per message)
 //   bridge → agent: work (one offer for that Keeper), status
 // The Bell halts the Bridge until the player opens it again; an agent can never open it.
 export const BRIDGE_VERSION = 1;
 export const BRIDGE_HOST = '127.0.0.1'; // the only address it binds to and answers
-export const BRIDGE_TOPIC = ['register', 'work', 'report', 'status', 'bell', 'open'];
+export const BRIDGE_TOPIC = ['register', 'work', 'report', 'status', 'bell', 'open', 'keepers'];
 export const BRIDGE_REPORT_KEYS = ['v', 'queueId', 'kind', 'summary', 'question', 'branch', 'input_tokens', 'output_tokens'];
 export const BRIDGE_CREDENTIAL = ['mqtt', 'webhook', 'paperclip'];
 export const PAPERCLIP_WRITES = ['comment']; // write-back is comments only (user, 2026-10-04); status changes stay manual
@@ -389,11 +390,12 @@ export function topicAllowed(who, topic, action) {
   const t = parseBridgeTopic(topic);
   if (!t || t.realmId !== who.realmId || !['publish', 'subscribe'].includes(action)) return false;
   const pub = action === 'publish';
-  if (who.role === 'game') return pub ? ['bell', 'open'].includes(t.kind) : ['report', 'register', 'status', 'work'].includes(t.kind);
-  if (who.role === 'bridge') return pub ? ['work', 'status'].includes(t.kind) : ['register', 'report', 'bell', 'open'].includes(t.kind);
+  if (who.role === 'game') return pub ? ['bell', 'open', 'keepers'].includes(t.kind) : ['report', 'register', 'status', 'work'].includes(t.kind);
+  if (who.role === 'bridge') return pub ? ['work', 'status'].includes(t.kind) : ['register', 'report', 'bell', 'open', 'keepers'].includes(t.kind);
   if (who.role === 'agent') {
     if (!who.keeperId || !BRIDGE_ID.test(who.keeperId)) return false;
     if (t.kind === 'status') return !pub;
+    if (t.kind === 'keepers') return false;
     return t.keeperId === who.keeperId && (pub ? ['register', 'report'].includes(t.kind) : t.kind === 'work');
   }
   return false;
@@ -434,6 +436,15 @@ export function bridgeMayOffer(ledger, registration, halted) {
   if (['resting', 'released'].includes(k.status)) return { ok: false, why: `${k.name} is ${k.status}` };
   return { ok: true, why: null };
 }
+
+/**
+ * The retained Keeper list the game publishes on the keepers topic: only the Keepers the player opted in (the caller
+ * passes those), and only id, name and status. No Work text, no skills, no credential.
+ * @returns {{ v: number, keepers: { id: string, name: string, status: string }[] }}
+ */
+export const keeperList = keepers =>
+  ({ v: BRIDGE_VERSION, keepers: (keepers || []).filter(k => k && BRIDGE_ID.test(k.id || '') && ONE_LINE(k.name))
+    .map(k => ({ id: k.id, name: k.name, status: String(k.status ?? '') })) });
 
 /** Halt state: the Bell halts it; only the game's open message clears it. Nothing an agent sends reaches here. */
 export const bridgeHalt = (halted, kind) => kind === 'bell' ? true : kind === 'open' ? false : halted;
