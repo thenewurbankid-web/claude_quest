@@ -23,8 +23,8 @@ Reload with `?playtest` to reset.
 - Note (2026-10-03): user played fight 2 and reported "working fine"; individual lines not yet confirmed.
 - [ ] Mashing Enter/Space as a question opens never picked an answer.
 - [ ] On Payment provider, mashing Enter on the confirm screen never sealed.
-- [ ] Answered one, then retreated mid-fight. After reloading with `?playtest`, it came back stronger, I can explain how,
-      and my earlier answer wasn't asked again.
+- [ ] Answered one, then retreated mid-fight. Reload WITHOUT `?playtest` (it would reset the retreat count) and wait out
+      the 10-minute calm: it came back stronger, I can explain how, and my earlier answer wasn't asked again.
 - [ ] Answered one, then hit Recall on the outbox strip within 10 s: the Gloamwyrm got those hp back.
 
 ### Phone (criterion 8)

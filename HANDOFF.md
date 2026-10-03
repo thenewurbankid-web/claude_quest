@@ -83,6 +83,11 @@ collecting (PLAN-adventure §5 rewritten).
   target; measure it in the playtest before padding anything. The Lodge stays the plain confirm (rule 3).
   **Next: the playtest (gate):** `/?playtest` on a static server, then `/?playtest=heavier` a day later.
   Checklist: `PLAYTEST-R2.md` (fill it in during both sessions).
+- **Bigger world (user, 2026-10-03):** the 3D hub is 48x32 (was 24x16). The old town sits in the middle (`hub.js`
+  `TOWN` offset) with its tree wall opened into a hedge; roads run to every edge; a wood and hamlet north, a lake west,
+  an orchard and fields east, a meadow south. `START` and `KEEPER_SPOTS` come from `hub.js`; `scene.js` reads the
+  width from the map. 6 animals, 12 open-grass trees. Paused for it: the pre-R3 gaps (raise Riddles from the Ledger
+  panel, clickable Beacon log rows, the Keepers' stats board), next in line.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.

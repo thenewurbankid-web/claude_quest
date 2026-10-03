@@ -11,7 +11,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { SquareGrid } from './grid.js';
-import { HUB, SOLID } from './hub.js';
+import { HUB, SOLID, START, KEEPER_SPOTS } from './hub.js';
 import { dayPhase, clockLabel } from './clock.js';
 import { createAtmosphere } from './atmosphere.js';
 import { LOOK } from './look.js';
@@ -19,8 +19,9 @@ import { load as loadSunnyside } from './sunnyside.js';
 
 const A = 'assets/';
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const rows = HUB.map(r => r.padEnd(24, '.').slice(0, 24));
-const grid = new SquareGrid(24, rows.length, 1);
+const COLS = Math.max(...HUB.map(r => r.length));
+const rows = HUB.map(r => r.padEnd(COLS, '.').slice(0, COLS));
+const grid = new SquareGrid(COLS, rows.length, 1);
 const at = (c, r) => (grid.inside(c, r) ? rows[r][c] : 'T');
 
 // ---------- renderer, scene, camera ----------
@@ -604,14 +605,14 @@ async function build() {
   // A few trees standing in the open grass inside the map, away from the well and the player's start.
   const open = [];
   for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
-    if ((at(c, r) === '.' || at(c, r) === ',') && Math.abs(c - wellCell[0]) + Math.abs(r - wellCell[1]) > 3 && !(c === 11 && r === 9)) open.push([c, r]);
+    if ((at(c, r) === '.' || at(c, r) === ',') && Math.abs(c - wellCell[0]) + Math.abs(r - wellCell[1]) > 3 && !(c === START[0] && r === START[1])) open.push([c, r]);
   }
   const rank = ([c, r]) => ((c * 7 + 3) * 73856093 ^ (r * 5 + 1) * 19349663) >>> 0;
   for (const [c, r] of open.sort((a, b) => rank(a) - rank(b)).slice(0, LOOK.trees.inside)) { treeCells.add(c + ',' + r); jobs.push(tree(c, r, {})); }
   await Promise.all(jobs);
-  const p = await person('player', 11, 9, 0x3050c0, 'shorthair');
-  player = makeActor(p.obj, p.clips, 11, 9, LOOK.move.walk, p.sprite);
-  const keeperSpots = [[4, 7], [17, 8], [11, 13], [6, 4], [19, 12]].slice(0, LOOK.people.keepers);
+  const p = await person('player', ...START, 0x3050c0, 'shorthair');
+  player = makeActor(p.obj, p.clips, ...START, LOOK.move.walk, p.sprite);
+  const keeperSpots = KEEPER_SPOTS.slice(0, LOOK.people.keepers);
   for (const [i, [c, r]] of keeperSpots.entries()) {
     const m = await person('keeper', c, r, 0xd97757, sunny?.HAIR[(i + 1) % sunny.HAIR.length], i);
     const a = makeActor(m.obj, m.clips, c, r, 2.6 * LOOK.move.npcPace, m.sprite);
