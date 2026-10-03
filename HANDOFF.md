@@ -47,8 +47,13 @@ collecting (PLAN-adventure §5 rewritten).
   outbox → sealed → decision on the Work, and the confirm view for the high-risk Riddle; no console errors.
   Gaps: nothing raises new Riddles yet (the Ledger panel can't add one; the sample's come preloaded), the Keepers'
   stats board in the Lodge isn't built (answerTimes exists), and the Beacon log's Riddle rows aren't clickable.
-  **Next: R2 "The Gloamwyrm"**: write the playtest criteria first (PLAN-engine.md, Risks: "written playtest criteria
-  before R2"), then the contract step.
+- **R2 playtest criteria approved** (PLAN-engine.md, "R2 playtest criteria"), and **the R2 contract step is done
+  (2026-10-03):** `contract.js` has `BATTLE_PHASE`/`BATTLE_MOVES` (fighting, question, lodge, won, retreated; retreat
+  from any turn), the `Battle` record (play state in the save's `play.boss`, never ledger data), `validateBattle` (it
+  can't fall or be won while a Riddle is unresolved; confirm/never Riddles only pause for the Lodge), the boss rules
+  (threshold 3 on the sum of `riddleWeight` over open and deferred Riddles, hp per weight, +0.25 strength per retreat,
+  mash bonus at most 15% of a hit) and the boss events. `npm test` 72 pass. The sample Realm already crosses the
+  threshold. **Next: R2's parallel round** (boss ∥ weights ∥ placeholder art), then tuning, then the playtest (gate).
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.

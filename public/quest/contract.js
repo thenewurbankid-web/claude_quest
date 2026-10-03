@@ -5,7 +5,8 @@
 //   - the /work queue states and their allowed moves,
 //   - the LedgerStore interface (the IndexedDB store implements it; memoryStore below is the reference version),
 //   - the save format (the split save's parts, held as one object until R5 packs them into a zip),
-//   - the lore rules' defaults (R1: outbox seconds, defer and fade delays, the never-in-game list).
+//   - the lore rules' defaults (R1: outbox seconds, defer and fade delays, the never-in-game list; R2: the boss),
+//   - R2's battle record and its phases (play state, kept in the save's play part, not in the ledger).
 // Change a shape here first, in its own commit, and only then in the slices that use it.
 
 export const LEDGER_VERSION = 1;
@@ -56,7 +57,7 @@ export const QUEUE_MOVES = {
 // R1 adds the Riddle's later moves; question-to-answer time is riddle.raised → riddle.answered for the same ref.
 export const EVENT_KIND = ['riddle.raised', 'riddle.answered', 'riddle.deferred', 'riddle.recalled', 'riddle.sealed',
   'riddle.returned', 'riddle.faded', 'riddle.proposed', 'agent.blocked', 'agent.unblocked', 'session.start',
-  'session.end'];
+  'session.end', 'boss.summoned', 'boss.retreated', 'boss.defeated'];
 
 // ---------- lore rules (defaults) ----------
 // A world's lore folder overrides these (PLAN-engine.md, "Customizable through lore files"); until Ink lore lands in
@@ -71,6 +72,28 @@ export const DEFAULT_RULES = {
   // neverInGame ones are never answered in the game at all, only shown with where to answer them.
   confirmWords: ['merge', 'deploy', 'release', 'delete', 'drop', 'budget', 'payment', 'billing'],
   neverInGame: ['password', 'secret', 'api key', 'token', 'credential'],
+  // R2, the Gloamwyrm: its score is the sum of riddleWeight over open and deferred Riddles; past the threshold it cuts in.
+  bossThreshold: 3,
+  bossHpPerWeight: 10,     // maxHp = round(score * this * strength)
+  bossReturnGrowth: 0.25,  // each retreat: strength + this, so it returns stronger
+  mashBonus: 0.15,         // the most extra damage mashing adds to a hit, as a share of that hit
+};
+
+// ---------- R2: the battle ----------
+// The Gloamwyrm fight is play state (the save's play part), never ledger data: answers still go through the Riddle
+// rules, and the battle only reads which Riddles got resolved. Phases:
+//   fighting: turns run; question: paused on a normal-tier Riddle, no timer, input locked until the box closes;
+//   lodge: paused because a confirm- or never-tier Riddle came up; it is answered in the Lodge, never in combat;
+//   won: every Riddle in the fight resolved (answered or deferred); retreated: the player fell back to the Lodge.
+// Hits come only from resolving a Riddle (deferring counts). Mashing scales a hit by at most mashBonus and never
+// picks an answer. hp never reaches 0 while any of the fight's Riddles is unresolved.
+export const BATTLE_PHASE = ['fighting', 'question', 'lodge', 'won', 'retreated'];
+export const BATTLE_MOVES = {
+  fighting: ['question', 'lodge', 'won', 'retreated'],
+  question: ['fighting', 'won', 'retreated'], // retreat works from any turn, a pause included
+  lodge: ['fighting', 'won', 'retreated'],
+  won: [],
+  retreated: [],
 };
 
 export const canMove = (moves, from, to) => (moves[from] || []).includes(to);
@@ -116,6 +139,12 @@ export const stewardOf = (ledger, marchId) =>
  *             leaseUntil?: string|null, result?: { text: string, usage?: { input: number, output: number },
  *             at: string }|null, createdAt: string }} QueueItem
  * @typedef {{ at: string, kind: string, ref?: string|null }} Event
+ * @typedef {{ id: string, startedAt: string, phase: string, score: number, strength: number, hp: number, maxHp: number,
+ *             riddleIds: string[], lodgeIds: string[], resolvedIds: string[], current: string|null, turn: number,
+ *             endedAt?: string|null }} Battle
+ *   riddleIds: normal-tier Riddles asked in the fight; lodgeIds: confirm/never ones that pause it for the Lodge;
+ *   resolvedIds: those answered or deferred so far (answers kept across a retreat); current: the Riddle on screen
+ * @typedef {{ battle: Battle|null, retreats: number }} BossPlay   the save's play.boss
  * @typedef {{ version: number, realm: Realm, marches: March[], halls: Hall[], works: Work[], keepers: Keeper[],
  *             riddles: Riddle[], queue: QueueItem[], events: Event[] }} Ledger
  */
@@ -221,6 +250,25 @@ export function validateLedger(l) {
     if (q.state === 'leased' && !q.leaseUntil) bad(`${p}.leaseUntil`, 'a leased item needs its lease end');
   });
   l.events.forEach((e, i) => oneOf(`events[${i}].kind`, e.kind, EVENT_KIND));
+  return out;
+}
+
+/** Problems with a battle record, empty when sound. */
+export function validateBattle(b) {
+  const out = [];
+  const bad = (path, problem) => out.push({ path, problem });
+  if (!b || typeof b !== 'object') return [{ path: '', problem: 'not a battle' }];
+  if (!BATTLE_PHASE.includes(b.phase)) bad('phase', `${JSON.stringify(b.phase)} is not one of ${BATTLE_PHASE.join(', ')}`);
+  for (const k of ['riddleIds', 'lodgeIds', 'resolvedIds']) if (!Array.isArray(b[k])) bad(k, 'missing list');
+  if (!(b.maxHp > 0) || !(b.hp >= 0) || b.hp > b.maxHp) bad('hp', 'needs 0 <= hp <= maxHp, maxHp > 0');
+  if (!(b.strength >= 1)) bad('strength', 'starts at 1 and only grows');
+  const all = [...(b.riddleIds || []), ...(b.lodgeIds || [])];
+  if ((b.resolvedIds || []).some(id => !all.includes(id))) bad('resolvedIds', 'resolves a Riddle outside the fight');
+  const open = all.filter(id => !(b.resolvedIds || []).includes(id));
+  if (b.hp === 0 && open.length) bad('hp', 'the Gloamwyrm cannot fall while a Riddle is unresolved');
+  if (b.phase === 'won' && open.length) bad('phase', 'won with Riddles unresolved');
+  if (b.phase === 'question' && !(b.riddleIds || []).includes(b.current)) bad('current', 'a question pause shows one of the fight\'s Riddles');
+  if ((b.lodgeIds || []).includes(b.current) && b.phase !== 'lodge') bad('current', 'confirm/never Riddles are never asked in combat');
   return out;
 }
 

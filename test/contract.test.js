@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   validateLedger, emptyLedger, memoryStore, makeSave, ledgerFromSave, canMove, RIDDLE_MOVES, QUEUE_MOVES, stewardOf,
-  DEFAULT_RULES, EVENT_KIND, applyChanges, mergeChanges, noChanges,
+  DEFAULT_RULES, EVENT_KIND, applyChanges, mergeChanges, noChanges, validateBattle, BATTLE_MOVES,
 } from '../public/quest/contract.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -119,4 +119,23 @@ test('R1: Changes merge and apply puts before events', async () => {
   const l = await s.snapshot();
   assert.equal(l.riddles[1].state, 'deferred');
   assert.equal(l.events.at(-1).kind, 'riddle.deferred');
+});
+
+const battle = (o = {}) => ({ id: 'b1', startedAt: '2026-10-03T12:00:00Z', phase: 'fighting', score: 3.2, strength: 1,
+  hp: 32, maxHp: 32, riddleIds: ['r2'], lodgeIds: ['r1'], resolvedIds: [], current: null, turn: 0, ...o });
+
+test('R2: a battle is sound; it cannot fall or be won while a Riddle is unresolved', () => {
+  assert.deepEqual(validateBattle(battle()), []);
+  assert.deepEqual(validateBattle(battle({ hp: 0 })).map(p => p.path), ['hp']);
+  assert.deepEqual(validateBattle(battle({ phase: 'won', hp: 0, resolvedIds: ['r2'] })).map(p => p.path), ['hp', 'phase']);
+  assert.deepEqual(validateBattle(battle({ phase: 'won', hp: 0, resolvedIds: ['r2', 'r1'] })), []);
+});
+
+test('R2: confirm/never Riddles pause for the Lodge and are never asked in combat; retreat from any turn', () => {
+  assert.deepEqual(validateBattle(battle({ phase: 'question', current: 'r1' })).map(p => p.path), ['current', 'current']);
+  assert.deepEqual(validateBattle(battle({ phase: 'lodge', current: 'r1' })), []);
+  for (const from of ['fighting', 'question', 'lodge']) assert.ok(canMove(BATTLE_MOVES, from, 'retreated'), from);
+  assert.ok(!canMove(BATTLE_MOVES, 'won', 'fighting'));
+  assert.ok(DEFAULT_RULES.bossThreshold > 0 && DEFAULT_RULES.mashBonus < 1);
+  for (const k of ['boss.summoned', 'boss.retreated', 'boss.defeated']) assert.ok(EVENT_KIND.includes(k), k);
 });
