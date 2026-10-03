@@ -6,6 +6,20 @@ Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
 **R4.5 Bridge process built (CLA-7, 2026-10-04):** `bridge/` (`node bridge/index.js`; `bridge/bridge.js` is `createBridge`): aedes over TCP (4780) and WebSocket+HTTP (4779) on 127.0.0.1, `topicAllowed` on every publish/subscribe, bad agent reports and registrations are replaced by a `refused` message on the status topic, good reports republished with `{queueId, keeperId, report}`, Bell/open via `bridgeHalt`, offers only through `bridgeMayOffer`. Paperclip: `GET /paperclip/api/...` passthrough and `POST /paperclip/comment {issueId, kind: decision|report, body}` (comments only, needs header `x-quest-token` = webhook token). Own git-ignored files `bridge/credential.json` and `bridge/ledger.json`. Deps: `aedes`, `websocket-stream`. `npm test` 189 pass, tested over loopback only; not tried against the real Paperclip or a browser. **Open for CLA-8/9:** (1) the Bridge holds no ledger: it reads a snapshot from `bridge/ledger.json`; the game must write or send one (no topic for it exists yet). (2) The credential has one MQTT login, so roles come from the client id (`game`, `agent-<keeperId>`): an agent holding the password could claim `game`. Separate game/agent logins would need a contract change; user's call. (3) Agents also see the unused `status` refusals. **Next:** CLA-8 in-game client and settings.
 **R4.5 contract done (CLA-6, 2026-10-04, `152c47e`):** `contract.js` "R4.5: the Bridge" (topics `quest/<realm>/...`, `topicAllowed`, `Registration`, `bridgeMayOffer`/`bridgeHalt`, `reportFromBridge` via `parseReport`, `Credential`, `bridgeBindHost`/`isOwnMachine`), `sample-bridge.json`, four Bridge safety tests; `npm test` 181 pass. Slices: CLA-7 Bridge process (`bridge/`), CLA-8 in-game client and settings, CLA-9 integration (`boot.js`), in that order. Nothing here touches the browser. **Next:** CLA-7 (needs `aedes`, `mqtt` and its WebSocket adapter only). `PLAN-engine.md` has the user's 2026-10-04 decisions uncommitted; commit it with the next change.
+**Main session duty (2026-10-04, user): monitor and review Quest Dev, merge its branches.**
+- Quest Dev now runs up to 2 issues in parallel, each in a worktree `.paperclip/worktrees/quest-dev/<CLA-n>` on branch
+  `quest-dev/<CLA-n>` cut from `3d-world` (agent config `git_worktree`, `paperclip/AGENTS.md`). It never merges.
+- On each finished branch: review the diff against the plan's safety lines, run `npm test`, merge into `3d-world` with
+  `--no-ff`, and comment on the issue. CLA-8's first run started before the switch and commits straight to `3d-world`.
+- Just in time: assign the next issue when the one it follows is done. CLA-10 (Paperclip plugin) is unassigned until
+  CLA-9 is done. Paperclip's recovery reassigns an unassigned issue that another issue waits on, so CLA-9 stays
+  assigned and its run only comments "waiting".
+- Answer Quest Dev's questions on the issue only when PLAN-engine.md already settles them, citing it; take real design
+  choices to the user.
+- State on 2026-10-04 22:41: CLA-6 is done. CLA-7 (Bridge process, `83edeaf`) was reopened for the review fixes: login on
+  every connection, Origin check, start halted, guarded `POST /paperclip/comment`, game-published Keeper list. CLA-8 is
+  in progress; CLA-9 and CLA-10 are todo.
+
 **Done (2026-10-04): Quest Pulse, a local Paperclip dashboard (user).** `node dev/dashboard.js` (launch config
 `quest-pulse`, port 4795) serves `dev/dashboard/index.html`, refreshing every 5 s:
 - Quest Dev's pulse, releases R0 to R9+ (matched to Paperclip issues by title prefix), issues with their latest comment,
