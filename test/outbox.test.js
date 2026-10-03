@@ -42,7 +42,8 @@ test('recall inside the window reopens the Riddle and logs it', async () => {
   assert.equal(r.state, 'open');
   assert.equal(r.answer, null);
   assert.equal(r.outboxUntil, null);
-  assert.deepEqual(after.events.at(-1), { at: plus(3).toISOString(), kind: 'riddle.recalled', ref: 'r1' });
+  const { seq, prevHash, hash, ...recalled } = after.events.at(-1); // the store's chain fields aside
+  assert.deepEqual(recalled, { at: plus(3).toISOString(), kind: 'riddle.recalled', ref: 'r1' });
   assert.deepEqual(hard(after), []);
 });
 

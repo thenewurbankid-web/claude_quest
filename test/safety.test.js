@@ -110,7 +110,8 @@ test('rule 11: the Recall Bell stops all work, from anywhere', async () => {
   assert.ok(!l.queue.some(q => LIVE.includes(q.state)));
   assert.equal(l.queue.find(q => q.id === 'q2').state, 'returned');         // finished work is kept
   for (const k of l.keepers) assert.ok(wake(l, k.id, 'w6', {}, T0).problem); // nobody takes new work after it
-  assert.deepEqual(l.events.at(-1), { at: T0.toISOString(), kind: 'bell.rung', ref: null });
+  const { seq, prevHash, hash, ...rung } = l.events.at(-1); // the store's chain fields aside
+  assert.deepEqual(rung, { at: T0.toISOString(), kind: 'bell.rung', ref: null });
   assert.deepEqual(sound(l), []);
 });
 

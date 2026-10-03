@@ -8,6 +8,7 @@ import {
   DEFAULT_RULES, EVENT_KIND, applyChanges, mergeChanges, noChanges, validateBattle, BATTLE_MOVES,
   isGameOnly, validateAreaLore, validateAreaLoreIndex, validateAreaLoreCells, MARK_SOURCE,
   KEEPER_STATUS, parseReport, emberLeft, branchFor, REPORT_INSTRUCTIONS,
+  suggest, MISSION_MOVES, validateMissionPlay, emptyMissionPlay, chainEvent, verifyEvents,
 } from '../public/quest/contract.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -242,4 +243,97 @@ test('R4: Ember is spent by reported tokens inside the window and never goes bel
   assert.equal(emberLeft(l, '2026-10-05T12:00:00Z'), DEFAULT_RULES.emberMax); // outside the window
   l.queue[0].reports[0].usage = { input: 2e6, output: 0 };
   assert.equal(emberLeft(l, '2026-10-03T12:00:00Z'), 0);
+});
+
+test('paste checks: a misspelled field or kind says "did you mean", and nothing is repaired', () => {
+  const typo = '```quest-report\nkind: blcoked\nsummary: s\nquestion: q?\ninput_token: 5\noutput_tokens: 5\n```';
+  const { report, problems } = parseReport(typo);
+  assert.equal(report, null);
+  assert.deepEqual(problems.find(p => p.field === 'kind').suggestions, ['blocked']);
+  assert.equal(problems.find(p => p.field === 'input_token').suggestions[0], 'input_tokens'); // closest first
+  const upper = parseReport('```quest-report\nKind: done\nsummary: s\n```').problems;
+  assert.deepEqual(upper.find(p => p.field === 'Kind').suggestions, ['kind']);
+  assert.deepEqual(suggest('zebra', ['progress', 'done', 'blocked']), []); // too far off: no guess
+  assert.deepEqual(suggest('done', ['progress', 'done', 'blocked']), []);  // exact: nothing to suggest
+  assert.equal(parseReport('```quest-report\nkind: done\nsummary: s\n```').problems.length, 0);
+});
+
+test('missions: a parent Work and its children in one Hall, one level deep', () => {
+  const l = sample();
+  const [a, b, c] = l.works.filter(w => w.hallId === l.works[0].hallId);
+  b.parentId = a.id;
+  assert.deepEqual(validateLedger(l).filter(p => p.path.endsWith('parentId')), []);
+  if (c) { c.parentId = b.id; assert.ok(validateLedger(l).some(p => p.path.endsWith('parentId') && p.repair && /one level/.test(p.problem))); c.parentId = null; }
+  b.parentId = b.id;
+  assert.ok(validateLedger(l).some(p => /its own parent/.test(p.problem)));
+  b.parentId = 'nope';
+  assert.ok(validateLedger(l).some(p => p.path.endsWith('parentId') && !p.repair));
+  const other = l.works.find(w => w.hallId && w.hallId !== a.hallId);
+  b.parentId = other.id;
+  assert.ok(validateLedger(l).some(p => /different Halls/.test(p.problem) && p.repair));
+});
+
+test('missions: one at a time, through the allowed moves', () => {
+  assert.ok(canMove(MISSION_MOVES, 'briefing', 'active'));
+  assert.ok(canMove(MISSION_MOVES, 'active', 'cliffhanger'));
+  assert.ok(canMove(MISSION_MOVES, 'cliffhanger', 'active'));
+  assert.ok(canMove(MISSION_MOVES, 'shelved', 'active'));     // picked up where it was
+  assert.ok(!canMove(MISSION_MOVES, 'done', 'active'));
+  assert.ok(!canMove(MISSION_MOVES, 'briefing', 'done'));     // no skipping to the end
+  assert.deepEqual(validateMissionPlay(emptyMissionPlay()), []);
+  const at = '2026-10-03T12:00:00Z';
+  const mp = { current: 'w1', runs: { w1: { id: 'w1', state: 'active', startedAt: at }, w2: { id: 'w2', state: 'shelved', startedAt: at } } };
+  assert.deepEqual(validateMissionPlay(mp), []);
+  mp.runs.w2.state = 'active';
+  assert.ok(validateMissionPlay(mp).some(p => p.path === 'runs'));
+  mp.runs.w2.state = 'done';
+  assert.ok(validateMissionPlay(mp).some(p => p.path === 'runs.w2.endedAt'));
+  assert.ok(EVENT_KIND.includes('mission.begun') && EVENT_KIND.includes('keeper.summoned'));
+});
+
+test('Keepers are summoned with Ember, join on approved work, and are released, never deleted', () => {
+  assert.ok(KEEPER_STATUS.includes('summoned') && KEEPER_STATUS.includes('released'));
+  const l = sample();
+  const now = '2026-10-03T12:00:00Z';
+  l.keepers.push({ id: 'kn', name: 'Ash', role: 'tests', skills: [], status: 'summoned', summonedAt: '2026-10-03T11:00:00Z' });
+  assert.deepEqual(validateLedger(l).filter(p => p.path.startsWith('keepers')), []);
+  assert.equal(emberLeft(l, now), DEFAULT_RULES.emberMax - DEFAULT_RULES.summonCost);
+  assert.equal(emberLeft(l, '2026-10-05T12:00:00Z'), DEFAULT_RULES.emberMax); // Ember comes back as the window moves on
+  l.keepers.at(-1).joinedAt = now;
+  assert.ok(validateLedger(l).some(p => /no longer only summoned/.test(p.problem)));
+  l.keepers.at(-1).status = 'released';
+  assert.ok(validateLedger(l).some(p => p.path.endsWith('releasedAt')));
+  l.keepers.at(-1).releasedAt = now;
+  assert.deepEqual(validateLedger(l).filter(p => p.path.startsWith('keepers')), []);
+});
+
+test('the event log is chained: a lost, changed or reordered event shows, and old unchained events are fine', async () => {
+  const s = memoryStore();
+  await s.put('events', { at: '2026-10-03T12:00:00Z', kind: 'session.start' });
+  await s.put('events', { at: '2026-10-03T12:01:00Z', kind: 'riddle.answered', ref: 'r1' });
+  await s.put('events', { at: '2026-10-03T12:02:00Z', kind: 'session.end' });
+  const { events } = await s.snapshot();
+  assert.deepEqual(events.map(e => e.seq), [0, 1, 2]);
+  assert.deepEqual(verifyEvents(events), { ok: true, brokenAt: null, why: null });
+  const changed = structuredClone(events); changed[1].ref = 'r2';
+  assert.equal(verifyEvents(changed).brokenAt, 1);
+  assert.equal(verifyEvents([events[0], events[2]]).brokenAt, 1);           // one went missing
+  const old = [{ at: 'x', kind: 'session.start' }];
+  const next = chainEvent({ at: 'y', kind: 'session.end' }, old[0], 1);
+  assert.ok(verifyEvents([...old, next]).ok);                              // the chain starts after old events
+  assert.equal(verifyEvents([next, ...old]).ok, false);                    // but nothing unchained after it
+  const l = sample(); l.events = changed;
+  assert.ok(validateLedger(l).some(p => p.path === 'events[1]' && /changed/.test(p.problem)));
+  const save = makeSave({ ...emptyLedger(), events }, {});
+  assert.ok(verifyEvents(ledgerFromSave(save).events).ok);                 // a save keeps the chain
+});
+
+test('release dates and deadlines are optional ISO times on Halls and Works', () => {
+  const l = sample();
+  l.halls[0].dueAt = '2026-10-17T17:00:00Z';
+  l.works[0].dueAt = '2026-10-10T17:00:00Z';
+  assert.deepEqual(validateLedger(l).filter(p => p.path.endsWith('dueAt')), []);
+  l.halls[0].dueAt = 'next friday';
+  l.works[0].dueAt = 'soon';
+  assert.deepEqual(validateLedger(l).filter(p => p.path.endsWith('dueAt')).map(p => p.path), ['halls[0].dueAt', 'works[0].dueAt']);
 });

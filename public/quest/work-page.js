@@ -128,7 +128,8 @@ export function mountWorkPage(container, store, { now = () => new Date(), rules 
       const l = await store.snapshot();
       const opts = c.kind ? { kind: c.kind, question: c.question.value } : {};
       const { changes, problems, refused } = pasteResult(l, itemId, c.paste.value, opts, now(), rules);
-      c.problems.replaceChildren(...problems.map(p => el('li', null, `${p.field}: ${p.problem}`)));
+      c.problems.replaceChildren(...problems.map(p => el('li', null,
+        `${p.field}: ${p.problem}${p.suggestions?.length ? ` (did you mean ${p.suggestions.map(x => `"${x}"`).join(' or ')}?)` : ''}`)));
       if (refused) { c.note.textContent = `Not taken: this item is ${refused}.`; return; }
       if (problems.length) {
         c.pick.hidden = false;

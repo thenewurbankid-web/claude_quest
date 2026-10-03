@@ -7,7 +7,9 @@
 //   - the save format (the split save's parts, held as one object until R5 packs them into a zip),
 //   - the lore rules' defaults (R1: outbox seconds, defer and fade delays, the never-in-game list; R2: the boss),
 //   - R2's battle record and its phases (play state, kept in the save's play part, not in the ledger),
-//   - R3's area-lore entry and cell index (shared per geohash-4 cell), and isGameOnly, which keeps lore out of the boss.
+//   - R3's area-lore entry and cell index (shared per geohash-4 cell), and isGameOnly, which keeps lore out of the boss,
+//   - missions (a parent Work and its children; the saga is their Hall), Keepers summoned with Ember, and the event
+//     log's hash chain.
 // Change a shape here first, in its own commit, and only then in the slices that use it.
 
 export const LEDGER_VERSION = 1;
@@ -21,7 +23,9 @@ export const WORK_RESOLVED = ['done', 'cancelled'];
 export const HALL_STATUS = ['planned', 'active', 'achieved'];
 export const PRIORITY = ['critical', 'high', 'medium', 'low'];
 export const SIZE = ['S', 'M', 'L']; // pebble, stone, boulder
-export const KEEPER_STATUS = ['free', 'busy', 'resting', 'wandered']; // wandered: its lease lapsed (R4)
+// wandered: its lease lapsed (R4). summoned: called up with Ember, its first Work not approved yet; it joins the Lodge
+// (free) once one is. released: retired to the Hall of Champions; it keeps its record and gets no more work.
+export const KEEPER_STATUS = ['free', 'busy', 'resting', 'wandered', 'summoned', 'released'];
 export const BEACON = ['gold', 'amber', 'red'];
 
 // Every action and response carries a mark: where it is in its life, and where it came from.
@@ -67,7 +71,28 @@ export const EVENT_KIND = ['riddle.raised', 'riddle.answered', 'riddle.deferred'
   'session.end', 'riddle.asked', 'riddle.replied', 'boss.summoned', 'boss.retreated', 'boss.defeated', 'boss.pushed',
   // R4: the /work page and the Keeper controls (ref: the queue item, or the Keeper for rested/resumed)
   'work.queued', 'work.leased', 'work.reported', 'work.returned', 'work.lapsed', 'work.cancelled',
-  'keeper.rested', 'keeper.resumed', 'bell.rung'];
+  'keeper.rested', 'keeper.resumed', 'bell.rung',
+  // missions (ref: the mission's parent Work) and Keepers summoned with Ember (ref: the Keeper)
+  'mission.begun', 'mission.cliffhanger', 'mission.resumed', 'mission.shelved', 'mission.debriefed', 'mission.done',
+  'keeper.summoned', 'keeper.joined', 'keeper.released'];
+
+// ---------- missions ----------
+// A mission is a parent Work and its child Works (Work.parentId, Paperclip's parent issue); its saga is their Hall (the
+// milestone), whose finale is the Sealed Hall. A Work with no parent and no children is a one-step side mission.
+// The player goes on one mission at a time. Mission progress is play state (the save's play.missions), never ledger
+// data: the real work still moves only through the /work queue and the Riddle rules.
+//   briefing: chosen, its Keeper's briefing not yet heard; active: under way; cliffhanger: one of its Works raised a
+//   Riddle that waits on the player; debrief: every Work resolved, the debrief not yet heard; done: heard;
+//   shelved: set aside for another mission, and picked up again where it was.
+export const MISSION_STATE = ['briefing', 'active', 'cliffhanger', 'debrief', 'done', 'shelved'];
+export const MISSION_MOVES = {
+  briefing: ['active', 'shelved'],
+  active: ['cliffhanger', 'debrief', 'shelved'],
+  cliffhanger: ['active', 'debrief', 'shelved'],
+  debrief: ['done'],
+  done: [],
+  shelved: ['active'],
+};
 
 // ---------- lore rules (defaults) ----------
 // A world's lore folder overrides these (PLAN-engine.md, "Customizable through lore files"); until Ink lore lands in
@@ -100,6 +125,7 @@ export const DEFAULT_RULES = {
   emberMax: 100,           // the Well's fuel; at 0 the /work page offers no prompts (safety rule 5)
   tokensPerEmber: 10000,   // reported tokens (input + output) per Ember
   emberWindowHours: 24,    // Ember spent in this rolling window counts against emberMax
+  summonCost: 10,          // Ember spent to summon a Keeper; it counts against the window like reported tokens
 };
 
 // ---------- R2: the battle ----------
@@ -229,28 +255,54 @@ export const REPORT_INSTRUCTIONS = [
 const REPORT_KEYS = ['kind', 'summary', 'question', 'branch', 'input_tokens', 'output_tokens'];
 const FENCE_RE = new RegExp('```' + REPORT_FENCE + '[ \\t]*\\r?\\n([\\s\\S]*?)```', 'g');
 
+/** Edit distance between two strings (Levenshtein). */
+function distance(a, b) {
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++)
+      next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+
+/**
+ * Up to three words from vocab that input was probably meant to be, closest first (similarity 0.6 or more, ignoring
+ * case). Only ever offered to the player as "did you mean"; nothing is repaired with it.
+ */
+export function suggest(input, vocab) {
+  const x = String(input ?? '').trim().toLowerCase();
+  if (!x) return [];
+  return vocab.map(v => ({ v, sim: 1 - distance(x, v.toLowerCase()) / Math.max(x.length, v.length) }))
+    .filter(c => c.sim >= 0.6 && c.v !== input).sort((a, b) => b.sim - a.sim).slice(0, 3).map(c => c.v);
+}
+
 /**
  * Reads the last quest-report block in a paste. Returns { report, problems }: report is null when there is no block or
  * it has any problem (the page then asks the player to pick the kind). Never repairs a field; extra keys are problems.
+ * A problem may carry suggestions ("did you mean"): a misspelled field or kind names the likely one.
  * @returns {{ report: { kind: string, summary: string, question: string|null, branch: string|null,
- *             usage: { input: number, output: number }|null }|null, problems: { field: string, problem: string }[] }}
+ *             usage: { input: number, output: number }|null }|null,
+ *             problems: { field: string, problem: string, suggestions?: string[] }[] }}
  */
 export function parseReport(pasted) {
   const blocks = [...String(pasted ?? '').matchAll(FENCE_RE)];
   if (!blocks.length) return { report: null, problems: [{ field: 'block', problem: `no ${REPORT_FENCE} block` }] };
   const problems = [];
-  const bad = (field, problem) => problems.push({ field, problem });
+  const bad = (field, problem, suggestions = []) =>
+    problems.push(suggestions.length ? { field, problem, suggestions } : { field, problem });
   const f = {};
   for (const raw of blocks.at(-1)[1].split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
-    const m = line.match(/^([a-z_]+)\s*:\s*(.*)$/);
+    const m = line.match(/^([A-Za-z_ -]+?)\s*:\s*(.*)$/);
     if (!m) { bad('block', `not a "key: value" line: ${line.slice(0, 40)}`); continue; }
-    if (!REPORT_KEYS.includes(m[1])) { bad(m[1], 'unknown field'); continue; }
+    if (!REPORT_KEYS.includes(m[1])) { bad(m[1], 'unknown field', suggest(m[1], REPORT_KEYS)); continue; }
     if (m[1] in f) { bad(m[1], 'given twice'); continue; }
     f[m[1]] = m[2].trim();
   }
-  if (!REPORT_KIND.includes(f.kind)) bad('kind', `must be one of ${REPORT_KIND.join(', ')}`);
+  if (!REPORT_KIND.includes(f.kind)) bad('kind', `must be one of ${REPORT_KIND.join(', ')}`, suggest(f.kind, REPORT_KIND));
   if (!f.summary) bad('summary', 'needs one line');
   if (f.kind === 'blocked' && !f.question) bad('question', 'a blocked report asks its question');
   if (f.kind === 'done' && f.question) bad('question', 'a done report asks nothing; report blocked instead');
@@ -267,13 +319,18 @@ export function parseReport(pasted) {
     usage: input === null ? null : { input, output } }, problems };
 }
 
-/** Ember left now: emberMax less the tokens reported in the last emberWindowHours, never below 0. */
+/**
+ * Ember left now: emberMax less what was spent in the last emberWindowHours, never below 0. Spent: the tokens agents
+ * reported, and summonCost for each Keeper summoned in the window. Keepers are made of Ember, so it comes back as the
+ * window moves on.
+ */
 export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
   const since = new Date(now).getTime() - rules.emberWindowHours * 3600e3;
-  let tokens = 0;
+  let tokens = 0, summons = 0;
   for (const q of ledger.queue || []) for (const r of q.reports || [])
     if (r.usage && Date.parse(r.at) > since) tokens += r.usage.input + r.usage.output;
-  return Math.max(0, rules.emberMax - tokens / rules.tokensPerEmber);
+  for (const k of ledger.keepers || []) if (k.summonedAt && Date.parse(k.summonedAt) > since) summons++;
+  return Math.max(0, rules.emberMax - tokens / rules.tokensPerEmber - summons * rules.summonCost);
 }
 
 // ---------- record shapes ----------
@@ -282,18 +339,26 @@ export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
  * @typedef {{ id: string, name: string, owner: string }} Realm   owner: the fallback steward for every March
  * @typedef {{ id: string, name: string, banner: string, steward: string|null }} March   banner: a CSS colour
  * @typedef {{ id: string, marchId: string, name: string, status: string, order: number,
- *             weight?: number|null, council?: boolean }} Hall
+ *             weight?: number|null, council?: boolean, dueAt?: string|null }} Hall
  *   council: big milestone, accepted by a council vote (quest:council) rather than the steward
- * @typedef {{ id: string, marchId: string, hallId: string|null, title: string, status: string, priority: string,
+ *   dueAt: the release date the milestone ships on (the saga's clock); deadlines are on work, never on answering
+ * @typedef {{ id: string, marchId: string, hallId: string|null, parentId?: string|null, title: string, status: string, priority: string,
  *             size?: string|null, weight?: number|null, risk?: 'high'|null, keeperId?: string|null,
  *             blockedBy?: string[], failures?: number, createdAt: string, updatedAt: string,
- *             resolvedAt?: string|null, decisions?: Decision[], mark?: Mark, endsAt?: string|null }} Work
+ *             resolvedAt?: string|null, decisions?: Decision[], mark?: Mark, endsAt?: string|null,
+ *             dueAt?: string|null }} Work
  *   hallId null is allowed but is a repair quest ("this Work belongs to no Hall")
+ *   parentId: the mission's parent Work, in the same Hall; one level only (a parent has no parent of its own)
+ *   dueAt: its deadline (a mission's is its parent's); unlike endsAt it closes nothing, it only sets the clock
  *   endsAt: R3 lore only, when its area-lore entry ends; the Work closes then and its open Riddle fades
  * @typedef {{ riddleId: string, question: string, answer: string, sealed_by: string, at: string,
  *             sent?: { to: 'paperclip', at: string, ref?: string|null }|null }} Decision
  *   a sealed Riddle written back to its Work (rule 9); sent: set once the connector has posted it as a comment
- * @typedef {{ id: string, name: string, role: string, skills: string[], status: string }} Keeper
+ * @typedef {{ id: string, name: string, role: string, skills: string[], status: string,
+ *             summonedAt?: string|null, joinedAt?: string|null, releasedAt?: string|null }} Keeper
+ *   Keepers are agents, and everything about one beyond these fields is read from its work (Works, reports, events);
+ *   the game invents no stats. summonedAt: when Ember was spent on it; joinedAt: its first approved Work;
+ *   releasedAt: when it was retired. Keepers from before summoning existed have none of these.
  * @typedef {{ status: string, source: string, sourceId: string, real: boolean, at: string }} Mark
  *   real: true for real work, false for game-only actions
  * @typedef {{ id: string, workId: string, marchId: string, text: string, line?: string|null, options?: string[],
@@ -323,7 +388,12 @@ export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
  *             at: string }} Report
  *   R4: one paste on /work. text: the whole paste, verbatim; manual: no valid quest-report block was found, so the
  *   player picked the kind by hand (summary is then the paste's first line). A question raises a Riddle on the Work.
- * @typedef {{ at: string, kind: string, ref?: string|null }} Event
+ * @typedef {{ at: string, kind: string, ref?: string|null, seq?: number, prevHash?: string|null, hash?: string }} Event
+ *   seq, prevHash, hash: stamped by the store as the event is written (chainEvent), so a lost or changed event shows
+ *   (verifyEvents). Events from before the chain have none and count as its unchained start.
+ * @typedef {{ id: string, state: string, startedAt: string, endedAt?: string|null }} MissionRun
+ *   id: the mission's parent Work (or the lone Work of a side mission)
+ * @typedef {{ current: string|null, runs: Record<string, MissionRun> }} MissionPlay   the save's play.missions
  * @typedef {{ id: string, startedAt: string, phase: string, score: number, strength: number, hp: number, maxHp: number,
  *             riddleIds: string[], lodgeIds: string[], resolvedIds: string[], current: string|null, turn: number,
  *             endedAt?: string|null, weights?: Record<string, number>,
@@ -392,6 +462,7 @@ export function validateLedger(l) {
     ref(`${p}.marchId`, h.marchId, 'marches');
     text(`${p}.name`, h.name);
     oneOf(`${p}.status`, h.status, HALL_STATUS);
+    if (h.dueAt !== null && h.dueAt !== undefined && !ISO(h.dueAt)) bad(`${p}.dueAt`, 'needs an ISO time');
   });
   l.works.forEach((w, i) => {
     const p = `works[${i}]`;
@@ -413,11 +484,25 @@ export function validateLedger(l) {
       text(`${p}.decisions[${j}].answer`, d.answer);
     });
     (w.blockedBy || []).forEach((b, j) => ref(`${p}.blockedBy[${j}]`, b, 'works'));
+    if (w.dueAt !== null && w.dueAt !== undefined && !ISO(w.dueAt)) bad(`${p}.dueAt`, 'needs an ISO time');
+    if (w.parentId !== null && w.parentId !== undefined) {
+      const parent = l.works.find(x => x.id === w.parentId);
+      if (w.parentId === w.id) bad(`${p}.parentId`, `"${w.title}" is its own parent`, true);
+      else if (!parent) ref(`${p}.parentId`, w.parentId, 'works');
+      else if (parent.hallId !== w.hallId) bad(`${p}.parentId`, `"${w.title}" and its parent are in different Halls`, true);
+      else if (parent.parentId) bad(`${p}.parentId`, `"${parent.title}" is already a child; missions are one level deep`, true);
+    }
     mark(`${p}.mark`, w.mark);
   });
   l.keepers.forEach((k, i) => {
-    text(`keepers[${i}].name`, k.name);
-    oneOf(`keepers[${i}].status`, k.status, KEEPER_STATUS);
+    const p = `keepers[${i}]`;
+    text(`${p}.name`, k.name);
+    oneOf(`${p}.status`, k.status, KEEPER_STATUS);
+    for (const t of ['summonedAt', 'joinedAt', 'releasedAt'])
+      if (k[t] !== null && k[t] !== undefined && !ISO(k[t])) bad(`${p}.${t}`, 'needs an ISO time');
+    if (k.status === 'summoned' && !k.summonedAt) bad(`${p}.summonedAt`, 'a summoned Keeper records when Ember was spent');
+    if (k.status === 'summoned' && k.joinedAt) bad(`${p}.status`, 'a Keeper that has joined is no longer only summoned');
+    if (k.status === 'released' && !k.releasedAt) bad(`${p}.releasedAt`, 'a released Keeper records when it was retired');
   });
   l.riddles.forEach((r, i) => {
     const p = `riddles[${i}]`;
@@ -456,7 +541,75 @@ export function validateLedger(l) {
     });
   });
   l.events.forEach((e, i) => oneOf(`events[${i}].kind`, e.kind, EVENT_KIND));
+  const chain = verifyEvents(l.events);
+  if (!chain.ok) bad(`events[${chain.brokenAt}]`, `the event log's chain breaks here: ${chain.why}`);
   return out;
+}
+
+/** Problems with the save's play.missions, empty when sound. One mission at a time: current is the one under way. */
+export function validateMissionPlay(mp) {
+  const out = [];
+  const bad = (path, problem) => out.push({ path, problem });
+  if (!mp || typeof mp !== 'object' || !mp.runs || typeof mp.runs !== 'object') return [{ path: '', problem: 'not mission play' }];
+  for (const [id, r] of Object.entries(mp.runs)) {
+    if (r?.id !== id) bad(`runs.${id}.id`, 'a run is keyed by its own id');
+    if (!MISSION_STATE.includes(r?.state)) bad(`runs.${id}.state`, `${JSON.stringify(r?.state)} is not one of ${MISSION_STATE.join(', ')}`);
+    if (!ISO(r?.startedAt)) bad(`runs.${id}.startedAt`, 'needs an ISO time');
+    if (r?.state === 'done' && !ISO(r.endedAt)) bad(`runs.${id}.endedAt`, 'a finished mission records when it ended');
+  }
+  if (mp.current !== null && mp.current !== undefined) {
+    const r = mp.runs[mp.current];
+    if (!r) bad('current', `no run ${JSON.stringify(mp.current)}`);
+    else if (['done', 'shelved'].includes(r.state)) bad('current', `the current mission can't be ${r.state}`);
+  }
+  const live = Object.values(mp.runs).filter(r => !['done', 'shelved'].includes(r?.state)).map(r => r.id);
+  if (live.some(id => id !== mp.current)) bad('runs', 'only the current mission is under way; the rest are shelved or done');
+  return out;
+}
+export const emptyMissionPlay = () => ({ current: null, runs: {} });
+
+// ---------- the event log's hash chain ----------
+// Each event the store writes is stamped with its place (seq), the hash before it (prevHash) and its own hash, so an
+// event that goes missing or changes shows up. FNV-1a: it catches accidents (a lost write, a hand-edited save), not a
+// determined forger; a source with outside writers can move to SHA-256 later.
+const canon = v => Array.isArray(v) ? `[${v.map(canon).join(',')}]`
+  : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon(v[k])}`).join(',')}}`
+  : JSON.stringify(v ?? null);
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+const bodyOf = ({ seq, prevHash, hash, ...body }) => body;
+/** An event's hash: its body (without the chain fields), its seq and the hash before it. */
+export const eventHash = (e, seq, prevHash) => fnv1a(`${seq}|${prevHash ?? ''}|${canon(bodyOf(e))}`);
+/**
+ * Stamps an event for the end of the log. prev: the last event in the log (or null), seq: how many events come
+ * before this one. An unchained log (events from before the chain) starts the chain with prevHash null.
+ */
+export function chainEvent(e, prev, seq) {
+  const prevHash = prev?.hash ?? null;
+  return { ...bodyOf(e), seq, prevHash, hash: eventHash(e, seq, prevHash) };
+}
+/**
+ * Checks the log's chain. ok with brokenAt null when sound; otherwise brokenAt is the first bad event and why says
+ * what is wrong. Unchained events are fine only before the chain starts.
+ */
+export function verifyEvents(events = []) {
+  let prevHash = null, chained = false;
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e?.hash === undefined) {
+      if (chained) return { ok: false, brokenAt: i, why: 'an unchained event after the chain began' };
+      continue;
+    }
+    chained = true;
+    if (e.seq !== i) return { ok: false, brokenAt: i, why: `expected place ${i}, found ${e.seq} (an event is missing or out of order)` };
+    if ((e.prevHash ?? null) !== prevHash) return { ok: false, brokenAt: i, why: 'it does not follow the event before it' };
+    if (e.hash !== eventHash(e, e.seq, e.prevHash)) return { ok: false, brokenAt: i, why: 'it was changed after it was written' };
+    prevHash = e.hash;
+  }
+  return { ok: true, brokenAt: null, why: null };
 }
 
 /** Problems with a battle record, empty when sound. */
@@ -495,6 +648,7 @@ export function validateBattle(b) {
  * @typedef {object} LedgerStore
  * @property {() => Promise<Ledger>} snapshot              a deep copy of the whole ledger
  * @property {(kind: string, record: object) => Promise<void>} put   insert or replace by id; stamps updatedAt on works
+ *   and chains events (chainEvent) onto the end of the log
  * @property {(kind: string, id: string) => Promise<void>} remove
  * @property {(ledger: Ledger) => Promise<void>} replace   swap in a whole ledger (sample Realm, a loaded save)
  * @property {(fn: (l: Ledger) => void) => () => void} subscribe   called after every change; returns unsubscribe
@@ -523,7 +677,8 @@ export function memoryStore(initial = emptyLedger()) {
   return {
     async snapshot() { return clone(l); },
     async put(kind, record) {
-      const rows = list(kind), r = clone(record);
+      const rows = list(kind);
+      const r = kind === 'events' ? chainEvent(clone(record), rows.at(-1) || null, rows.length) : clone(record);
       if (kind === 'works') r.updatedAt = new Date().toISOString();
       const i = kind === 'events' ? -1 : rows.findIndex(x => x.id === r.id);
       if (i >= 0) rows[i] = r; else rows.push(r);
