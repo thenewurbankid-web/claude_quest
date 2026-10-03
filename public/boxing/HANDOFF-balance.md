@@ -42,3 +42,6 @@ Slow (about 160 s for n=40, all 25 pairs). `--engine` loads a patched copy of th
 5. Leave recover v recover (0 punches) as is, or give recover a jab-reach range. Not part of this issue.
 
 Not tested: other stat mixes (all runs at 50/50/50/50), fights where tactics change by round, the browser. n=30–40 per pair, so single-pair percentages near 0 or 100 are stable but 0.2–0.6 values carry roughly ±0.1 noise.
+
+### The user's decisions (balance)
+- 2026-10-04: The game targets phones. Batch scripts stay headless (node only, no DOM/Babylon); balance work changes nothing in rendering. `scripts/boxing-balance.mjs` already complies. Still waiting on which of A/B/C/D to apply.
