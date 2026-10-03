@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- Dev page for the outbox (R1): the sample Realm in a memoryStore, the outbox strip docked bottom-left above a
+     stand-in conversation box, the sealing timer running, and buttons that answer Riddles so they wait at the gate.
+     Serve with: node dev/static.js 4794 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Outbox dev</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; }
+    body { min-height: 100vh; background: radial-gradient(ellipse at 30% 70%, #2f5d3a 0%, #1b2f3f 45%, #0c1220 100%);
+      color: #eef0f4; font: 14px/1.4 system-ui, -apple-system, sans-serif; }
+    .dev { position: fixed; top: 16px; left: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .dev button { padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.1); color: inherit; font: inherit; cursor: pointer; }
+    .dev button:hover { background: rgba(255,255,255,.2); }
+    .convo { position: fixed; left: 16px; right: 16px; bottom: 16px; height: 184px; box-sizing: border-box;
+      border: 1px dashed rgba(255,255,255,.3); border-radius: 12px; padding: 12px; color: #a3a9b6; }
+    pre { position: fixed; top: 170px; right: 16px; width: min(420px, calc(100vw - 32px)); max-height: 40vh;
+      overflow: auto; margin: 0; padding: 8px; font-size: 11px; background: rgba(0,0,0,.4); border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="dev" aria-label="Dev controls">
+    <button type="button" data-act="r1">Answer Payment provider: Stripe</button>
+    <button type="button" data-act="r2">Answer Plant catalogue: Keep them</button>
+    <button type="button" data-act="unmount">Unmount / remount strip</button>
+    <button type="button" data-act="reset">Reset sample Realm</button>
+  </div>
+  <pre id="state" aria-label="Riddles, Works and recent events"></pre>
+  <div class="convo">Conversation box area (kept free)</div>
+  <script type="module">
+    import { memoryStore, DEFAULT_RULES } from './contract.js';
+    import { mountOutbox, startOutbox } from './outbox.js';
+
+    const sample = await (await fetch('./sample-realm.json')).json();
+    const store = memoryStore(sample);
+    let strip = mountOutbox(document.body, store);
+    startOutbox(store);
+    window.questStore = store; // for poking at from the console
+
+    const show = l => {
+      document.getElementById('state').textContent = [
+        ...l.riddles.map(r => `${r.id} ${r.state}${r.answer ? ` "${r.answer.text}"` : ''}`),
+        ...l.works.filter(w => ['w4', 'w6'].includes(w.id)).map(w => `${w.id} ${w.status} decisions=${(w.decisions || []).length}`),
+        ...l.events.slice(-5).map(e => `${e.kind} ${e.ref || ''}`),
+      ].join('\n');
+    };
+    store.subscribe(show);
+    show(await store.snapshot());
+
+    const answer = async (id, text) => {
+      const r = (await store.snapshot()).riddles.find(r => r.id === id);
+      const at = new Date();
+      await store.put('riddles', { ...r, state: 'answered', answer: { text, by: 'player', at: at.toISOString() },
+        outboxUntil: new Date(at.getTime() + DEFAULT_RULES.outboxSeconds * 1000).toISOString() });
+    };
+    const acts = {
+      r1: () => answer('r1', 'Stripe'),
+      r2: () => answer('r2', 'Keep them'),
+      unmount() { if (strip) { strip.unmount(); strip = null; } else strip = mountOutbox(document.body, store); },
+      async reset() { await store.replace(sample); },
+    };
+    document.querySelector('.dev').addEventListener('click', e => {
+      const act = e.target.closest('button')?.dataset.act;
+      if (act) acts[act]();
+    });
+  </script>
+</body>
+</html>
