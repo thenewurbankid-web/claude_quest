@@ -138,7 +138,10 @@ addEventListener('quest:lodge', async () => {
 });
 // ---------- R3: Lore quests ----------
 const qs = new URLSearchParams(location.search);
-const loreBase = qs.has('lore') ? new URL((qs.get('lore') || 'quest/sample-lore/').replace(/\/?$/, '/'), document.baseURI) : null;
+// The published lore folder (area-lore/README.md, step 7). null until the claude-quest-lore repo exists: calendar only.
+const LORE_BASE = null;
+const loreBase = qs.has('lore') ? new URL((qs.get('lore') || 'quest/sample-lore/').replace(/\/?$/, '/'), document.baseURI)
+  : LORE_BASE ? new URL(LORE_BASE) : null;
 const loreCell = () => (/^[0-9b-hjkmnp-z]{4}$/.test(qs.get('cell') || '') ? qs.get('cell') : geohash(place().lat, place().lon));
 let loreShown = { entries: [], calendar: true };
 const refreshLore = async () => {

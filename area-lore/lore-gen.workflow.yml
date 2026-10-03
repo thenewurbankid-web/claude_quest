@@ -1,0 +1,31 @@
+# Copy to .github/workflows/lore.yml in the PRIVATE claude-quest-lore-gen repo (never in claude_quest: it is public,
+# and a self-hosted runner must never be attached to a public repo). Schedule and manual triggers only: nothing a
+# stranger can start.
+name: area lore
+on:
+  schedule:
+    - cron: '17 */6 * * *'   # every 6 hours; a run missed while the Mac is off only makes lore late
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency: { group: lore, cancel-in-progress: false }
+jobs:
+  write:
+    runs-on: [self-hosted, macOS, lore]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4            # this private repo: areas.json
+      - uses: actions/checkout@v4            # the generator code, read-only, pinned to a commit you trust
+        with: { repository: thenewurbankid-web/claude_quest, ref: main, path: game, persist-credentials: false }
+      - uses: actions/checkout@v4            # the public lore repo, written with a deploy key
+        with: { repository: thenewurbankid-web/claude-quest-lore, path: out, ssh-key: '${{ secrets.LORE_DEPLOY_KEY }}' }
+      - name: Write lore
+        env: { OLLAMA_URL: 'http://127.0.0.1:11434', OLLAMA_MODEL: 'qwen3:4b' }
+        run: node game/area-lore/generate.mjs --areas areas.json --out out/lore
+      - name: Publish
+        working-directory: out
+        run: |
+          git add -A lore
+          git diff --cached --quiet && exit 0
+          git -c user.name='lore bot' -c user.email='lore-bot@users.noreply.github.com' commit -q -m "lore $(date -u +%FT%TZ)"
+          git push -q
