@@ -211,3 +211,26 @@ export function riddleContext(ledger, riddleId, now = new Date()) {
   for (const d of w?.decisions || []) facts.push(['Decided before', `${d.question} → ${d.answer}`]);
   return { path: [m?.name, h?.name, w?.title].filter(Boolean), facts };
 }
+
+// ---------- where a Riddle stands ----------
+const until = (iso, now) => {
+  const h = Math.round((Date.parse(iso) - now.getTime()) / HOUR);
+  if (!(h > 0)) return 'any moment now';
+  return h < 48 ? `in ${h} hour${h === 1 ? '' : 's'}` : `in ${Math.round(h / 24)} days`;
+};
+
+/**
+ * Lines for the conversation box when a Riddle is picked from the Beacon log but can't be answered right now: the
+ * question, then where it stands. Plain text; the question and answer are real words and are shown verbatim.
+ */
+export function riddleStanding(ledger, riddleId, now = new Date()) {
+  const r = findRiddle(ledger, riddleId);
+  const work = (ledger.works || []).find(w => w.id === r.workId);
+  const lines = [r.text];
+  if (r.state === 'open') lines.push(`It waits on ${work?.title || 'its Work'}, which isn't blocked or in review, so no one stands with it in the world.`);
+  else if (r.state === 'deferred') lines.push(`You put this off. It comes back ${until(r.deferredUntil, now)}.`);
+  else if (r.state === 'answered') lines.push(`You answered "${r.answer.text}". It waits in the outbox, recallable, and seals ${until(r.outboxUntil, now)}.`);
+  else if (r.state === 'sealed') lines.push(`Sealed by ${r.sealed_by}: "${r.answer?.text ?? ''}".`);
+  else if (r.state === 'faded') lines.push(r.fadeNote);
+  return lines;
+}

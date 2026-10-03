@@ -56,6 +56,9 @@ const CSS = `
 .qbh-text { flex: 1; min-width: 0; }
 .qbh-at { flex: none; color: var(--qbh-dim); font-size: 11px; }
 .qbh-kind { color: var(--qbh-dim); font-size: 11px; margin-right: 4px; }
+.qbh-open { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit;
+  text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.qbh-open:hover .qbh-q { text-decoration: underline; text-decoration-color: var(--qbh-gold); }
 .qbh-empty { color: var(--qbh-dim); font-style: italic; padding: 4px 0; }
 .qbh-lock { flex: none; width: 14px; height: 14px; align-self: center; fill: none; stroke: currentColor;
   stroke-width: 2; stroke-linecap: round; color: var(--qbh-dim); }
@@ -157,10 +160,16 @@ export function mountBeaconHud(container, store) {
 
   const bannerOf = (l, marchId) => l.marches.find(m => m.id === marchId)?.banner;
   const row = (l, item) => {
-    const li = el('li'), dotM = el('span', 'qbh-banner'), text = el('span', 'qbh-text');
+    // a Riddle row is a button: it asks the page to open that Riddle ('quest:talk', from: 'log')
+    const riddle = item.kind === 'riddle';
+    const li = el('li'), dotM = el('span', 'qbh-banner'), text = el(riddle ? 'button' : 'span', riddle ? 'qbh-open' : 'qbh-text');
     const banner = bannerOf(l, item.marchId);
     if (banner) dotM.style.backgroundColor = banner; // an invalid colour is simply ignored
-    text.append(el('span', 'qbh-kind', KIND[item.kind] || item.kind), document.createTextNode(item.text));
+    text.append(el('span', 'qbh-kind', KIND[item.kind] || item.kind), el('span', 'qbh-q', item.text));
+    if (riddle) {
+      text.type = 'button';
+      text.onclick = () => dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: item.id, from: 'log' } }));
+    }
     li.append(dotM, text, el('time', 'qbh-at', when(item.at)));
     if (item.at) li.lastChild.dateTime = item.at;
     return li;

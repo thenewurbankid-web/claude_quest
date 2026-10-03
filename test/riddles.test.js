@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RULES, memoryStore, applyChanges, validateLedger } from '../public/quest/contract.js';
-import { ASK_LATER, riskTier, trueSight, riddleNpcs, answerRiddle, tickRiddles, riddleWeight, raiseRiddle } from '../public/quest/riddles.js';
+import { ASK_LATER, riskTier, trueSight, riddleNpcs, answerRiddle, tickRiddles, riddleWeight, raiseRiddle, riddleStanding } from '../public/quest/riddles.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
 const NOW = new Date('2026-10-03T12:00:00Z');
@@ -222,4 +222,20 @@ test('raiseRiddle leaves a Work already waiting as it is, and refuses a missing 
   assert.throws(() => raiseRiddle(sample(), { workId: 'nope', text: 'x' }, NOW), /no Work/);
   assert.throws(() => raiseRiddle(sample(), { workId: 'w1', text: 'x' }, NOW), /done/);
   assert.throws(() => raiseRiddle(sample(), { workId: 'w3', text: '   ' }, NOW), /question/);
+});
+
+test('riddleStanding: the question, then where it stands, for each state a log row can show', () => {
+  const l = sample();
+  const r = (state, extra) => { const x = { ...l.riddles[0], id: 'x', state, ...extra }; l.riddles.push(x); return x; };
+  const ans = { text: 'Stripe', by: 'player', at: NOW.toISOString() };
+  r('deferred', { deferredUntil: '2026-10-04T12:00:00Z' });
+  assert.deepEqual(riddleStanding(l, 'x', NOW), [l.riddles[0].text, 'You put this off. It comes back in 24 hours.']);
+  l.riddles.pop(); r('answered', { answer: ans, outboxUntil: '2026-10-03T11:00:00Z' });
+  assert.match(riddleStanding(l, 'x', NOW)[1], /"Stripe".*any moment now/);
+  l.riddles.pop(); r('sealed', { answer: ans, sealed_by: 'player' });
+  assert.equal(riddleStanding(l, 'x', NOW)[1], 'Sealed by player: "Stripe".');
+  l.riddles.pop(); r('faded', { fadeNote: 'Gone stale.' });
+  assert.equal(riddleStanding(l, 'x', NOW)[1], 'Gone stale.');
+  l.riddles.pop(); r('open', { workId: 'w3' });
+  assert.match(riddleStanding(l, 'x', NOW)[1], /Pricing page, which isn't blocked/);
 });

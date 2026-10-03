@@ -14,7 +14,7 @@ import { mountLedgerPanel } from './ledger-panel.js';
 import { mountBeaconHud } from './beacon-hud.js';
 import { beacon } from './status.js';
 import { applyChanges, DEFAULT_RULES } from './contract.js';
-import { riddleNpcs, riddleContext, tickRiddles, trueSight } from './riddles.js';
+import { riddleNpcs, riddleContext, tickRiddles, trueSight, riddleStanding } from './riddles.js';
 import { mountConversation } from './conversation.js';
 import { startOutbox, mountOutbox } from './outbox.js';
 import { mountDigest, trackSession } from './digest.js';
@@ -113,10 +113,16 @@ prompt.addEventListener('click', () => near && dispatchEvent(new CustomEvent('qu
 
 const lock = locked => { talking = locked; prompt.hidden = locked || !near; dispatchEvent(new CustomEvent('quest:input', { detail: { locked } })); };
 addEventListener('quest:talk', async e => {
-  if (talking) return;
+  if (talking || battle.open) return; // a log click during a fight is ignored
   const l = await store.snapshot();
   const npc = riddleNpcs(l).find(n => n.riddle.id === e.detail?.riddleId);
-  if (!npc) return;
+  if (!npc) {
+    // picked from the Beacon log but not answerable now: say where it stands instead
+    if (e.detail?.from !== 'log' || !l.riddles.some(r => r.id === e.detail.riddleId)) return;
+    lock(true);
+    try { await talk.say(riddleStanding(l, e.detail.riddleId), { name: 'Lumi' }); } finally { lock(false); }
+    return;
+  }
   lock(true);
   try {
     const speaker = { name: npc.keeper?.name || 'A villager' };

@@ -95,6 +95,12 @@ collecting (PLAN-adventure §5 rewritten).
   `quest-static-3` (4793; 4790 and 4791 belonged to other chats): raised on Pricing page, Work blocked, no console
   errors; typing into an open fight question by accident answered nothing. Next: clickable Beacon log rows, then the
   Keepers' stats board.
+- **Pre-R3 gap 2 of 3 done (2026-10-03): the Beacon log's Riddle rows are buttons.** A click sends `quest:talk`
+  (`from: 'log'`); an answerable Riddle opens in the conversation box as if you'd walked up to its Keeper, and any other
+  one gets a short Lumi note on where it stands (`riddleStanding` in `riddles.js`: put off and when it returns, in the
+  outbox and when it seals, sealed by whom with what, faded with its note, or open on a Work no one waits on). Clicks
+  are ignored during a fight. `npm test` 87 pass; checked on 4793 (open, deferred, sealed rows; no console errors).
+  Next: the Keepers' stats board.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
