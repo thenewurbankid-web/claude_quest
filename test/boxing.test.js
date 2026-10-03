@@ -159,3 +159,86 @@ test('profileOf ships a normalized look; receivedProfile rebuilds a peer look wi
   assert.deepEqual(r.look, normalizeLook(undefined, PHOTO_OUTFITS.blue));
   assert.deepEqual(receivedProfile({ name: 'D', stats: AVG }, 'red').look, normalizeLook(undefined, PHOTO_OUTFITS.red));
 });
+
+// ─── The MPFB person (public/boxing/models/person.glb), loaded in Babylon's NullEngine ─────────────────────────
+const personWorld = async () => {
+  const fs = await import('node:fs');
+  const { createRequire } = await import('node:module');
+  const B = createRequire(import.meta.url)('babylonjs');
+  createRequire(import.meta.url)('babylonjs-loaders');
+  const scene = new B.Scene(new B.NullEngine());
+  const load = (f) => B.SceneLoader.LoadAssetContainerAsync('data:application/octet-stream;base64,' + fs.readFileSync(new URL(`../public/boxing/models/${f}`, import.meta.url)).toString('base64'), undefined, scene, undefined, '.glb');
+  const anims = await load('anims.glb');
+  for (const g of anims.animationGroups) g.stop();
+  const tex = () => new B.Texture('data:image/png;base64,iVBORw0KGgo=', scene);
+  const person = { boxer: await load('person.glb'), anims, person: true, skins: { light: tex(), medium: tex(), deep: tex() } };
+  return { B, scene, person };
+};
+const SHADOW = { addShadowCaster() {} };
+
+test('person.glb has every garment a look can show, on the Quaternius bone names', async () => {
+  const { personParts, ModelRig, LOOK_OPTIONS } = await import('../public/boxing/boxer-model.js');
+  const { B, scene, person } = await personWorld();
+  const rig = new ModelRig(B, scene, person, 'red');
+  const names = new Set(rig.meshes.map((m) => m.name.slice(4)));
+  for (const topStyle of Object.keys(LOOK_OPTIONS.topStyle)) for (const boots of Object.keys(LOOK_OPTIONS.boots)) for (const cap of [null, '#1c2540'])
+    for (const skin of Object.keys(LOOK_OPTIONS.skin))
+      for (const p of personParts({ topStyle, boots, cap, skin })) assert.ok(names.has(p), `${p} missing from person.glb`);
+  for (const b of ['root', 'pelvis', 'spine_03', 'Head', 'upperarm_l', 'hand_r', 'calf_l', 'ball_r']) assert.ok(rig.bones[b], `bone ${b}`);
+  assert.equal(rig.clipNames.includes('Punch_Jab') && rig.clipNames.includes('Death01'), true);
+});
+
+test('person looks: parts shown and tint colours follow the look; hair depends on skin and cap', async () => {
+  const { personParts, personTint, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  const red = personParts(PHOTO_OUTFITS.red), blue = personParts(PHOTO_OUTFITS.blue);
+  assert.ok(red.includes('top_tee') && red.includes('top_tee_sleeve') && red.includes('shoes_timbs') && !red.includes('shoes_sneakers'));
+  assert.ok(blue.includes('top_varsity_sleeve') && blue.includes('shoes_sneakers') && blue.includes('hair_short01'));
+  assert.ok(!red.some((p) => p.startsWith('hair')), 'the red corner wears a cap');
+  assert.ok(personParts({ ...PHOTO_OUTFITS.red, cap: null, skin: 'light' }).includes('hair_short02'));
+  assert.ok(!personParts({ topStyle: 'tank', boots: 'timbs', cap: null, skin: 'deep' }).some((p) => /sleeve|top_tee/.test(p)));
+  assert.equal(personTint('pants_jeans', PHOTO_OUTFITS.blue), PHOTO_OUTFITS.blue.jeans);
+  assert.equal(personTint('top_varsity_sleeve', PHOTO_OUTFITS.blue), PHOTO_OUTFITS.blue.sleeve);
+  assert.equal(personTint('top_varsity', PHOTO_OUTFITS.blue), PHOTO_OUTFITS.blue.top);
+  assert.equal(personTint('top_tee_sleeve', PHOTO_OUTFITS.red), PHOTO_OUTFITS.red.top);
+  assert.equal(personTint('skin', PHOTO_OUTFITS.red), null);
+  assert.equal(personTint('shoes_timbs', PHOTO_OUTFITS.red), null);
+});
+
+test('the existing clips pose the person: finite bones, soles on the floor, head and fists where a boxer has them', async () => {
+  const { ModelBoxer, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  const { B, scene, person } = await personWorld();
+  const boxer = new ModelBoxer(B, scene, person, 'red', SHADOW, { glove: '#c9343a', trunks: '#9e1c24', wraps: true, outfit: PHOTO_OUTFITS.red });
+  const me = { x: 0, y: 0, vx: 0, vy: 0, gasRatio: 1, activePunch: null }, opp = { x: 0, y: 1.2, activePunch: null };
+  const idle = boxer.pose(me, opp, 0, 0, 1 / 60, 0);
+  assert.ok(idle.head.y > 1.3 && idle.head.y < 1.6, `head ${idle.head.y}`);
+  const soles = [boxer.rig.pos('ball_l').y, boxer.rig.pos('ball_r').y];
+  assert.ok(soles.every((y) => y > -0.02 && y < 0.1), `balls ${soles}`);
+  for (const type of ['jab', 'cross', 'hook', 'uppercut', 'body']) {
+    const r = boxer.pose({ ...me, activePunch: { type, launchTick: 0, arriveTick: 10 } }, opp, 9, 0, 1 / 60, 0);
+    for (const p of [r.head, r.chest, r.gloveL, r.gloveR, r.hips]) assert.ok([p.x, p.y, p.z].every(Number.isFinite), `${type} not finite`);
+    const reach = Math.max(r.gloveL.z, r.gloveR.z);
+    assert.ok(reach > 0.7, `${type}: a fist reaches ${reach.toFixed(2)} m forward`);
+  }
+  for (const clip of boxer.rig.clipNames) {
+    boxer.rig.applyLayers([{ clip: 'Idle_Loop', t: 0, w: 1 }, { clip, t: 0.5, w: 1 }]);
+    for (const k of ['Head', 'hand_l', 'foot_r']) { const p = boxer.rig.pos(k); assert.ok([p.x, p.y, p.z].every(Number.isFinite), `${clip}/${k}`); }
+  }
+});
+
+test('boxer assets fall back to the Quaternius boxer when person.glb will not load', async () => {
+  const { loadBoxerAssets } = await import('../public/boxing/boxer-model.js');
+  const asked = [];
+  const B = {
+    SceneLoader: {
+      IsPluginForExtensionAvailable: () => true,
+      LoadAssetContainerAsync: async (base, file) => { asked.push(file); if (file === 'person.glb') throw new Error('404'); return { animationGroups: [], file }; },
+    },
+    Texture: class { constructor(url) { this.url = url; } },
+  };
+  const warn = console.warn; console.warn = () => {};
+  const a = await loadBoxerAssets(B, {}, '/x/').finally(() => { console.warn = warn; });
+  assert.deepEqual(asked.sort(), ['anims.glb', 'boxer.glb', 'person.glb']);
+  assert.equal(a.person, false);
+  assert.equal(a.boxer.file, 'boxer.glb');
+  assert.ok(a.skinLight.url.endsWith('skin_light.webp'));
+});

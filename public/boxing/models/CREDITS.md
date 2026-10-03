@@ -17,6 +17,36 @@ play on the character directly. The finger channels and the animation library's 
 
 Not from a pack (drawn in code in `arena-babylon.js`): gloves, trunks, the ring, the crowd, the canvas texture.
 
+## The realistic person (`person.glb`, `person_skin_light|medium|deep.webp`)
+
+Built in Blender 5.2 by `scripts/build-mpfb-boxer.py` (headless) and compressed by `scripts/build-mpfb-models.mjs`. It is a
+male human made with **MPFB 2.0.17** (MakeHuman for Blender, https://extensions.blender.org/add-ons/mpfb/, installed from
+the public extensions site with no login), on MPFB's `game_engine` rig, posed into the Quaternius T-pose and given the
+Quaternius bone orientations so `anims.glb` plays on it unchanged.
+
+Licences, as MPFB's FAQ states and each asset's own header repeats (`build-mpfb-boxer.py` refuses any asset whose
+header has no CC0 line; the headers it read are in `assets-src/build/mpfb/licences.json`):
+- The MPFB add-on is GPL-3.0. It is only a tool run at build time; nothing of its code ships. The base mesh, targets, rig
+  and the asset packs below are **CC0 1.0**, so the GLB is CC0. Pack zips (`*_cc0.zip`, from files2.makehumancommunity.org,
+  downloaded 2026-10-04, not in git): `makehuman_system_assets`, `skins01-03`, `hair01`, `eyebrows01`, `eyelashes01`,
+  `shirts01`, `pants01`, `shoes01` (the others, `hats01`, `gloves01`, `jewelry01`, were downloaded but not used). CC-BY packs
+  were deliberately not downloaded.
+
+| In `person.glb` | MPFB asset | Author per its header |
+|---|---|---|
+| `top_tee`, `top_tank`, `top_tee_sleeve` | `elvs_crude_t-shirt_male` | MakeHuman, edited by Elvaerwyn, CC0 |
+| `top_varsity`, `top_varsity_sleeve` (the jacket) | `male_casualsuit05` (its shirt) | Data Collection AB, Joel Palmius, Jonas Hauquier, CC0 |
+| `pants_jeans` | `male_casualsuit04` (its trousers) | same, CC0 |
+| `top_hoodie`, `top_hoodie_sleeve` (a knit sweater) | `toigo_fisherman_sweater` | MRT, CC0 |
+| `shoes_timbs` | `toigo_ankle_boots_male` | MRT, CC0 |
+| `shoes_sneakers` | `shoes05` | Data Collection AB et al., CC0 |
+| `hair_short01`, `hair_short02` | `short01`, `short02` | same, CC0 |
+| eyes, brows, lashes | `low-poly`, `eyebrow001`, `eyelashes01` | same, CC0 |
+| skin, `person_skin_*.webp` | `young_caucasian_male` (light), `young_asian_male` (medium), `young_african_male` (deep) | same, CC0 |
+
+Garment textures are converted to grey (shading kept) so the game can tint them with a look's colours; normal maps were
+dropped and textures resized to 1024 px WebP.
+
 ## The day court (`court.glb`, `court_sky.webp`)
 
 Built in Blender 5.2 by `scripts/bake-court.py` (geometry, UVs, Cycles light bake, glTF export) and compressed by

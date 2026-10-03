@@ -1,5 +1,6 @@
 /**
- * Boxing Manager AI: the rigged boxer for the 3D view (Quaternius CC0 character and clips, see models/CREDITS.md).
+ * Boxing Manager AI: the rigged boxer for the 3D view (a MakeHuman/MPFB person with Quaternius CC0 clips, falling back
+ * to the Quaternius character; see models/CREDITS.md).
  *
  * We don't let Babylon play the clips. Each frame we sample them ourselves (Animation.evaluate) and blend per bone, so a
  * punch clip can be scrubbed to the sim's launch → arrive ticks and hit exactly when the sim says the fist lands. On top
@@ -22,17 +23,31 @@ export function loadGltfLoader(B) {
   return loaderPromise;
 }
 
-/** Loads boxer.glb and anims.glb once per scene into asset containers. */
+/**
+ * Loads the character and anims.glb once per scene into asset containers. The MPFB person (person.glb, clothing options
+ * as separate meshes) is preferred; if it won't load, the Quaternius boxer.glb is used and `person` is false.
+ */
 export async function loadBoxerAssets(B, scene, base = '/boxing/models/') {
   await loadGltfLoader(B);
-  const [boxer, anims] = await Promise.all([
-    B.SceneLoader.LoadAssetContainerAsync(base, 'boxer.glb', scene),
-    B.SceneLoader.LoadAssetContainerAsync(base, 'anims.glb', scene),
-  ]);
+  const anims = await B.SceneLoader.LoadAssetContainerAsync(base, 'anims.glb', scene);
   for (const g of anims.animationGroups) g.stop();
-  const skinLight = new B.Texture(base + 'skin_light.webp', scene, false, false);
-  return { boxer, anims, skinLight };
+  let boxer = null;
+  try { boxer = await B.SceneLoader.LoadAssetContainerAsync(base, 'person.glb', scene); }
+  catch (err) { console.warn('person.glb unavailable, using the Quaternius boxer:', err); }
+  if (boxer) {
+    const tex = (tone) => new B.Texture(`${base}person_skin_${tone}.webp`, scene, false, false);
+    return { boxer, anims, person: true, skins: { light: tex('light'), medium: tex('medium'), deep: tex('deep') } };
+  }
+  boxer = await B.SceneLoader.LoadAssetContainerAsync(base, 'boxer.glb', scene);
+  return { boxer, anims, person: false, skinLight: new B.Texture(base + 'skin_light.webp', scene, false, false) };
 }
+
+/**
+ * The Quaternius clips carry a translation for every bone, which would stretch another skeleton to Quaternius bone
+ * lengths. The person keeps its own bone offsets and only takes the clips' root and pelvis movement, relative to this
+ * rest (pelvis position under `root` in boxer.glb, in the root bone's own axes).
+ */
+const CLIP_REST = { root: [0, 0, 0], pelvis: [0, 0.043, 0.949] };
 
 const ARM = {
   [-1]: { upper: 'upperarm_l', lower: 'lowerarm_l', hand: 'hand_l' },
@@ -42,7 +57,7 @@ const ARM = {
 /** One instanced character with a clip mixer and arm IK. */
 export class ModelRig {
   constructor(B, scene, assets, tag) {
-    this.B = B;
+    this.B = B; this.ownBones = !!assets.person;
     const inst = assets.boxer.instantiateModelsToScene((n) => `${tag}:${n}`, false, { doNotInstantiate: true });
     this.root = inst.rootNodes[0];
     this.holder = new B.TransformNode(`${tag}:holder`, scene);
@@ -71,11 +86,12 @@ export class ModelRig {
     }
     this.clipNames = Object.keys(this.clips);
     this._q = new B.Quaternion(); this._p = new B.Vector3();
+    this.lift = 0;
   }
 
   /** Stands the rig at `pos` (ground point) facing unit `forward` (both {x,y,z}). */
   place(pos, forward) {
-    this.holder.position.set(pos.x, pos.y, pos.z);
+    this.holder.position.set(pos.x, pos.y + this.lift, pos.z);
     this.holder.rotation.y = Math.atan2(forward.x, forward.z);
   }
 
@@ -103,10 +119,30 @@ export class ModelRig {
         }
       }
       node.rotationQuaternion.copyFrom(q ?? rest.q);
-      node.position.copyFrom(p ?? rest.p);
+      if (this.ownBones) {
+        const cr = CLIP_REST[name];
+        if (p && cr) node.position.set(rest.p.x + p.x - cr[0], rest.p.y + p.y - cr[1], rest.p.z + p.z - cr[2]);
+        else node.position.copyFrom(rest.p);
+      } else node.position.copyFrom(p ?? rest.p);
     }
     this.root.computeWorldMatrix(true);
     for (const n of Object.values(this.bones)) n.computeWorldMatrix(true);
+  }
+
+  /**
+   * The person has shorter legs than the clips were made for, and its shoes' soles sit below its foot bones, so in the
+   * stance its soles would sink into the floor. Sets `lift` so the sole of `shoe` rests at y = 0 in the guard stance.
+   */
+  standOn(shoe) {
+    const ballY = () => (this.pos('ball_l').y + this.pos('ball_r').y) / 2;
+    this.lift = 0;
+    this.holder.position.set(0, 0, 0); this.holder.rotation.y = 0;
+    this.applyLayers([]);
+    const restBall = ballY();
+    shoe.computeWorldMatrix(true);
+    const sole = shoe.getBoundingInfo().boundingBox.minimumWorld.y - restBall;
+    this.applyLayers([{ ...STANCE, w: 1 }]);
+    this.lift = -(ballY() + sole);
   }
 
   /** World position of a bone as {x,y,z}. */
@@ -320,30 +356,68 @@ export function normalizeLook(look, base = PHOTO_OUTFITS.red) {
   };
 }
 
+
+// ─── The MPFB person: garments are separate meshes in person.glb, shown and tinted by the look ──────────
+
+/** Garment textures are baked grey with this mean (scripts/build-mpfb-boxer.py), so diffuseColor / this gives the exact hex. */
+const GREY_MEAN = 0.8;
+const TINTED = new Set(['top_tee', 'top_tank', 'top_hoodie', 'top_varsity', 'pants_jeans', 'shoes_sneakers']);
+const TOP_PARTS = { tee: ['top_tee', 'top_tee_sleeve'], tank: ['top_tank'], varsity: ['top_varsity', 'top_varsity_sleeve'], hoodie: ['top_hoodie', 'top_hoodie_sleeve'] };
+
+/** Names of the person.glb meshes a look shows. Dark hair for medium and deep skin, brown for light; none under a cap. */
+export function personParts(o) {
+  const parts = ['skin', 'eyes', 'brows', 'lashes', 'pants_jeans', `shoes_${o.boots === 'sneakers' ? 'sneakers' : 'timbs'}`, ...(TOP_PARTS[o.topStyle] ?? TOP_PARTS.tee)];
+  if (!o.cap) parts.push(o.skin === 'light' ? 'hair_short02' : 'hair_short01');
+  return parts;
+}
+
+/** The colour (hex) a tinted person mesh gets from the look, or null for an untinted one. */
+export function personTint(name, o) {
+  if (name === 'pants_jeans') return o.jeans;
+  if (name === 'shoes_sneakers') return '#ececea';
+  if (name === 'top_varsity_sleeve') return o.sleeve ?? o.top;
+  if (TINTED.has(name) || /^top_.*_sleeve$/.test(name)) return o.top;
+  return null;
+}
+
 export class ModelBoxer {
   constructor(B, scene, assets, corner, shadow, colors) {
     this.B = B; this.corner = corner;
-    // The model's own texture is the deep tone; light and medium use the light texture (medium tinted in paintOutfit).
+    const person = !!assets.person;
     const tone = colors.outfit?.skin ?? (corner === 'red' ? 'light' : 'deep');
+    // Quaternius model: its own texture is the deep tone; light and medium use the light texture (medium tinted in paintOutfit).
     const skin = tone === 'deep' ? null : assets.skinLight;
     this.rig = new ModelRig(B, scene, assets, corner);
     // The rest of the arena uses standard materials and has no environment map, so the PBR skin would come out near
     // black. Rebuild it as a standard material from the same textures, with the look's skin tone.
+    const lookOutfit = colors.outfit ?? PHOTO_OUTFITS[corner];
+    const shown = person ? new Set(personParts(lookOutfit)) : null;
     for (const m of this.rig.meshes) {
       const pbr = m.material;
+      const part = m.name.slice(corner.length + 1);
+      if (person) m.setEnabled(shown.has(part));
       if (!pbr?.albedoTexture) continue;
       const mat = new B.StandardMaterial(`${pbr.name}-${corner}`, scene);
-      mat.diffuseTexture = /Superhero/.test(pbr.name) && skin ? skin : pbr.albedoTexture;
+      if (person) {
+        mat.diffuseTexture = part === 'skin' ? assets.skins[tone] : pbr.albedoTexture;
+        const hex = personTint(part, lookOutfit);
+        if (hex) mat.diffuseColor = B.Color3.FromHexString(hex).scale(1 / GREY_MEAN);
+        if (pbr.transparencyMode === B.Material.MATERIAL_ALPHATEST) {
+          mat.diffuseTexture.hasAlpha = true; mat.useAlphaFromDiffuseTexture = true;
+          mat.transparencyMode = B.Material.MATERIAL_ALPHATEST; mat.alphaCutOff = pbr.alphaCutOff ?? 0.5; mat.backFaceCulling = false;
+        }
+      } else mat.diffuseTexture = /Superhero/.test(pbr.name) && skin ? skin : pbr.albedoTexture;
       if (pbr.bumpTexture) { mat.bumpTexture = pbr.bumpTexture; mat.invertNormalMapX = pbr.invertNormalMapX; mat.invertNormalMapY = pbr.invertNormalMapY; }
-      mat.specularColor = new B.Color3(0.08, 0.07, 0.07); mat.specularPower = /Eyes/.test(pbr.name) ? 96 : 20;
+      mat.specularColor = new B.Color3(0.08, 0.07, 0.07); mat.specularPower = /Eyes|eyes/.test(pbr.name) ? 96 : 20;
       m.material = mat;
     }
+    if (person) this.rig.standOn(this.rig.meshes.find((m) => m.isEnabled() && /^shoes_/.test(m.name.slice(corner.length + 1))));
     for (const m of this.rig.meshes) { shadow.addShadowCaster(m); m.receiveShadows = true; }
 
     // Street clothes (colors.outfit): painted onto the body texture; the trunks give way to jeans.
     const outfit = colors.outfit ?? null;
     this.outfit = outfit;
-    if (outfit) {
+    if (outfit && !person) {
       const body = this.rig.meshes.find((m) => /Superhero/.test(m.material?.name ?? ''));
       if (body) {
         if (body.material.bumpTexture) body.material.bumpTexture.level = 0.5;
@@ -384,6 +458,7 @@ export class ModelBoxer {
     this.extras.gloveR.scaling.set(...fist);
     if (wraps) for (const c of [this.extras.cuffL, this.extras.cuffR]) { c.scaling.set(0.82, 1.6, 0.82); c.material = glove; }
     this.collarH = outfit ? (outfit.boots === 'timbs' ? 0.17 : 0.07) : wraps ? 0.07 : 0.16;
+    if (person) for (const k of ['trunks', 'belt', 'bootL', 'bootR', 'ankleL', 'ankleR']) this.extras[k].setEnabled(false);   // the person wears real jeans and shoes
     if (outfit) {
       // Jeans replace the trunks; the belt stays as a leather belt. A fitted cap and a gold chain if the outfit has them.
       this.extras.trunks.setEnabled(false);
