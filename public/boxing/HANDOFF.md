@@ -40,7 +40,18 @@ Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds 
   feet slide a little), the trunks are a rigid cylinder over the model's briefs, one body model for both corners, no hair.
   LayToIdle (getting up) is unused because the sim has no knockdowns other than the KO.
 
-## Next job: open (see Open issues)
+## Next job: make the 3D view realistic and less dark (user, 2026-10-03: "the game looks dark, make it realist and cool")
+
+Do this first, in a fresh session. Then balance (see Open issues), which the user also picked.
+- Lighting in `createArena3D` (`arena-babylon.js`): brighter, warmer key on the ring; the crowd lit enough to read (today
+  it is near black); a lighter vignette (`vignetteWeight` 2.2); check exposure/contrast with ACES.
+- Reflections: there is no environment map, which is why the skin was rebuilt as StandardMaterial. A realistic look likely
+  wants PBR back with an environment, e.g. a CC0 indoor-arena HDRI from Poly Haven turned into a prefiltered `.env`, or
+  a `ReflectionProbe`. Downloading an HDRI needs the user's yes (name, source, size).
+- Surfaces: a canvas with sheen and wear, glossy gloves, slightly shiny skin (sweat), chrome posts.
+- Optional: SSAO2 / depth of field on ringside cuts, if the frame rate holds.
+- Check with `?debug` (`__bmArena`) at a 16:9 frame (the page is 16:9; a tall pane narrows the field of view).
+  Preview: `boxing-static-2` (port 4794) lives in the main checkout's `.claude/launch.json`, uncommitted.
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.
