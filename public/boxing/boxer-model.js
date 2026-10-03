@@ -191,6 +191,93 @@ const GUARD = { [-1]: { x: -0.13, y: -0.04, z: 0.26 }, [1]: { x: 0.18, y: -0.08,
 const CLIP_WEIGHT = { Melee_Hook: 0.5 };
 const HIT_CLIP = { head: 'Hit_Head', body: 'Hit_Chest', big: 'Hit_Knockback' };
 
+
+// ─── Outfits: clothes painted onto the body texture by bone region ─────────────────────────
+
+/** Which part of an outfit covers the skin a bone drives. */
+function zoneOf(bone) {
+  if (/^(pelvis|thigh|calf)/.test(bone)) return 'legs';
+  if (/^(foot|ball)/.test(bone)) return 'feet';
+  if (/^(spine|clavicle)/.test(bone)) return 'torso';
+  if (/^neck/.test(bone)) return 'neck';
+  if (/^upperarm/.test(bone)) return 'upper';
+  if (/^lowerarm/.test(bone)) return 'lower';
+  return 'skin';
+}
+
+/** The colour (hex) an outfit puts on each zone, or null where skin shows. */
+function outfitColors(o) {
+  const sleeve = o.sleeve ?? o.top;
+  const covers = { tank: ['torso'], tee: ['torso', 'upper'], varsity: ['torso', 'upper', 'lower'], hoodie: ['torso', 'upper', 'lower', 'neck'] }[o.topStyle] ?? [];
+  return {
+    legs: o.jeans, feet: o.boots === 'sneakers' ? '#ececea' : '#c89a5c',
+    torso: covers.includes('torso') ? o.top : null, neck: covers.includes('neck') ? o.top : null,
+    upper: covers.includes('upper') ? (o.topStyle === 'tee' || o.topStyle === 'tank' ? o.top : sleeve) : null,
+    lower: covers.includes('lower') ? sleeve : null, skin: null,
+  };
+}
+
+/**
+ * Paints `outfit` onto a copy of the body's base texture. Each triangle takes the zone of the bones that drive it,
+ * the zone's garment colour fills it in UV space, and the base texture's shading is kept as folds. Denim gets a twill
+ * and a lighter wash down the front of the thighs. Resolves with the new texture.
+ */
+export async function paintOutfit(B, scene, mesh, baseTex, outfit) {
+  await new Promise((r) => (baseTex.isReady() ? r() : baseTex.onLoadObservable.addOnce(r)));
+  const { width: W, height: H } = baseTex.getSize();
+  const pixels = await baseTex.readPixels();
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const base = new ImageData(new Uint8ClampedArray(pixels.buffer.slice(0)), W, H);
+
+  // Zone mask in UV space: one grey level per zone.
+  const ZONES = ['legs', 'feet', 'torso', 'neck', 'upper', 'lower', 'skin'];
+  const uv = mesh.getVerticesData('uv'), idx = mesh.getIndices();
+  const mi = mesh.getVerticesData('matricesIndices'), mw = mesh.getVerticesData('matricesWeights');
+  const bones = mesh.skeleton.bones.map((b) => zoneOf(b.name.replace(/^.*:/, '')));
+  const vzone = (v) => { let best = 0; for (let k = 1; k < 4; k++) if (mw[v * 4 + k] > mw[v * 4 + best]) best = k; return bones[mi[v * 4 + best]]; };
+  const mask = document.createElement('canvas'); mask.width = W; mask.height = H;
+  const mg = mask.getContext('2d');
+  mg.lineJoin = 'round'; mg.lineWidth = 2;
+  for (let t = 0; t < idx.length; t += 3) {
+    const zs = [vzone(idx[t]), vzone(idx[t + 1]), vzone(idx[t + 2])];
+    const z = zs[1] === zs[2] ? zs[1] : zs[0];
+    const level = `rgb(${(ZONES.indexOf(z) + 1) * 30},0,0)`;
+    mg.fillStyle = mg.strokeStyle = level;
+    mg.beginPath();
+    for (let k = 0; k < 3; k++) { const v = idx[t + k]; const x = uv[v * 2] * W, y = uv[v * 2 + 1] * H; k ? mg.lineTo(x, y) : mg.moveTo(x, y); }
+    mg.closePath(); mg.fill(); mg.stroke();
+  }
+  const m = mg.getImageData(0, 0, W, H).data, px = base.data;
+  const cols = outfitColors(outfit);
+  const rgb = Object.fromEntries(Object.entries(cols).map(([k, hex]) => [k, hex && [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))]));
+  // Mean brightness of the base texture, so its shading becomes a ±25 % shade on the cloth.
+  let sum = 0, n = 0;
+  for (let i = 0; i < px.length; i += 16) { sum += px[i] + px[i + 1] + px[i + 2]; n++; }
+  const mean = sum / n || 1;
+  for (let i = 0, p = 0; i < px.length; i += 4, p++) {
+    const zone = ZONES[Math.round(m[i] / 30) - 1];
+    const c = zone && rgb[zone];
+    if (!c) continue;
+    const x = p % W, y = (p / W) | 0;
+    let shade = Math.min(1.25, Math.max(0.7, 0.75 + 0.25 * ((px[i] + px[i + 1] + px[i + 2]) / mean)));
+    if (zone === 'legs') shade *= ((x + y) % 6 < 3 ? 0.94 : 1.04) * (1 + 0.12 * Math.sin(x * 0.05) * Math.sin(y * 0.03));
+    else shade *= 0.97 + ((x * 7 + y * 13) % 5) * 0.015;
+    px[i] = c[0] * shade; px[i + 1] = c[1] * shade; px[i + 2] = c[2] * shade;
+  }
+  g.putImageData(base, 0, 0);
+  const tex = new B.DynamicTexture(`outfit-${mesh.name}`, cv, scene, true);
+  tex.update(false);
+  tex.wrapU = tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+  return tex;
+}
+
+/** The two fighters' default outfits, taken from the user's reference photo. Character creation will offer these. */
+export const PHOTO_OUTFITS = {
+  red: { topStyle: 'tee', top: '#ecebe6', jeans: '#8fa8c4', boots: 'timbs', cap: '#1c2540', capBackwards: true, chain: true, wraps: '#c9343a' },
+  blue: { topStyle: 'varsity', top: '#1f2a44', sleeve: '#c9c6bf', jeans: '#2f3b52', boots: 'sneakers', cap: null, chain: true, wraps: '#2f6fd0' },
+};
+
 export class ModelBoxer {
   constructor(B, scene, assets, corner, shadow, colors) {
     this.B = B; this.corner = corner;
@@ -209,6 +296,19 @@ export class ModelBoxer {
     }
     for (const m of this.rig.meshes) { shadow.addShadowCaster(m); m.receiveShadows = true; }
 
+    // Street clothes (colors.outfit): painted onto the body texture; the trunks give way to jeans.
+    const outfit = colors.outfit ?? null;
+    this.outfit = outfit;
+    if (outfit) {
+      const body = this.rig.meshes.find((m) => /Superhero/.test(m.material?.name ?? ''));
+      if (body) {
+        if (body.material.bumpTexture) body.material.bumpTexture.level = 0.5;
+        paintOutfit(B, scene, body, body.material.diffuseTexture, outfit)
+          .then((tex) => { body.material.diffuseTexture = tex; })
+          .catch((err) => console.warn('outfit paint failed, keeping skin:', err));
+      }
+    }
+
     const mat = (name, hex, spec = 0.06) => {
       const m = new B.StandardMaterial(`${name}-${corner}`, scene);
       m.diffuseColor = B.Color3.FromHexString(hex); m.specularColor = new B.Color3(spec, spec, spec); m.specularPower = 48;
@@ -216,8 +316,11 @@ export class ModelBoxer {
     };
     // Street gear (colors.wraps): taped fists instead of gloves, low sneakers instead of high-top boots.
     const wraps = !!colors.wraps;
-    const glove = mat('glove', colors.glove, wraps ? 0.04 : 0.12), trunks = mat('trunks', colors.trunks, 0.06);
-    const band = mat('band', wraps ? colors.glove : '#f1f1f1', 0.2), boot = mat('boot', wraps && corner === 'red' ? '#e9e9e6' : '#111318', 0.3);
+    const wrapCol = outfit?.wraps ?? colors.glove;
+    const glove = mat('glove', wrapCol, wraps ? 0.04 : 0.12), trunks = mat('trunks', colors.trunks, 0.06);
+    const band = mat('band', outfit ? '#3a2a1e' : wraps ? wrapCol : '#f1f1f1', 0.05);
+    const bootCol = outfit ? (outfit.boots === 'sneakers' ? '#ececea' : '#c89a5c') : wraps && corner === 'red' ? '#e9e9e6' : '#111318';
+    const boot = mat('boot', bootCol, 0.05);
     const keep = (m, material) => { m.material = material; m.rotationQuaternion = new B.Quaternion(); shadow.addShadowCaster(m); return m; };
     this.extras = {
       gloveL: keep(B.MeshBuilder.CreateSphere('gloveL', { diameter: 1, segments: 14 }, scene), glove),
@@ -234,8 +337,19 @@ export class ModelBoxer {
     const fist = wraps ? [0.095, 0.085, 0.115] : [0.14, 0.14, 0.17];
     this.extras.gloveL.scaling.set(...fist);
     this.extras.gloveR.scaling.set(...fist);
-    if (wraps) for (const c of [this.extras.cuffL, this.extras.cuffR]) c.scaling.set(0.82, 1.6, 0.82);
-    this.collarH = wraps ? 0.07 : 0.16;
+    if (wraps) for (const c of [this.extras.cuffL, this.extras.cuffR]) { c.scaling.set(0.82, 1.6, 0.82); c.material = glove; }
+    this.collarH = outfit ? (outfit.boots === 'timbs' ? 0.17 : 0.07) : wraps ? 0.07 : 0.16;
+    if (outfit) {
+      // Jeans replace the trunks; the belt stays as a leather belt. A fitted cap and a gold chain if the outfit has them.
+      this.extras.trunks.setEnabled(false);
+      if (outfit.boots === 'timbs') for (const a of [this.extras.ankleL, this.extras.ankleR]) a.scaling.x = a.scaling.z = 1.12;
+      if (outfit.cap) {
+        const capM = mat('cap', outfit.cap, 0.03);
+        this.extras.capDome = keep(B.MeshBuilder.CreateSphere('capDome', { diameter: 0.215, segments: 14, slice: 0.55 }, scene), capM);
+        this.extras.capBrim = keep(B.MeshBuilder.CreateBox('capBrim', { width: 0.18, height: 0.012, depth: 0.12 }, scene), capM);
+      }
+      if (outfit.chain) this.extras.chain = keep(B.MeshBuilder.CreateTorus('chain', { diameter: 0.2, thickness: 0.012, tessellation: 24 }, scene), mat('chain', '#d4a63a', 0.1));
+    }
 
     // Render-side state only.
     this.lastPunch = null; this.retract = null;
@@ -387,6 +501,28 @@ export class ModelBoxer {
       B.Quaternion.FromUnitVectorsToRef(B.Vector3.UpReadOnly, new B.Vector3(shin.x, shin.y, shin.z), collar.rotationQuaternion);
     }
 
+    // Cap and chain ride on a head/neck frame: up along the neck, right across the shoulders, forward out of the face.
+    if (X.capDome || X.chain) {
+      const head = rig.pos('Head'), neckP = rig.pos('neck_01');
+      const hu = norm(sub(head, neckP)), across = norm(sub(rig.pos('upperarm_r'), rig.pos('upperarm_l')));
+      const cross = (a, b) => v(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+      const fwd = norm(cross(across, hu)), side = cross(hu, fwd);
+      const frame = (f) => B.Quaternion.RotationQuaternionFromAxis(new B.Vector3(side.x * f, side.y * f, side.z * f), new B.Vector3(hu.x, hu.y, hu.z), new B.Vector3(fwd.x * f, fwd.y * f, fwd.z * f));
+      if (X.capDome) {
+        const f = this.outfit.capBackwards ? -1 : 1;
+        const c = add(head, add(mul(hu, CAP.up), mul(fwd, CAP.fwd)));
+        X.capDome.position.set(c.x, c.y, c.z); X.capDome.rotationQuaternion.copyFrom(frame(f));
+        const b = add(c, add(mul(fwd, f * CAP.brim), mul(hu, -0.005)));
+        X.capBrim.position.set(b.x, b.y, b.z); X.capBrim.rotationQuaternion.copyFrom(frame(f));
+      }
+      if (X.chain) {
+        const c = add(neckP, add(mul(hu, -0.06), mul(fwd, 0.04)));
+        X.chain.position.set(c.x, c.y, c.z);
+        const tilt = norm(add(hu, mul(fwd, 0.45)));
+        B.Quaternion.FromUnitVectorsToRef(B.Vector3.UpReadOnly, new B.Vector3(tilt.x, tilt.y, tilt.z), X.chain.rotationQuaternion);
+      }
+    }
+
     return { head: rig.pos('Head'), chest: rig.pos('spine_03'), gloveL, gloveR, hips: pelvis };
   }
 
@@ -394,6 +530,8 @@ export class ModelBoxer {
 }
 
 const UPV = v(0, 1, 0);
+/** Where the cap sits relative to the Head bone (metres along the head frame), tuned by eye. */
+const CAP = { up: 0.13, fwd: 0.01, brim: 0.13 };
 const smooth = (t) => t * t * (3 - 2 * t);
 const lerpV = (a, b, t) => add(a, mul(sub(b, a), t));
 const bez2 = (a, b, c, t) => lerpV(lerpV(a, b, t), lerpV(b, c, t), t);

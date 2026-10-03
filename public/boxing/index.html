@@ -168,6 +168,9 @@
         <label class="row small">View <select id="view" style="width:auto">
           <option value="3d" selected>3D broadcast</option><option value="2d">2D top-down</option><option value="headless">Headless</option>
         </select></label>
+        <label class="row small">Time <select id="time" style="width:auto" title="Applies from the next fight">
+          <option value="day" selected>Day</option><option value="night">Night</option>
+        </select></label>
       </div>
       <div class="status" id="corner-status" role="status"></div>
     </section>
@@ -384,7 +387,7 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner }) {
   // Phaser's headless mode still makes a canvas, so outside the 2D view it gets a parent that is never shown.
   state.game = createPhysicsGame({ parent: headless ? document.createElement('div') : $('ring'), sim, headless, timeScale: speedValue() });
   if (view === '3d') {
-    createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name } })
+    createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name }, timeOfDay: $('time').value })
       .then((arena) => { if (state.sim === sim) state.arena = arena; else arena.destroy(); })
       .catch((err) => { $('ring-placeholder').hidden = false; $('ring-placeholder').textContent = `3D view failed to load: ${err.message}`; });
   }

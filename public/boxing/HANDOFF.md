@@ -76,37 +76,42 @@ cool street theme". They picked **new setting, same physics**: `CombatSimulation
 - User then: "photo realitic textures no shiny is also ok", "you can downoad". Five CC0 Poly Haven textures are in
   `public/boxing/textures/` (see CREDITS.md there) but **not wired in yet**.
 
+## Done (2026-10-03): the reference photo rebuilt (day, with a night toggle)
+
+The user sent a photo (a New York cypher at a neighbourhood basketball court) and asked for the same look: "SAME COLOR
+AND LIGHTING", and "THE OUTFITS WILL BE THE ONES IN THE PHOTO FOR CROWD AND CHARACTERS". They picked **day, with a
+night toggle**.
+- `arena-babylon.js` `buildStreet()` is now the court. It has photo-textured asphalt and a lighter court surface with
+  worn lines, a 4.2 m chain-link fence (`COURT.half` 9.6), a gooseneck hoop at +z behind the crowd (centred in the hard
+  camera's view, as in the photo), sidewalks with curbs, and street trees. Round it are 5-floor brick tenements
+  (`brick_red` photo texture, `LOOK.floors`) with lintels, sills, AC units, bars on the first floor and fire escapes.
+  The green-awning deli is on the far wall. `buildNight()` holds the neon, string lights, fire barrels and rain; the
+  sodium lamp, headlights, lit windows and shop lights are gated on `night` as well.
+- Light: day is overcast (pale grey sky and fog, hemi 1.05, a faint directional with soft 0.25 shadows, colour curves
+  at −22 saturation with a green-cyan shadow tint). Night is the old setup. `createArena3D({ timeOfDay })`; the page
+  has a **Time** select (Day/Night) next to View, which applies to the next fight.
+- Crowd: every part is thin-instanced separately (caps, heads, tops, sleeves, hands, jeans, boots) in `CROWD_WEAR`
+  colours from the photo. They stand four rows deep and lean in, and a fifth have their arms up.
+- Fighters: `boxer-model.js` `paintOutfit()` paints the clothes onto the body texture. It picks each triangle's zone
+  from its dominant bone and keeps the base shading as folds; denim gets a twill. `PHOTO_OUTFITS`: red wears a white
+  tee, light-wash jeans, wheat Timberland-style boots, a backwards navy cap, a gold chain and red wraps. Blue wears a
+  navy varsity jacket with light sleeves, dark jeans, white sneakers, a chain and blue wraps. The jeans replace the trunks.
+- Checked at 1280×720: the day hard camera frames like the photo, 60 fps, `npm test` 93 pass.
+- Known issues: night's first load takes about 15 s while the 15-light shaders compile (day about 3 s); something
+  like `scene.whenReadyAsync` plus a loading card would hide it. The crowd gap on the hard camera's side shows on the
+  rooftop shot. The paint seams at the garment edges are jagged (they read as frayed). The primitive fallback fighters
+  don't get outfits.
+
 ## Next jobs
 
-1. **Rebuild the location from the user's photo** (sent 2026-10-03; a frame from a YouTube short, "NY Cypher",
-   tagged New York, not saved in the repo). This replaces item 2. What it shows:
-   - **Location:** a neighbourhood basketball court, not an alley. Grey asphalt court with faded white lines; the
-     fight spot is on the court. A tall black chain-link fence (about 4 m) runs around it on posts.
-   - **Hoop:** a steel gooseneck pole, a rectangular white/grey steel backboard with a red-orange square, an orange rim
-     with a chain net. It stands behind the crowd, centred in the camera's view.
-   - **Buildings behind:** 5–6 storey red-brown brick tenements, in a continuous row. Black iron fire escapes zig-zag
-     up the fronts. Window AC units stick out, some lower windows have bars, and there are decorative stone lintels.
-     A ground-floor shop at the back right has a dark green awning with white lettering, partly hidden.
-   - **Trees:** bare or sparse autumn street trees (thin trunks, a few yellow-green leaves) between the fence and the
-     buildings.
-   - **Light:** **daytime, overcast**. Soft, even, slightly cool light, no hard shadows, muted colours. That is matte
-     and fits "no shiny graphics", but it replaces the night look (neon, fire barrels, headlights, rain): ask the user
-     whether night stays as an option.
-   - **Crowd (the cypher):** packed shoulder to shoulder in a tight circle, several rows deep, leaning in, arms up,
-     shouting. Clothes: New York Yankees fitted caps (navy, some backwards), navy and grey varsity jackets with leather
-     sleeves, light and dark denim jackets, white tees and tank tops, black hoodies, gold chains, light-wash and ripped
-     jeans, wheat Timberland boots and white sneakers. This is also the reference for the hip hop outfits in the
-     creator (item 3) and for dressing the onlookers.
-   - Textures already in `public/boxing/textures/` fit: asphalt (court), brick_red or brick_dirty (tenements; compare
-     against the photo's red-brown), sidewalk concrete. A chain-link alpha texture exists in code (`chainLinkTexture`).
-2. **Outdoor street** (user: "and outdoor steet fight"). Open the yard into a street: buildings on ±z only, with
-   sidewalks and curbs, the road running away along x into the fog, more lamps and parked cars, sky. Wire in the
-   textures: asphalt on the road, brick on the walls, the worn concrete on the sidewalks, rust on the barrels.
-3. **Character creation, looks + name only** (picked by the user). The sim is untouched. Hip hop outfits are the
-   options: hoodie or tank, baggy jeans or sweats, sneakers, chain, cap. Store a `look` with the fighter in Dexie and
-   add it to `profileOf()` so it rides along in P2P `start` messages (`FighterModel` ignores unknown fields). Dress the
-   onlookers to match.
-4. Balance (see Open issues).
+1. **Character creation, looks + name only** (picked by the user). The sim is untouched. The outfit options are the
+   photo's (user: "the outfits will be the ones in the photo"): top style (tee, tank, varsity, hoodie) and colours,
+   jeans wash, boots (Timberland-style, sneakers), cap (none, forward, backwards; colour), chain, wrap colour, skin
+   tone. `paintOutfit()` and `PHOTO_OUTFITS` are the building blocks. Store a `look` with the fighter in Dexie and add
+   it to `profileOf()` so it rides along in P2P `start` messages (`FighterModel` ignores unknown fields). Show a live
+   preview with one `ModelBoxer` in a small scene.
+2. Night load time (see the known issues above).
+3. Balance (see Open issues).
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.
