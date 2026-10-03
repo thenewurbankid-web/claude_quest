@@ -183,22 +183,23 @@ function chainLinkTexture(B, scene) {
  * A back lot at night: wet asphalt with the fight spot sprayed on it, brick buildings with lit windows and graffiti,
  * neon signs, a sodium street lamp, string lights across the yard, fire barrels, two cars with their headlights on
  * the fight, a chain-link fence, a steaming manhole, rain, and a ring of onlookers.
- * Returns the pieces the caller wires up: { ground, crowd, glossy: [[material, level, power]], update(t, dt) }.
+ * Returns the pieces the caller wires up: { ground, crowd, update(t, dt) }.
  */
 function buildStreet(B, scene, shadow) {
   const rand = mulberryish(21);
   const mat = (name, hex, opts = {}) => {
     const m = new B.StandardMaterial(name, scene);
     m.diffuseColor = B.Color3.FromHexString(hex);
-    const s = opts.spec ?? 0.08; m.specularColor = new B.Color3(s, s, s); m.specularPower = opts.power ?? 32;
+    // Matte throughout (the user asked for no shiny graphics): `spec` is capped so nothing reads as gloss.
+    const s = Math.min(opts.spec ?? 0.04, 0.1); m.specularColor = new B.Color3(s, s, s); m.specularPower = opts.power ?? 16;
     if (opts.emissive) m.emissiveColor = B.Color3.FromHexString(opts.emissive);
     return m;
   };
   const glow = (name, hex) => { const m = mat(name, '#000000', { emissive: hex }); m.disableLighting = true; return m; };
-  const glossy = [], flicker = [];
+  const flicker = [];
   const Y = LOOK.yardM, H = LOOK.wallH;
 
-  // Ground: wet asphalt (glossy, tight highlights) plus the painted fight spot just above it.
+  // Ground: damp asphalt plus the painted fight spot just above it.
   const ground = B.MeshBuilder.CreateGround('asphalt', { width: Y * 2 + 2, height: Y * 2 + 2 }, scene);
   const gm = mat('asphaltM', '#ffffff', { spec: 0.55, power: 90 });
   gm.diffuseTexture = asphaltTexture(B, scene); gm.diffuseTexture.uScale = gm.diffuseTexture.vScale = 4;
@@ -213,13 +214,12 @@ function buildStreet(B, scene, shadow) {
   // Buildings: four brick walls with windows, drainpipes, doors and graffiti.
   const brick = brickTexture(B, scene);
   const windowDark = mat('windowDark', '#0c1016', { spec: 0.9, power: 120 });
-  glossy.push([windowDark, 0.5, 1.5]);
   const lit = ['#ffcf8a', '#ffe2b0', '#8fb7ff', '#ffb36b'].map((c, i) => glow('windowLit' + i, c));
   const frameM = mat('frameM', '#1a1b1f');
   const pipeM = mat('pipeM', '#3b3f45', { spec: 0.5, power: 60 });
   const tags = [
-    ['STREET KINGS', '#ff2d95', '#14081a'], ['KO', '#ffd23f', '#1a1206'], ['BACK LOT', '#19e3ff', '#04161a'],
-    ['NO RULES', '#a6ff3a', '#0d1a05'], ['ROUND 1', '#ff5a36', '#1a0805'],
+    ['STREET KINGS', '#ff2d95', '#14081a'], ['UPTOWN', '#ffd23f', '#1a1206'], ['BROOKLYN', '#19e3ff', '#04161a'],
+    ['BX 4 LIFE', '#a6ff3a', '#0d1a05'], ['HARLEM', '#ff5a36', '#1a0805'],
   ];
   for (let side = 0; side < 4; side++) {
     const yaw = side * Math.PI / 2;
@@ -248,6 +248,7 @@ function buildStreet(B, scene, shadow) {
     }
     // Ground floor: a roller door, and a drainpipe.
     const door = B.MeshBuilder.CreatePlane('door', { width: 3.2, height: 2.8 }, scene);
+    if (side === 0) door.setEnabled(false);       // the bodega takes that spot on the far wall
     door.material = mat('doorM' + side, '#3e4247', { spec: 0.35, power: 40 }); place(door, -5 + side * 2.5, 1.4, 0.03);
     const pipe = B.MeshBuilder.CreateCylinder('pipe', { height: H, diameter: 0.12 }, scene);
     pipe.material = pipeM; place(pipe, 7.5 - side, H / 2, 0.1);
@@ -271,9 +272,9 @@ function buildStreet(B, scene, shadow) {
   // Neon signs, each with a coloured light washing the wall and the wet ground.
   const neons = [
     { text: 'Open 24h', col: LOOK.neon.pink, side: 2, along: -4, up: 3.6 },
-    { text: 'Noodles', col: LOOK.neon.cyan, side: 1, along: 3, up: 3.4 },
-    { text: 'Liquor', col: LOOK.neon.lime, side: 3, along: 1, up: 3.5 },
-    { text: 'Gym', col: LOOK.neon.amber, side: 2, along: 6.5, up: 4.2 },
+    { text: 'Pizza', col: LOOK.neon.cyan, side: 1, along: 3, up: 3.4 },
+    { text: 'Liquors', col: LOOK.neon.lime, side: 3, along: 1, up: 3.5 },
+    { text: 'Botanica', col: LOOK.neon.amber, side: 2, along: 6.5, up: 4.2 },
   ];
   neons.forEach((n, i) => {
     const yaw = n.side * Math.PI / 2, fwd = new B.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), right = new B.Vector3(fwd.z, 0, -fwd.x);
@@ -349,19 +350,24 @@ function buildStreet(B, scene, shadow) {
 
   // Two cars parked with their headlights on the fight.
   const glass = mat('carGlass', '#0a0d12', { spec: 1, power: 150 });
-  glossy.push([glass, 0.7, 1.2]);
   const tyre = mat('tyreM', '#0d0d0f');
   const flareTex = radialTexture(B, scene, 'flareTex', 'rgba(230,240,255,1)', 'rgba(230,240,255,0)');
-  for (const [x, z, paint] of [[7.6, 7.2, '#7a1018'], [-7.8, -6.4, '#d9d9d6']]) {
+  for (const [x, z, paint, taxi] of [[7.6, 7.2, '#7a1018'], [-7.8, -6.4, '#f2b90f', true]]) {
     const yaw = Math.atan2(-x, -z);
     const car = new B.TransformNode('car', scene);
     car.position.set(x, 0, z); car.rotation.y = yaw;
     const body = mat('carPaint' + paint, paint, { spec: 0.9, power: 110 });
-    glossy.push([body, 0.55, 1.8]);
     const part = (mesh, px, py, pz, m) => { mesh.parent = car; mesh.position.set(px, py, pz); mesh.material = m; shadow.addShadowCaster(mesh); return mesh; };
     part(B.MeshBuilder.CreateBox('carBody', { width: 1.85, height: 0.62, depth: 4.4 }, scene), 0, 0.6, 0, body);
     part(B.MeshBuilder.CreateBox('carCabin', { width: 1.6, height: 0.55, depth: 2.2 }, scene), 0, 1.18, -0.25, glass);
     part(B.MeshBuilder.CreateBox('carRoof', { width: 1.62, height: 0.06, depth: 1.9 }, scene), 0, 1.47, -0.3, body);
+    if (taxi) {
+      // A yellow cab: roof light and the checker stripe.
+      const roofSign = glow('taxiSignM', '#fff3c4');
+      part(B.MeshBuilder.CreateBox('taxiSign', { width: 0.7, height: 0.18, depth: 0.22 }, scene), 0, 1.6, -0.2, roofSign);
+      const checker = mat('checkerM', '#111111');
+      for (const sx of [-0.93, 0.93]) part(B.MeshBuilder.CreateBox('taxiStripe', { width: 0.02, height: 0.08, depth: 3.6 }, scene), sx, 0.62, 0, checker);
+    }
     for (const [wx, wz] of [[-0.88, 1.35], [0.88, 1.35], [-0.88, -1.35], [0.88, -1.35]]) {
       const w = part(B.MeshBuilder.CreateCylinder('wheel', { height: 0.24, diameter: 0.66, tessellation: 18 }, scene), wx, 0.33, wz, tyre);
       w.rotation.z = Math.PI / 2;
@@ -393,7 +399,7 @@ function buildStreet(B, scene, shadow) {
     p.position.set(Y - 2.2, 1.65, z); p.material = pipeM;
   }
   const dumpster = B.MeshBuilder.CreateBox('dumpster', { width: 2.2, height: 1.3, depth: 1.2 }, scene);
-  dumpster.position.set(-3, 0.65, Y - 0.9); dumpster.material = mat('dumpsterM', '#1f4a2c', { spec: 0.25 }); shadow.addShadowCaster(dumpster);
+  dumpster.position.set(7.5, 0.65, Y - 0.9); dumpster.material = mat('dumpsterM', '#1f4a2c', { spec: 0.25 }); shadow.addShadowCaster(dumpster);
   const palletM = mat('palletM', '#6b5034');
   for (const [x, z, h] of [[-Y + 1, -3, 0.6], [-Y + 1.2, -1.6, 0.3], [Y - 1, -8, 0.45]]) {
     const p = B.MeshBuilder.CreateBox('pallet', { width: 1.2, height: h, depth: 1 }, scene);
@@ -405,10 +411,11 @@ function buildStreet(B, scene, shadow) {
   manhole.rotation.x = Math.PI / 2; manhole.position.set(-4.4, 0.006, -5.2); manhole.material = mat('manholeM', '#1b1c1f', { spec: 0.6, power: 60 });
   const steam = new B.ParticleSystem('steam', 120, scene);
   steam.particleTexture = radialTexture(B, scene, 'steamTex', 'rgba(220,225,235,0.35)', 'rgba(220,225,235,0)');
-  steam.emitter = new B.Vector3(-4.4, 0.05, -5.2);
-  steam.minEmitBox = new B.Vector3(-0.3, 0, -0.3); steam.maxEmitBox = new B.Vector3(0.3, 0, 0.3);
+  steam.emitter = new B.Vector3(-4.4, 1.75, -5.2);
+  steam.minEmitBox = new B.Vector3(-0.12, 0, -0.12); steam.maxEmitBox = new B.Vector3(0.12, 0, 0.12);
+  steam.emitRate = 40;
   steam.color1 = steam.color2 = new B.Color4(0.85, 0.87, 0.92, 0.3); steam.colorDead = new B.Color4(0.8, 0.8, 0.85, 0);
-  steam.minSize = 0.5; steam.maxSize = 1.6; steam.minLifeTime = 1.5; steam.maxLifeTime = 3; steam.emitRate = 22;
+  steam.minSize = 0.5; steam.maxSize = 1.6; steam.minLifeTime = 1.5; steam.maxLifeTime = 3;
   steam.direction1 = new B.Vector3(-0.1, 1, -0.1); steam.direction2 = new B.Vector3(0.25, 1, 0.1);
   steam.minEmitPower = 0.4; steam.maxEmitPower = 0.8; steam.blendMode = B.ParticleSystem.BLENDMODE_STANDARD; steam.start();
 
@@ -424,9 +431,10 @@ function buildStreet(B, scene, shadow) {
   rain.minEmitPower = rain.maxEmitPower = 1; rain.minLifeTime = rain.maxLifeTime = 0.72;
   rain.emitRate = 4500; rain.blendMode = B.ParticleSystem.BLENDMODE_ADD; rain.start();
 
+  buildNewYork(B, scene, shadow, mat, glow, rand);
   const crowd = buildCrowd(B, scene);
   return {
-    ground, crowd, glossy,
+    ground, crowd,
     update(t, dt) {
       for (const f of flicker) {
         if (f.kind === 'fire') f.light.intensity = f.base * (0.75 + 0.25 * Math.sin(t * 13 + f.phase) * Math.sin(t * 7.3 + f.phase * 2) + Math.random() * 0.15);
@@ -440,6 +448,211 @@ function buildStreet(B, scene, shadow) {
       crowd.update(t, dt);
     },
   };
+}
+
+/** Stripes for an awning or the Con Ed steam stack. */
+function stripeTexture(B, scene, name, a, b, n, vertical = true) {
+  const S = 256, t = new B.DynamicTexture(name, { width: S, height: S }, scene, true);
+  const g = t.getContext();
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = i % 2 ? b : a;
+    if (vertical) g.fillRect((i * S) / n, 0, S / n + 1, S); else g.fillRect(0, (i * S) / n, S, S / n + 1);
+  }
+  t.update();
+  return t;
+}
+
+/** A bodega window, lit from inside: shelves of colourful stock, a fridge glow, an ATM sticker. */
+function bodegaTexture(B, scene) {
+  const W = 512, H = 256, t = new B.DynamicTexture('bodegaTex', { width: W, height: H }, scene, true);
+  const g = t.getContext(), rand = mulberryish(9);
+  const grd = g.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, '#fff2cf'); grd.addColorStop(1, '#d9b77a');
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#cfe9ff'; g.fillRect(W * 0.72, 10, W * 0.26, H - 20);              // the drinks fridge
+  for (let shelf = 0; shelf < 5; shelf++) {
+    const y = 30 + shelf * 44;
+    g.fillStyle = '#6b5440'; g.fillRect(8, y + 30, W * 0.68, 5);
+    for (let x = 12; x < W * 0.68; x += 10 + rand() * 8) {
+      g.fillStyle = `hsl(${Math.floor(rand() * 360)},70%,${45 + rand() * 20}%)`;
+      g.fillRect(x, y + 30 - (14 + rand() * 14), 8, 30);
+    }
+  }
+  g.fillStyle = 'rgba(0,0,0,0.25)'; for (let x = 0; x < W; x += W / 4) g.fillRect(x, 0, 4, H);    // mullions
+  g.fillStyle = '#1b6d2e'; g.fillRect(W * 0.04, H * 0.06, 70, 34);
+  g.fillStyle = '#fff'; g.font = 'bold 24px system-ui, sans-serif'; g.fillText('ATM', W * 0.04 + 10, H * 0.06 + 26);
+  t.update();
+  return t;
+}
+
+function signTexture(B, scene, name, text, bg, fg, w = 512, h = 128, font = 'bold 72px "Helvetica Neue", Arial, sans-serif') {
+  const t = new B.DynamicTexture(name, { width: w, height: h }, scene, true);
+  const g = t.getContext();
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  g.strokeStyle = fg; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12);
+  g.fillStyle = fg; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, w / 2, h / 2 + 2);
+  t.update();
+  return t;
+}
+
+/**
+ * Uptown Manhattan dressing for the yard: tenement fire escapes and cornices, a water tower, a bodega with an awning,
+ * a hydrant, trash bags, the orange-and-white steam stack over the manhole, subway globes, green street signs on the
+ * lamp pole, and a basketball hoop on the fence.
+ */
+function buildNewYork(B, scene, shadow, mat, glow, rand) {
+  const Y = LOOK.yardM, H = LOOK.wallH;
+  const onWall = (side, mesh, along, up, out = 0) => {
+    const yaw = side * Math.PI / 2, fwd = new B.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), right = new B.Vector3(fwd.z, 0, -fwd.x);
+    mesh.position.copyFrom(fwd.scale(Y - out)).addInPlace(right.scale(along)); mesh.position.y = up;
+    mesh.rotation.y = yaw;
+    return mesh;
+  };
+  const iron = mat('ironM', '#121316', { spec: 0.35, power: 40 });
+  const box = (name, w, h, d, m) => { const b = B.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene); b.material = m; return b; };
+
+  // Fire escapes: a platform under each window of a column, railings, and a ladder slanting between floors.
+  // Window columns sit at −Y + 2 + 3.1k along each wall and the floors at 4.4 + 2.6f (see buildStreet).
+  for (const [side, k] of [[1, 2], [1, 6], [3, 3], [3, 7], [0, 6], [2, 1]]) {
+    const along = -Y + 2 + 3.1 * k;
+    for (let f = 0; f < 3; f++) {
+      const y = 4.4 + f * 2.6 - 0.95;
+      onWall(side, box('escapeDeck', 2.2, 0.05, 0.85, iron), along, y, 0.45);
+      onWall(side, box('escapeRail', 2.2, 0.04, 0.04, iron), along, y + 0.9, 0.86);
+      for (const dx of [-1.08, -0.36, 0.36, 1.08]) onWall(side, box('escapeBar', 0.03, 0.9, 0.03, iron), along + dx, y + 0.45, 0.86);
+      for (const dx of [-1.1, 1.1]) onWall(side, box('escapeSide', 0.04, 0.04, 0.85, iron), along + dx, y + 0.9, 0.45);
+      if (f < 2) {
+        const ladder = onWall(side, box('escapeLadder', 0.5, 2.9, 0.05, iron), along + 0.55, y + 1.3, 0.7);
+        ladder.rotation.z = 0.5;
+      }
+    }
+    // The drop ladder hanging from the lowest deck.
+    onWall(side, box('dropLadder', 0.45, 1.6, 0.04, iron), along - 0.6, 4.4 - 0.95 - 0.8, 0.8);
+  }
+
+  // Cornices along the roofline.
+  const stone = mat('corniceM', '#4a4038', { spec: 0.05 });
+  for (let side = 0; side < 4; side++) {
+    onWall(side, box('cornice', Y * 2 + 0.6, 0.45, 0.5), 0, H - 0.2, 0.2).material = stone;
+    onWall(side, box('corniceLip', Y * 2 + 0.6, 0.12, 0.75), 0, H + 0.05, 0.3).material = stone;
+  }
+
+  // A wooden water tower on the far roof.
+  const wood = mat('towerWood', '#5b4330', { spec: 0.05 });
+  const tank = B.MeshBuilder.CreateCylinder('waterTower', { height: 3, diameter: 2.8, tessellation: 20 }, scene);
+  tank.position.set(-5, H + 2.9, Y + 2.2); tank.material = wood;
+  const cap = B.MeshBuilder.CreateCylinder('waterTowerCap', { height: 1.2, diameterTop: 0.1, diameterBottom: 3.1, tessellation: 20 }, scene);
+  cap.position.set(-5, H + 5, Y + 2.2); cap.material = iron;
+  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const leg = box('towerLeg', 0.12, 1.4, 0.12, iron); leg.position.set(-5 + dx, H + 0.7, Y + 2.2 + dz);
+  }
+  // Roofs beyond the walls, so the rooftop camera sees a skyline edge rather than the void.
+  for (let side = 0; side < 4; side++) {
+    const roof = B.MeshBuilder.CreateGround('roof', { width: Y * 2 + 12, height: 6 }, scene);
+    roof.material = mat('roofM' + side, '#141418');
+    onWall(side, roof, 0, H, -3);
+  }
+
+  // The bodega on the far wall: lit window, a door, a red-and-white awning and a backlit sign.
+  const shop = B.MeshBuilder.CreatePlane('bodegaWindow', { width: 4.2, height: 2.1 }, scene);
+  const sm = new B.StandardMaterial('bodegaM', scene);
+  sm.emissiveTexture = bodegaTexture(B, scene); sm.diffuseColor = new B.Color3(0, 0, 0); sm.specularColor = new B.Color3(0, 0, 0);
+  shop.material = sm; onWall(0, shop, -6.5, 1.45, 0.04);
+  onWall(0, box('bodegaDoor', 1.1, 2.4, 0.06, mat('bodegaDoorM', '#2a1f18')), -3.6, 1.2, 0.03);
+  const awning = box('awning', 6.2, 0.06, 1.5, mat('awningM', '#ffffff', { spec: 0.15 }));
+  awning.material.diffuseTexture = stripeTexture(B, scene, 'awningTex', '#c8202a', '#f2efe6', 14);
+  onWall(0, awning, -5.4, 2.95, 0.7); awning.rotation.x = -0.35;
+  const sign = B.MeshBuilder.CreatePlane('bodegaSign', { width: 5.4, height: 0.75 }, scene);
+  const sgm = new B.StandardMaterial('bodegaSignM', scene);
+  sgm.emissiveTexture = signTexture(B, scene, 'bodegaSignTex', 'DELI · GROCERY · 24 HR', '#0f3d8c', '#ffe066', 1024, 128, 'bold 64px "Helvetica Neue", Arial, sans-serif');
+  sgm.disableLighting = true; sign.material = sgm; onWall(0, sign, -5.4, 3.55, 0.06);
+  const shopLight = new B.PointLight('bodegaLight', new B.Vector3(-6.5, 1.6, Y - 1.5), scene);
+  shopLight.diffuse = new B.Color3(1, 0.86, 0.6); shopLight.intensity = 0.9; shopLight.range = 9;
+
+  // A fire hydrant.
+  const hydrantM = mat('hydrantM', '#b81d1d', { spec: 0.5, power: 50 });
+  const hyd = B.MeshBuilder.CreateCylinder('hydrant', { height: 0.62, diameter: 0.26, tessellation: 14 }, scene);
+  hyd.position.set(6.4, 0.31, -7.2); hyd.material = hydrantM; shadow.addShadowCaster(hyd);
+  const dome = B.MeshBuilder.CreateSphere('hydrantCap', { diameter: 0.28, segments: 10, slice: 0.5 }, scene);
+  dome.position.set(6.4, 0.62, -7.2); dome.material = mat('hydrantCapM', '#e8c21a', { spec: 0.5 });
+  const nozzle = B.MeshBuilder.CreateCylinder('hydrantNozzle', { height: 0.4, diameter: 0.1 }, scene);
+  nozzle.position.set(6.4, 0.42, -7.2); nozzle.rotation.z = Math.PI / 2; nozzle.material = hydrantM;
+
+  // Black trash bags piled by the walls and the dumpster.
+  const bagM = mat('bagM', '#08090b', { spec: 0.9, power: 90 });
+  for (const [cx, cz, n] of [[6, Y - 0.8, 7], [-Y + 0.9, 5.5, 6], [-2, -Y + 0.8, 5], [Y - 0.8, -3.5, 4]]) {
+    for (let i = 0; i < n; i++) {
+      const bag = B.MeshBuilder.CreateSphere('trashBag', { diameter: 0.7, segments: 8 }, scene);
+      bag.scaling.set(0.9 + rand() * 0.4, 0.7 + rand() * 0.3, 0.85 + rand() * 0.3);
+      bag.position.set(cx + (rand() - 0.5) * 1.6, 0.22 + (i > n * 0.6 ? 0.35 : 0), cz + (rand() - 0.5) * 1.2);
+      bag.rotation.y = rand() * 3; bag.material = bagM;
+    }
+  }
+
+  // The orange-and-white Con Ed stack over the manhole (the steam comes out of its top).
+  const stack = B.MeshBuilder.CreateCylinder('steamStack', { height: 1.7, diameterTop: 0.36, diameterBottom: 0.44, tessellation: 18 }, scene);
+  stack.position.set(-4.4, 0.85, -5.2);
+  const stm = mat('stackM', '#ffffff', { spec: 0.3 });
+  stm.diffuseTexture = stripeTexture(B, scene, 'stackTex', '#ff6a13', '#f4f4f0', 6, false);
+  stack.material = stm; shadow.addShadowCaster(stack);
+
+  // Subway entrance: two green globe lamps on posts and a sign, at the left wall.
+  const globeM = glow('subwayGlobeM', '#3dd66b');
+  for (const z of [-9.4, -6.6]) {
+    const post = B.MeshBuilder.CreateCylinder('subwayPost', { height: 2.4, diameter: 0.08 }, scene);
+    post.position.set(-Y + 1.6, 1.2, z); post.material = iron;
+    const globe = B.MeshBuilder.CreateSphere('subwayGlobe', { diameter: 0.34, segments: 12 }, scene);
+    globe.position.set(-Y + 1.6, 2.5, z); globe.material = globeM;
+  }
+  const rail = box('subwayRail', 0.05, 0.05, 2.8, iron); rail.position.set(-Y + 1.6, 1.0, -8);
+  const subwaySign = B.MeshBuilder.CreatePlane('subwaySign', { width: 1.9, height: 0.42 }, scene);
+  const ssm = new B.StandardMaterial('subwaySignM', scene);
+  ssm.emissiveTexture = signTexture(B, scene, 'subwaySignTex', 'SUBWAY', '#111111', '#ffffff', 512, 112, 'bold 74px "Helvetica Neue", Arial, sans-serif');
+  ssm.disableLighting = true; ssm.backFaceCulling = false; subwaySign.material = ssm;
+  subwaySign.position.set(-Y + 1.6, 1.9, -8); subwaySign.rotation.y = Math.PI / 2;
+  const subwayLight = new B.PointLight('subwayLight', new B.Vector3(-Y + 2.2, 2.4, -8), scene);
+  subwayLight.diffuse = new B.Color3(0.3, 1, 0.45); subwayLight.intensity = 0.7; subwayLight.range = 6;
+
+  // Green street-name blades on the lamp pole (the pole stands at −9.5, 8.5).
+  for (const [text, yaw, y] of [['LENOX AV', 0, 3.1], ['W 125 ST', Math.PI / 2, 3.35]]) {
+    const blade = B.MeshBuilder.CreatePlane('streetSign', { width: 1.5, height: 0.26 }, scene);
+    const bm = new B.StandardMaterial('streetSignM' + text, scene);
+    bm.diffuseTexture = signTexture(B, scene, 'streetSignTex' + text, text, '#0b6b3a', '#ffffff', 512, 96, 'bold 62px "Helvetica Neue", Arial, sans-serif');
+    bm.emissiveColor = new B.Color3(0.25, 0.25, 0.25); bm.backFaceCulling = false;
+    blade.material = bm; blade.position.set(-9.5, y, 8.5); blade.rotation.y = yaw;
+  }
+
+  // A basketball hoop on the chain-link fence (the fence runs along x = Y − 2.2).
+  const hx = Y - 2.25;
+  const pole = B.MeshBuilder.CreateCylinder('hoopPole', { height: 3.3, diameter: 0.12 }, scene);
+  pole.position.set(hx + 0.15, 1.65, 6.5); pole.material = iron;
+  const board = box('backboard', 0.04, 1.05, 1.8, mat('backboardM', '#e9e9e9', { spec: 0.4 }));
+  board.position.set(hx - 0.1, 3.3, 6.5);
+  const rim = B.MeshBuilder.CreateTorus('rim', { diameter: 0.46, thickness: 0.025, tessellation: 24 }, scene);
+  rim.position.set(hx - 0.4, 3.05, 6.5); rim.material = mat('rimM', '#e0561b', { spec: 0.5 });
+}
+
+/**
+ * The street is hundreds of small static meshes (window frames, fire-escape bars, bags). Each one is a draw call in the
+ * main pass and the shadow map, so merge everything static that shares a material.
+ * Parented (cars), thin-instanced (crowd, bulbs), billboarded and listed meshes are left alone.
+ */
+function mergeStatic(B, scene, shadow, keep) {
+  const casters = shadow.getShadowMap().renderList;
+  const groups = new Map();
+  for (const m of scene.meshes) {
+    if (keep.includes(m) || m.parent || m.skeleton || m.hasThinInstances || m.billboardMode || !m.material || !m.isEnabled()) continue;
+    if (!m.getTotalVertices()) continue;
+    const g = groups.get(m.material) ?? []; g.push(m); groups.set(m.material, g);
+  }
+  for (const [, g] of groups) {
+    if (g.length < 2) continue;
+    const cast = g.some((m) => casters.includes(m)), receive = g.some((m) => m.receiveShadows);
+    const merged = B.Mesh.MergeMeshes(g, true, true);
+    if (!merged) continue;
+    merged.freezeWorldMatrix(); merged.receiveShadows = receive;
+    if (cast) shadow.addShadowCaster(merged);
+  }
 }
 
 /** Onlookers standing in a loose ring around the fight spot, open on the hard camera's side. One thin-instanced mesh. */
@@ -795,7 +1008,7 @@ function makeOverlay(parent) {
       .bm3d-third div small { display:block; font-weight:400; opacity:.75; font-size:10.5px; }
       .bm3d-cam { position:absolute; top:12px; right:14px; font: 600 10px/1 ui-monospace,monospace; opacity:.6; }
     </style>
-    <div class="bm3d-bug"><b>●</b> LIVE · BACK LOT</div>
+    <div class="bm3d-bug"><b>●</b> LIVE · UPTOWN NYC</div>
     <div class="bm3d-cam"></div>
     <div class="bm3d-banner"></div>
     <div class="bm3d-third">
@@ -856,49 +1069,23 @@ export async function createArena3D({ parent, sim, names = {}, BABYLON: B = glob
   shadow.useBlurExponentialShadowMap = true; shadow.blurKernel = 16; shadow.darkness = 0.4;
 
   const arena = buildStreet(B, scene, shadow);
+  mergeStatic(B, scene, shadow, [arena.ground]);
   const lampCage = B.MeshBuilder.CreateCylinder('workLampShade', { height: 0.25, diameterTop: 0.15, diameterBottom: 0.55, tessellation: 16 }, scene);
   lampCage.position.set(0, 6.3, 0); lampCage.material = new B.StandardMaterial('workLampM', scene);
   lampCage.material.diffuseColor = new B.Color3(0.15, 0.16, 0.18); lampCage.material.emissiveColor = new B.Color3(0.9, 0.75, 0.5);
-
-  // Reflections without an HDRI: a probe at head height renders the yard (neon, windows, fires, headlights) into a
-  // cube map, refreshed now and then, and glossy surfaces pick it up with a fresnel falloff.
-  const probe = new B.ReflectionProbe('yardProbe', 256, scene);
-  probe.position = new B.Vector3(0, 1.6, 0);
-  probe.refreshRate = 30;
-  for (const m of scene.meshes) if (m !== arena.ground) probe.renderList.push(m);
-  const sheen = (mat, level, power = 2) => {
-    mat.reflectionTexture = probe.cubeTexture;
-    mat.reflectionFresnelParameters = new B.FresnelParameters();
-    mat.reflectionFresnelParameters.bias = level * 0.25; mat.reflectionFresnelParameters.power = power;
-    mat.reflectionFresnelParameters.leftColor = new B.Color3(level, level, level);
-    mat.reflectionFresnelParameters.rightColor = new B.Color3(level * 0.15, level * 0.15, level * 0.15);
-  };
-  for (const [mat, level, power] of arena.glossy) sheen(mat, level, power);
-
-  // The wet asphalt mirrors everything standing on it, blurred, strongest at a grazing angle.
-  const mirror = new B.MirrorTexture('wet', { ratio: 0.5 }, scene, true);
-  mirror.mirrorPlane = new B.Plane(0, -1, 0, 0);
-  mirror.renderListPredicate = (m) => m !== arena.ground && m.name !== 'paint' && m.name !== 'manhole';
-  mirror.adaptiveBlurKernel = 48;
-  const gm = arena.ground.material;
-  gm.reflectionTexture = mirror; gm.reflectionTexture.level = 0.55;
-  gm.reflectionFresnelParameters = new B.FresnelParameters();
-  gm.reflectionFresnelParameters.leftColor = new B.Color3(0.9, 0.9, 0.9);
-  gm.reflectionFresnelParameters.rightColor = new B.Color3(0.04, 0.04, 0.04);
-  gm.reflectionFresnelParameters.power = 3;
 
   // Rigged Quaternius boxers when the models load; the primitive boxers otherwise.
   let boxers;
   try {
     const assets = await loadBoxerAssets(B, scene);
-    boxers = Object.fromEntries(['red', 'blue'].map((c) => [c, new ModelBoxer(B, scene, assets, c, shadow, { glove: LOOK.wraps, trunks: LOOK.trunks[c], wraps: true, sheen })]));
+    boxers = Object.fromEntries(['red', 'blue'].map((c) => [c, new ModelBoxer(B, scene, assets, c, shadow, { glove: LOOK.wraps, trunks: LOOK.trunks[c], wraps: true })]));
   } catch (err) {
     console.warn('boxer models unavailable, using primitive boxers:', err);
     boxers = { red: new Boxer(B, scene, 'red', shadow), blue: new Boxer(B, scene, 'blue', shadow) };
   }
 
   // The street has a dozen lights; StandardMaterial takes four unless told otherwise.
-  for (const m of scene.materials) if ('maxSimultaneousLights' in m) m.maxSimultaneousLights = 14;
+  for (const m of scene.materials) if ('maxSimultaneousLights' in m) m.maxSimultaneousLights = 16;
 
   // Sweat and spit on clean shots.
   const spray = new B.ParticleSystem('spray', 400, scene);
@@ -916,17 +1103,16 @@ export async function createArena3D({ parent, sim, names = {}, BABYLON: B = glob
   scene.activeCamera = cam;
   const shot = { mode: 'hard', until: 0, pos: cam.position.clone(), look: new B.Vector3(0, 1.2, 0), shake: 0, side: 1 };
 
-  // Post: broadcast grade, bloom on the lights, vignette.
+  // Post: broadcast grade and a vignette; no bloom or lens effects (matte look).
   const pipe = new B.DefaultRenderingPipeline('broadcast', true, scene, [cam]);
   pipe.fxaaEnabled = true; pipe.samples = 4;
-  pipe.bloomEnabled = true; pipe.bloomThreshold = 0.75; pipe.bloomWeight = 0.35; pipe.bloomKernel = 48;
+  pipe.bloomEnabled = false;
   pipe.imageProcessingEnabled = true;
   pipe.imageProcessing.toneMappingEnabled = true; pipe.imageProcessing.toneMappingType = B.ImageProcessingConfiguration.TONEMAPPING_ACES;
   pipe.imageProcessing.exposure = 1.2; pipe.imageProcessing.contrast = 1.2;
   pipe.imageProcessing.vignetteEnabled = true; pipe.imageProcessing.vignetteWeight = 1.4; pipe.imageProcessing.vignetteColor = new B.Color4(0, 0, 0, 0);
-  pipe.chromaticAberrationEnabled = true; pipe.chromaticAberration.aberrationAmount = 6; pipe.chromaticAberration.radialIntensity = 1.2;
   pipe.sharpenEnabled = true; pipe.sharpen.edgeAmount = 0.25;
-  const glow = new B.GlowLayer('glow', scene); glow.intensity = 0.5;
+  const glow = new B.GlowLayer('glow', scene); glow.intensity = 0.3;   // only so neon reads as neon
 
   // Events (read only).
   let lastPose = { red: null, blue: null };

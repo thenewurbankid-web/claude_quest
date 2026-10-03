@@ -204,20 +204,19 @@ export class ModelBoxer {
       const mat = new B.StandardMaterial(`${pbr.name}-${corner}`, scene);
       mat.diffuseTexture = /Superhero/.test(pbr.name) && skin ? skin : pbr.albedoTexture;
       if (pbr.bumpTexture) { mat.bumpTexture = pbr.bumpTexture; mat.invertNormalMapX = pbr.invertNormalMapX; mat.invertNormalMapY = pbr.invertNormalMapY; }
-      mat.specularColor = new B.Color3(0.18, 0.16, 0.15); mat.specularPower = /Eyes/.test(pbr.name) ? 96 : 20;
-      if (/Superhero/.test(pbr.name) && colors.sheen) { mat.specularColor = new B.Color3(0.24, 0.22, 0.2); mat.specularPower = 36; colors.sheen(mat, 0.05, 4); }
+      mat.specularColor = new B.Color3(0.08, 0.07, 0.07); mat.specularPower = /Eyes/.test(pbr.name) ? 96 : 20;
       m.material = mat;
     }
     for (const m of this.rig.meshes) { shadow.addShadowCaster(m); m.receiveShadows = true; }
 
-    const mat = (name, hex, spec = 0.3) => {
+    const mat = (name, hex, spec = 0.06) => {
       const m = new B.StandardMaterial(`${name}-${corner}`, scene);
       m.diffuseColor = B.Color3.FromHexString(hex); m.specularColor = new B.Color3(spec, spec, spec); m.specularPower = 48;
       return m;
     };
     // Street gear (colors.wraps): taped fists instead of gloves, low sneakers instead of high-top boots.
     const wraps = !!colors.wraps;
-    const glove = mat('glove', colors.glove, wraps ? 0.08 : 0.6), trunks = mat('trunks', colors.trunks, 0.35);
+    const glove = mat('glove', colors.glove, wraps ? 0.04 : 0.12), trunks = mat('trunks', colors.trunks, 0.06);
     const band = mat('band', wraps ? colors.glove : '#f1f1f1', 0.2), boot = mat('boot', wraps && corner === 'red' ? '#e9e9e6' : '#111318', 0.3);
     const keep = (m, material) => { m.material = material; m.rotationQuaternion = new B.Quaternion(); shadow.addShadowCaster(m); return m; };
     this.extras = {

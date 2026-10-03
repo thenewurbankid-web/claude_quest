@@ -62,12 +62,32 @@ cool street theme". They picked **new setting, same physics**: `CombatSimulation
 - Not done: the primitive fallback `Boxer` still wears gloves; the onlookers are simple shapes (no arms raised, no
   phones); there is no rain splash on the ground. The page title, `index.html` copy and names still say "Boxing".
 
+## Done (2026-10-03, uncommitted at first): New York dressing, matte look
+
+- User: "make them have hip hop style clothing and make the world like new york alley nd streets". The world part is
+  done: `buildNewYork()` adds fire escapes, cornices, a water tower, a bodega (DELI · GROCERY · 24 HR, striped awning,
+  lit window), a yellow cab, a hydrant, trash bags, the Con Ed steam stack, subway globes, LENOX AV / W 125 ST signs
+  and a basketball hoop on the fence. Graffiti and neon are New York themed, and the overlay reads "LIVE · UPTOWN NYC".
+- `mergeStatic()` merges static meshes by material. Without it, the scene went from 480 meshes and 3,500 draw calls
+  down to 2 fps. With it, the scene has 115 meshes and runs at 60 fps.
+- User: "no need of shiny graphics" → picked "drop gloss and reflections". The wet-ground mirror, reflection probe, skin
+  sweat, glossy cars, bloom and chromatic aberration are gone, and the `mat()` helper caps specular at 0.1. The glow
+  layer stays at 0.3 so neon still reads as neon.
+- User then: "photo realitic textures no shiny is also ok", "you can downoad". Five CC0 Poly Haven textures are in
+  `public/boxing/textures/` (see CREDITS.md there) but **not wired in yet**.
+
 ## Next jobs
 
-1. **Character creation** (user, 2026-10-03: "and later give character creation"). Not started and not scoped yet.
-   Ask what it covers (looks only: skin, build, hair, outfit colours, wraps/gloves; or also the starting stats that
-   `FighterModel` already takes) and keep anything that affects the sim deterministic for P2P.
-2. Balance (see Open issues), which the user picked earlier.
+1. **Wait for the user's photo.** The user asked: "if i give you a photo of a location can you recreate it?" If one
+   comes, rebuild the street from it (layout, buildings, materials, signs, light) instead of item 2.
+2. **Outdoor street** (user: "and outdoor steet fight"). Open the yard into a street: buildings on ±z only, with
+   sidewalks and curbs, the road running away along x into the fog, more lamps and parked cars, sky. Wire in the
+   textures: asphalt on the road, brick on the walls, the worn concrete on the sidewalks, rust on the barrels.
+3. **Character creation, looks + name only** (picked by the user). The sim is untouched. Hip hop outfits are the
+   options: hoodie or tank, baggy jeans or sweats, sneakers, chain, cap. Store a `look` with the fighter in Dexie and
+   add it to `profileOf()` so it rides along in P2P `start` messages (`FighterModel` ignores unknown fields). Dress the
+   onlookers to match.
+4. Balance (see Open issues).
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.
