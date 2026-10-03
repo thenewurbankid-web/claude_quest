@@ -4,6 +4,21 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**Latest (2026-10-03, R3 session): R3 Lore quests is built; what is left is the user's one-time setup.** Contract
+(`'lore'` mark source, `isGameOnly`, area-lore entry/index/`cells.json` shapes, Work `endsAt`), client
+(`public/quest/area-lore.js`: geohash-4 cell + 8 neighbours, reads `cells.json` first so no 404s, calendar fallback,
+Town news March/Lore Hall mapping), board (`public/quest/town-board.js`, `B` in the hub, E or tap; lore Riddles are taken
+on there, never carried by Keepers), generator (`area-lore/`: Open-Meteo, iCal/RSS, allowed kinds only, Ollama with
+template fallback, checked for real with qwen3:4b). `isGameOnly` filters bossScore, shouldSummon, riddleWeight,
+realmStats, answerTimes, digest and the Beacon (the last two beyond the plan's list, so errands never turn it amber).
+`npm test` 117 pass; checked on 4793 with `?lore&cell=gcpv` (take on, answer, seal, Work done, Beacon/Haze unchanged,
+375px, no failed requests) and on the plain URL (calendar). The fight's Battle fields and tests are untouched.
+**Open:** (1) the user creates the two repos, deploy key and runner (area-lore/README.md, steps 1-6), then sets
+`LORE_BASE` in boot.js (step 7); until then the board shows the calendar. (2) Walking to the board and pressing E was
+not tested by walking (the event was dispatched). (3) When the Paperclip connector posts Decisions, it must skip Works
+where `isGameOnly` is true. (4) Resolved lore Works stay in the ledger; prune them when saves get archiving.
+**Next after that: R4 (Bring your Keeper),** per PLAN-engine.md's order.
+
 **Latest (user, 2026-10-03, end of the fight session): the R2 playtest no longer blocks R3.** "Don't stop for
 playtest, we tweak numbers later." **Next: build R3 Lore quests** (PLAN-engine.md, "R3 Lore quests"; contract step
 first). The user plays PLAYTEST-R2.md whenever they like, and fight numbers (`DEFAULT_RULES` Lantern/bites) get tuned

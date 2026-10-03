@@ -354,6 +354,7 @@ quests; the loop stays the same.
 - **Never empty:** with no location, no network or nothing live, built-in clock and calendar entries (time of day,
   season, weekend) fill the board. A rough location is asked for once and kept as `quest.place`, as the weather
   already does in `atmosphere.js`.
+- **Built 2026-10-03** (see HANDOFF.md): all four steps, plus `lore/cells.json` so clients only ask for cells that exist.
 - **How R3 runs:** contract (the area-lore entry shape, a sample cell file, the mark source, `isGameOnly`) → side by
   side: (a) the client source, ledger mapping, filters and calendar fallback ∥ (b) the board ∥ (c) the generator
   (weather from Open-Meteo, feeds, Ollama writer with template fallback, `generate.js` writing to a folder) plus a
