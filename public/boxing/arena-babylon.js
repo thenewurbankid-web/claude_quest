@@ -10,6 +10,8 @@
  * a rigged model can replace `Boxer` later without touching the rest.
  */
 import { RING_HALF_M, TICK_MS } from './physics-engine.js';
+import { loadBoxerAssets, ModelBoxer } from './boxer-model.js';
+import { v, add, sub, mul, dot, len, norm, lerp, bez, clamp, smooth, UP, rotateAbout, solveTwoBone } from './pose-math.js';
 
 const BABYLON_SRC = '/vendor/babylonjs/babylon.js';
 let babylonPromise = null;
@@ -41,42 +43,6 @@ const LOOK = {
   trunks: { red: '#b5222b', blue: '#1f4fa6' },
   crowdRows: 11,
 };
-
-// ─── Small vector helpers (plain objects, so the pose maths stays allocation-light) ─────────────────────
-
-const v = (x = 0, y = 0, z = 0) => ({ x, y, z });
-const add = (a, b) => v(a.x + b.x, a.y + b.y, a.z + b.z);
-const sub = (a, b) => v(a.x - b.x, a.y - b.y, a.z - b.z);
-const mul = (a, s) => v(a.x * s, a.y * s, a.z * s);
-const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
-const len = (a) => Math.sqrt(dot(a, a));
-const norm = (a) => { const l = len(a) || 1; return v(a.x / l, a.y / l, a.z / l); };
-const lerp = (a, b, t) => v(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
-const bez = (a, b, c, t) => lerp(lerp(a, b, t), lerp(b, c, t), t);
-const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
-const smooth = (t) => t * t * (3 - 2 * t);
-const UP = v(0, 1, 0);
-
-/** Rotates p around the axis through `pivot` along unit `axis` by `ang` (Rodrigues). */
-function rotateAbout(p, pivot, axis, ang) {
-  const q = sub(p, pivot), c = Math.cos(ang), s = Math.sin(ang);
-  const cr = v(axis.y * q.z - axis.z * q.y, axis.z * q.x - axis.x * q.z, axis.x * q.y - axis.y * q.x);
-  const out = add(add(mul(q, c), mul(cr, s)), mul(axis, dot(axis, q) * (1 - c)));
-  return add(out, pivot);
-}
-
-/** Two-bone IK: the middle joint for a chain root → mid → end with lengths a, b, bending toward `pole`. */
-function solveTwoBone(root, target, a, b, pole) {
-  const toT = sub(target, root);
-  const d = clamp(len(toT), Math.abs(a - b) + 1e-3, a + b - 1e-3);
-  const dir = norm(toT);
-  const end = add(root, mul(dir, d));
-  const cosA = clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1);
-  let n = sub(pole, mul(dir, dot(pole, dir)));
-  n = len(n) < 1e-4 ? v(0, -1, 0) : norm(n);
-  const mid = add(add(root, mul(dir, a * cosA)), mul(n, a * Math.sqrt(1 - cosA * cosA)));
-  return { mid, end };
-}
 
 // ─── Procedural textures (no files to download) ────────────────────────────────
 
@@ -635,7 +601,15 @@ export async function createArena3D({ parent, sim, names = {}, BABYLON: B = glob
   shadow.useBlurExponentialShadowMap = true; shadow.blurKernel = 16; shadow.darkness = 0.35;
 
   const arena = buildArena(B, scene, shadow);
-  const boxers = { red: new Boxer(B, scene, 'red', shadow), blue: new Boxer(B, scene, 'blue', shadow) };
+  // Rigged Quaternius boxers when the models load; the primitive boxers otherwise.
+  let boxers;
+  try {
+    const assets = await loadBoxerAssets(B, scene);
+    boxers = Object.fromEntries(['red', 'blue'].map((c) => [c, new ModelBoxer(B, scene, assets, c, shadow, { glove: LOOK.corners[c], trunks: LOOK.trunks[c] })]));
+  } catch (err) {
+    console.warn('boxer models unavailable, using primitive boxers:', err);
+    boxers = { red: new Boxer(B, scene, 'red', shadow), blue: new Boxer(B, scene, 'blue', shadow) };
+  }
 
   // Sweat and spit on clean shots.
   const spray = new B.ParticleSystem('spray', 400, scene);
@@ -743,8 +717,22 @@ export async function createArena3D({ parent, sim, names = {}, BABYLON: B = glob
       const axis = norm(v(s.blue.x - s.red.x, 0, s.blue.y - s.red.y));
       let perp = v(axis.z, 0, -axis.x);
       if (perp.z > 0) perp = mul(perp, -1);           // stay on the camera side of the ring
-      const fp = shot.focus ? lastPose[shot.focus].head : mid;
-      want = add(add(mid, mul(perp, 2.6)), v(0, -0.15, 0)); look = lerp(mid, fp, 0.5);
+      if (shot.focus && boxers[shot.focus].knocked) {
+        // The KO: side-on to the line between them, so the one on the canvas lies full length below the one standing.
+        // Take whichever side has more room inside the ropes.
+        const loser = lastPose[shot.focus].hips, winner = lastPose[shot.focus === 'red' ? 'blue' : 'red'].hips;
+        const c = v((loser.x + winner.x) / 2, 0, (loser.z + winner.z) / 2);
+        const axis = norm(v(loser.x - winner.x, 0, loser.z - winner.z)), side = v(axis.z, 0, -axis.x);
+        const inside = RING_HALF_M - 0.3;
+        const at = (sgn) => add(c, mul(side, sgn * 3.0));
+        const room = (p) => Math.max(Math.abs(p.x), Math.abs(p.z));
+        const pick = room(at(1)) < room(at(-1)) ? at(1) : at(-1);
+        want = v(clamp(pick.x, -inside, inside), 1.85, clamp(pick.z, -inside, inside));
+        look = v(c.x, 0.95, c.z);
+      } else {
+        const fp = shot.focus ? lastPose[shot.focus].head : mid;
+        want = add(add(mid, mul(perp, 2.6)), v(0, -0.15, 0)); look = lerp(mid, fp, 0.5);
+      }
     } else {
       const dist = 5.6 + gap * 0.9;
       want = v(mid.x * 0.55, 2.3 + gap * 0.25, mid.z * 0.35 - dist); look = mid;
@@ -766,8 +754,8 @@ export async function createArena3D({ parent, sim, names = {}, BABYLON: B = glob
   const ro = new ResizeObserver(() => engine.resize());
   ro.observe(parent);
 
-  return {
-    scene, engine,
+  const api = {
+    scene, engine, boxers, cut,
     destroy() {
       for (const off of offs) off();
       ro.disconnect();
@@ -776,6 +764,10 @@ export async function createArena3D({ parent, sim, names = {}, BABYLON: B = glob
       canvas.remove(); overlay.dispose();
     },
   };
+  // ?debug exposes the view for poking at it from the console (e.g. __bmArena.boxers.blue.knocked = true;
+  // __bmArena.cut('ringside', 5000, 'blue')).
+  if (new URLSearchParams(location.search).has('debug')) globalThis.__bmArena = api;
+  return api;
 }
 
 // Exposed for tests: the pose maths is plain JS and needs no WebGL.

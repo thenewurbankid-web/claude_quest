@@ -11,10 +11,17 @@
   },
   "dependencies": {
     "babylonjs": "^7.54.3",
+    "babylonjs-loaders": "^7.54.3",
     "dexie": "^4.4.6",
     "mqtt": "^5.16.0",
     "phaser": "^3.90.0",
     "three": "^0.186.1"
   },
-  "main": "app.js"
+  "main": "app.js",
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "sharp": "^0.35.5"
+  }
 }

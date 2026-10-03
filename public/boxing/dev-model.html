@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Boxer model viewer</title>
+<style>
+  body { margin: 0; background: #11151c; color: #dfe6ee; font: 13px system-ui, sans-serif; }
+  #c { width: 100vw; height: 78vh; display: block; }
+  #ui { padding: 8px 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  pre { margin: 0 12px; font: 11px ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+<canvas id="c"></canvas>
+<div id="ui">
+  Clip <select id="clip"></select>
+  Frame <input id="frame" type="range" min="0" max="1" step="0.001" value="0" style="width:40vw">
+  <label><input type="checkbox" id="play" checked> play</label>
+</div>
+<pre id="info"></pre>
+<script src="/vendor/babylonjs/babylon.js"></script>
+<script src="/vendor/babylonjs-loaders/babylon.glTF2FileLoader.min.js"></script>
+<script type="module">
+import { loadBoxerAssets, ModelRig } from './boxer-model.js';
+const B = BABYLON;
+const engine = new B.Engine(document.getElementById('c'), true);
+const scene = new B.Scene(engine);
+scene.clearColor = new B.Color4(0.07, 0.08, 0.11, 1);
+const cam = new B.ArcRotateCamera('cam', -Math.PI / 2, 1.3, 3.2, new B.Vector3(0, 1, 0), scene);
+cam.attachControl(true); cam.wheelPrecision = 60; cam.minZ = 0.05;
+new B.HemisphericLight('h', new B.Vector3(0, 1, 0), scene).intensity = 0.7;
+const d = new B.DirectionalLight('d', new B.Vector3(-0.3, -1, 0.5), scene); d.intensity = 1.6;
+const ground = B.MeshBuilder.CreateGround('g', { width: 4, height: 4 }, scene);
+const gm = new B.StandardMaterial('gm', scene); gm.diffuseColor = new B.Color3(0.3, 0.32, 0.36); ground.material = gm;
+// +z arrow: the direction the boxer should face.
+const arrow = B.MeshBuilder.CreateBox('arrow', { width: 0.04, height: 0.02, depth: 0.6 }, scene); arrow.position.set(0, 0.01, 0.5);
+
+const assets = await loadBoxerAssets(B, scene);
+const rig = new ModelRig(B, scene, assets, 'red');
+const sel = document.getElementById('clip');
+for (const name of rig.clipNames) sel.add(new Option(name, name));
+sel.value = 'Punch_Jab';
+const info = document.getElementById('info');
+info.textContent = JSON.stringify(rig.describe(), null, 1);
+window.rig = rig;
+
+let t = 0;
+scene.onBeforeRenderObservable.add(() => {
+  const clip = rig.clips[sel.value];
+  const slider = document.getElementById('frame');
+  if (document.getElementById('play').checked) { t = (t + engine.getDeltaTime() / 1000 / clip.seconds) % 1; slider.value = t; } else t = Number(slider.value);
+  rig.place({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
+  rig.applyLayers([{ clip: sel.value, t, w: 1 }]);
+});
+engine.runRenderLoop(() => scene.render());
+addEventListener('resize', () => engine.resize());
+</script>

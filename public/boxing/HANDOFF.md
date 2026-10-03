@@ -20,7 +20,27 @@ Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds 
 - Checked on port 4794 (`boxing-static-2`, defined in the main checkout's `.claude/launch.json` because the preview tool
   reads that one): rounds run, punches and spray show, no console errors. `npm test` 93 pass (new IK test).
 
-## Next job: real boxer models in the Babylon view
+## Done (2026-10-03): real boxer models (stage 2)
+
+- Assets: the free Quaternius CC0 packs (Universal Base Characters, Universal Animation Library 1 and 2, all one rig).
+  `scripts/build-boxing-models.mjs <unzipped packs>` (gltf-transform + sharp, devDependencies) writes
+  `public/boxing/models/boxer.glb` (0.81 MB), `skin_light.webp` (0.03 MB) and `anims.glb` (0.33 MB, 13 clips, finger
+  channels dropped). Licences and sources in `models/CREDITS.md`. The zips themselves are not in the repo.
+- `public/boxing/boxer-model.js`: `ModelRig` samples clips per bone itself (`Animation.evaluate`) and blends layers, so a
+  punch clip is scrubbed to the sim's launch → arrive ticks (impact at 25 % of Punch_Jab, 30 % of Punch_Cross, 42.5 % of
+  Melee_Hook, measured in `dev-model.html`). Two-bone IK on the real arm bones (`aim` works through the parent's world
+  matrix, so the glTF root's mirroring doesn't matter) holds the guard (relative to the head bone) and drives the
+  uppercut, body shot and hook arcs; jab and cross come from their clips with IK pulling them onto the target at impact.
+  Hit_Head / Hit_Chest / Hit_Knockback on landed shots, Death01 on the KO. Gloves, trunks, belt and high-top boots are
+  drawn in code and placed on the bones each frame. Skin is rebuilt as StandardMaterial (no environment map in the
+  arena, so PBR came out near black); red has the light skin, blue the dark.
+- `arena-babylon.js` uses `ModelBoxer` and falls back to the primitive boxers if the models fail to load. `?debug` on the
+  page exposes `__bmArena` (scene, engine, boxers). Vector/IK helpers moved to `pose-math.js`.
+- Gaps: no free uppercut or body-shot clips (IK fakes them), no boxing footwork clip (Walk_Loop at ≤ 45 % while moving,
+  feet slide a little), the trunks are a rigid cylinder over the model's briefs, one body model for both corners, no hair.
+  LayToIdle (getting up) is unused because the sim has no knockdowns other than the KO.
+
+## Next job: open (see Open issues)
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.

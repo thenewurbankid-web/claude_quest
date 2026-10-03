@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..', 'public');
-const VENDOR = Object.fromEntries(['three', 'phaser', 'dexie', 'babylonjs'].map(n => [n, path.join(__dirname, '..', 'node_modules', n)]));
+const VENDOR = Object.fromEntries(['three', 'phaser', 'dexie', 'babylonjs', 'babylonjs-loaders'].map(n => [n, path.join(__dirname, '..', 'node_modules', n)]));
 const PORT = Number(process.argv[2]) || 4790;
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json',
   '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary',

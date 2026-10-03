@@ -105,7 +105,7 @@ test('RAG: top 3 winning precedents against the most similar opponents, one per 
 });
 
 test('3D view: two-bone IK keeps bone lengths and stops at full reach', async () => {
-  const { _internals: { solveTwoBone, rotateAbout } } = await import('../public/boxing/arena-babylon.js');
+  const { solveTwoBone, rotateAbout } = await import('../public/boxing/pose-math.js');
   const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
   const root = { x: 0, y: 1.4, z: 0 };
   const near = solveTwoBone(root, { x: 0.3, y: 1.3, z: 0.2 }, 0.3, 0.27, { x: 0, y: -1, z: 0 });
