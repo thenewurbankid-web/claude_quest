@@ -45,3 +45,13 @@ Not tested: other stat mixes (all runs at 50/50/50/50), fights where tactics cha
 
 ### The user's decisions (balance)
 - 2026-10-04: The game targets phones. Batch scripts stay headless (node only, no DOM/Babylon); balance work changes nothing in rendering. `scripts/boxing-balance.mjs` already complies. Still waiting on which of A/B/C/D to apply.
+
+### BOX-4 applied (2026-10-04): A475 + B + D + pressure-mirror
+Committed in `physics-engine.js`: damage divisor 400 → 475 (`DAMAGE_DIVISOR`), pressure `rangeM` 0.95 → 0.85, new pressure `crowdMs: 30` added to the defender reaction window in `computePunch`, but only when the defender's tactic is not pressure. Deterministic (no new rng). Test added: crowd applies vs outbox, not vs pressure. `npm test`: 97 pass.
+
+Batch (n=40/pair, stats 50 all): win share pressure .48, outbox .45, counter .79, body_attack .28, recover .17; pressure v counter landed 399 v 351, win 5 / 85 %; pressure v outbox 0 / 88 %; pressure v pressure 483 v 483 (land rate 0.78). Overall KO rate 0.19 (in the 0.10-0.25 band).
+
+Follow-ups (not blockers):
+- **KO cliff:** divisor 500 gives KO 0.09, 475 gives 0.19, 450 gives 0.32. KOs are nearly all round-6 stoppages in lopsided pairs, so small divisor changes flip whole pairs. Re-measure after any tuning of damage or tactics.
+- **Counter still leads on scorecards:** counter wins about 85 % of decisions v pressure and 100 % v outbox even with landed counts near parity. Needs a later pass (counter window / `counter` weight / scoring weights).
+- Not tested: other stat mixes, per-round tactic changes, the browser.

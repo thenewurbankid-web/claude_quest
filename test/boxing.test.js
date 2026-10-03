@@ -241,4 +241,13 @@ test('boxer assets fall back to the Quaternius boxer when person.glb will not lo
   assert.equal(a.person, false);
   assert.equal(a.boxer.file, 'boxer.glb');
   assert.ok(a.skinLight.url.endsWith('skin_light.webp'));
+
+test('pressure crowds a defender, but not one who is also on pressure', () => {
+  const mk = (key) => { const f = fighter(key === 'x' ? 'blue' : 'blue'); f.tacticKey = key; f.tactic = TACTICS[key]; return f; };
+  const run = (defKey) => {
+    const r = fighter('red'); r.tacticKey = 'pressure'; r.tactic = TACTICS.pressure;
+    const b = mk(defKey); r.pos = { x: -0.45, y: 0 }; b.pos = { x: 0.45, y: 0 };
+    return computePunch({ attacker: r, defender: b, type: 'jab', tick: 0, rng: mulberry32(3) }).reaction.windowMs;
+  };
+  assert.equal(run('outbox') - run('pressure'), TACTICS.pressure.crowdMs);
 });

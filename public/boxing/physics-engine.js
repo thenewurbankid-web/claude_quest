@@ -34,6 +34,7 @@ const GUARD_OFFSET_M = 0.25;               // fist rests this far ahead of centr
 const TARGET_DEPTH_M = 0.15;               // head/body surface ahead of centre
 const SLIP_DISTANCE_M = 0.12;              // how far a head must move to evade
 const EXCHANGE_IDLE_MS = 800;              // quiet time that closes an exchange
+const DAMAGE_DIVISOR = 475;                // joules per health point
 const BLOCK_MARGIN_MS = 35;                // late reactions within this are blocks
 const PERIPHERAL_MS = 30;                  // extra perception for punches from the side
 const ROPES_ZONE_M = 0.6;                  // within this of the ropes, a defender can't slip back
@@ -54,7 +55,7 @@ export const PUNCHES = Object.freeze({
  * lateral: circling speed as a share of foot speed.
  */
 export const TACTICS = Object.freeze({
-  pressure:    { label: 'Pressure',     rangeM: 0.95, aggression: 1.0, combo: 0.35, lateral: 0.10, counter: 0.2, gasRegen: 1.0, weights: { jab: 1, cross: 2, hook: 3, uppercut: 2, body: 2 } },
+  pressure:    { label: 'Pressure',     rangeM: 0.85, crowdMs: 30, aggression: 1.0, combo: 0.35, lateral: 0.10, counter: 0.2, gasRegen: 1.0, weights: { jab: 1, cross: 2, hook: 3, uppercut: 2, body: 2 } },
   outbox:      { label: 'Box outside',  rangeM: 1.25, aggression: 0.8, combo: 0.25, lateral: 0.60, counter: 0.4, gasRegen: 1.0, weights: { jab: 6, cross: 2, hook: 0.5, uppercut: 0.2, body: 0.5 } },
   counter:     { label: 'Counter-punch', rangeM: 1.20, aggression: 0.45, combo: 0.30, lateral: 0.30, counter: 1.0, gasRegen: 1.1, weights: { jab: 2, cross: 3, hook: 2, uppercut: 1, body: 1 } },
   body_attack: { label: 'Body attack',  rangeM: 0.95, aggression: 0.9, combo: 0.40, lateral: 0.15, counter: 0.3, gasRegen: 1.0, weights: { jab: 1, cross: 1, hook: 1, uppercut: 1, body: 5 } },
@@ -220,7 +221,9 @@ export function computePunch({ attacker, defender, type, tick, rng, isCounter = 
   motorMs += Math.min(40, committedMs * 0.3);
   const anticipationMs = d.readSkill * (40 + 110 * attacker.predictability(type));
   const jitterMs = (rng() + rng() - 1) * 40;   // ±40 ms triangular neuromotor noise (seeded)
-  const reactionWindowMs = Math.max(60, perceptionMs + motorMs + fatiguePenaltyMs - anticipationMs + jitterMs);
+  // Pressure crowds a defender who is not also pressing: less room to read and slip.
+  const crowdMs = defender.tacticKey === 'pressure' ? 0 : (attacker.tactic.crowdMs || 0);
+  const reactionWindowMs = Math.max(60, perceptionMs + motorMs + fatiguePenaltyMs - anticipationMs + jitterMs + crowdMs);
 
   // Collision rule.
   const marginMs = reactionWindowMs - travelTimeMs;  // > 0 means the fist wins
@@ -438,10 +441,10 @@ export class CombatSimulation {
       const atk = this.fighters[p.attacker], def = this.fighters[p.defender];
       let damage = 0;
       if (p.outcome === 'landed') {
-        damage = (p.transferredJoules / 400) * (p.target === 'body' ? 0.55 : 1.0);
+        damage = (p.transferredJoules / DAMAGE_DIVISOR) * (p.target === 'body' ? 0.55 : 1.0);
         def.gas = Math.max(0, def.gas - p.transferredJoules / (p.target === 'body' ? 60 : 120));
       } else if (p.outcome === 'blocked') {
-        damage = p.transferredJoules / 400;
+        damage = p.transferredJoules / DAMAGE_DIVISOR;
         def.gas = Math.max(0, def.gas - p.transferredJoules / 100);
       } else {
         // A clean slip opens a counter window scaled by the defender's Ring IQ.
