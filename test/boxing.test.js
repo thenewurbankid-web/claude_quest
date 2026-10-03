@@ -103,3 +103,16 @@ test('RAG: top 3 winning precedents against the most similar opponents, one per 
   assert.match(ctx, /^OPPONENT\n/);
   assert.match(ctx, /PAST WINS AGAINST SIMILAR OPPONENTS/);
 });
+
+test('3D view: two-bone IK keeps bone lengths and stops at full reach', async () => {
+  const { _internals: { solveTwoBone, rotateAbout } } = await import('../public/boxing/arena-babylon.js');
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  const root = { x: 0, y: 1.4, z: 0 };
+  const near = solveTwoBone(root, { x: 0.3, y: 1.3, z: 0.2 }, 0.3, 0.27, { x: 0, y: -1, z: 0 });
+  assert.ok(Math.abs(d(root, near.mid) - 0.3) < 1e-9 && Math.abs(d(near.mid, near.end) - 0.27) < 1e-9);
+  assert.ok(near.mid.y < 1.4, 'the elbow bends toward the pole');
+  const far = solveTwoBone(root, { x: 0, y: 1.4, z: 3 }, 0.3, 0.27, { x: 0, y: -1, z: 0 });
+  assert.ok(d(root, far.end) < 0.57 && d(root, far.end) > 0.56, 'an out-of-reach target clamps to the arm length');
+  const p = rotateAbout({ x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, Math.PI / 2);
+  assert.ok(Math.abs(p.y) < 1e-9 && Math.abs(Math.abs(p.z) - 1) < 1e-9);
+});

@@ -1,10 +1,26 @@
 # Boxing Manager AI: handoff
 
 Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-ai`, based on `3d-world`.
-Nothing is committed yet. Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
+Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
-## Next job: realistic 3D boxing match in Babylon.js
+## Done (2026-10-03): the 3D view, stage 1 (procedural boxers)
+
+- `public/boxing/arena-babylon.js`: `createArena3D({ parent, sim, names })` lazily loads `/vendor/babylonjs/babylon.js`
+  (npm `babylonjs` 7.54.3, UMD) and only reads `sim.snapshot()` plus 'impact' / 'round_end' / 'fight_end'.
+  Ring (canvas texture drawn in code, posts, pads, four ropes, stools, apron), lighting truss with glow, ~2k thin-instanced
+  crowd that bounces on big shots, flash bulbs, press tables. Boxers are primitives posed each frame with two-bone IK
+  (arms and legs), orthodox stance, torso twist per punch type, punch paths per type (straight, hook arc, uppercut,
+  body), windup cock-back, block (guard up) and slip (lean) from the opponent's punch outcome, head snap / body fold
+  springs on impact, planted feet that step, fatigue sag, wobble when hurt, knockdown fall on KO. Broadcast cameras:
+  CAM 1 hard camera tracking the pair, CAM 3 ringside cut on big shots and on the KO, CAM 2 slow wide orbit between
+  rounds; shake on impact, ACES grade, bloom, vignette; DOM overlay with LIVE bug, round banners and lower thirds.
+- `index.html`: the Headless checkbox is now a View select (3D broadcast, the default / 2D top-down / Headless).
+  Phaser always steps the sim; outside 2D it runs headless with a detached parent (its headless mode still makes a canvas).
+- Checked on port 4794 (`boxing-static-2`, defined in the main checkout's `.claude/launch.json` because the preview tool
+  reads that one): rounds run, punches and spray show, no console errors. `npm test` 93 pass (new IK test).
+
+## Next job: real boxer models in the Babylon view
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.

@@ -10,6 +10,7 @@
     "static": "node dev/static.js"
   },
   "dependencies": {
+    "babylonjs": "^7.54.3",
     "dexie": "^4.4.6",
     "mqtt": "^5.16.0",
     "phaser": "^3.90.0",
