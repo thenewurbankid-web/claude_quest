@@ -4,6 +4,11 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**Latest (user, 2026-10-03, end of the fight session): the R2 playtest no longer blocks R3.** "Don't stop for
+playtest, we tweak numbers later." **Next: build R3 Lore quests** (PLAN-engine.md, "R3 Lore quests"; contract step
+first). The user plays PLAYTEST-R2.md whenever they like, and fight numbers (`DEFAULT_RULES` Lantern/bites) get tuned
+from that later. The fight now has heads and a Lantern (PLAN-fight.md); R3 touches boss.js/contract.js, so keep the
+Battle fields `heads`, `lantern`, `lanternMax`, `pushed`, `bitten` and their tests intact.
 **Read `PLAN-engine.md` first.** Approved plan: a customizable engine driven by lore files, where Paperclip work
 becomes Zelda-balanced play. Paperclip company = Realm (world); project = team = March (region); milestone = Sealed
 Hall (dungeon, locked until the work is done, then won through play); blockers ambush; a weighted backlog summons a
