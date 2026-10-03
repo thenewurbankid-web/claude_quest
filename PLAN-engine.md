@@ -9,7 +9,8 @@ become dungeons you can only win once the work is done, blockers ambush you, bac
 writes itself from the tasks. It must be fun with no work running, and it must never put real work at risk.
 
 This file is the agreed design plus the build order (approved 2026-10-03). It supersedes PLAN-adventure.md where they
-disagree (creature collecting is out; gyms are Sealed Hall dungeons). Build each milestone in its own session,
+disagree (gyms are Sealed Hall dungeons; "creature collecting is out" was reversed on 2026-10-03, see "Missions,
+Keepers and the Bridge"). Build each milestone in its own session,
 scoping it before building.
 
 ## Core gameplay
@@ -119,7 +120,9 @@ kind beside `provider`/`tool3d`/`tool2d` in `lib/plugins.js`; other adapters (e.
   hit power, never an answer (input lock before any sealed choice). You can retreat; the boss returns stronger.
 - **Renown** (XP) is team-wide, from reviewed outcomes only. Leading the work makes the game harder; getting
   ahead of the work makes it unbeatable until the work catches up, shown as the Haze over an unwritten road.
-- Play rewards are trinkets, gear, cosmetics, mounts and shortcuts. **No creature collecting.**
+- Play rewards are trinkets, gear, cosmetics, mounts and shortcuts. ~~No creature collecting.~~ *Reversed
+  (user, 2026-10-03):* Keepers are agents you summon with Ember and can release; no invented creatures or stats (see
+  "Missions, Keepers and the Bridge").
 - PM grounding (accepted): retrospectives (an Embertale after each Sigil), Fallen Bridges for cross-project
   dependencies, capacity as Keepers free vs busy.
 
@@ -166,7 +169,7 @@ Keepers, Lumi, the Ember Well and the Long Night.
 | Blockers / failures | **the Tanglers**: Knot, Fray and their pet Burr, who snarl stuck Works and ambush the player |
 | Planning / special attention | a Keeper or villager asks for a **Council** |
 | Calls from other Marches | **Speaking Stones** ring ("it's the Lab Keeper, got a moment?"), or Lumi brings word |
-| Backlog boss | **a Gloamwyrm**: unanswered Riddles condense in the Haze into a beast whose size follows the weighted score |
+| Backlog boss | **a Gloamwyrm**: unanswered Riddles condense in the Haze into a beast whose size follows the weighted score; from R5 backlog pressure (open work against the release date) is a second input |
 | Retreat from a boss | fall back to the Lodge; the Gloamwyrm returns stronger |
 | XP (team, work-only) | **Renown**, shared by the whole March |
 | Play rewards | trinkets, gear, cosmetics, mounts, shortcuts |
@@ -182,7 +185,12 @@ Keepers, Lumi, the Ember Well and the Long Night.
 | Stale question | the Riddle "fades" with a note |
 | Usage limit hit | **the Long Night** (already in the game) |
 
-## No server, except the Paperclip connector (user, 2026-10-03)
+## No server, except the Bridge (was the Paperclip connector) (user, 2026-10-03)
+> **Reversed in part (user, 2026-10-03): one Bridge for all communication.** "Make one bridge for all communication:
+> MQTT, falling back to polling or a webhook when a user or agent asks for one." One optional local process replaces
+> the Paperclip connector and carries Paperclip reads, sealed write-back, the Source chat and agents. The lines marked
+> *reversed* below no longer hold. The game itself still runs with no server; with the Bridge off it runs on the Local
+> Ledger and `/work` copy-paste as before. See "Missions, Keepers and the Bridge".
 **The game runs entirely in the browser, with no server of any kind,** ours or hosted, **except a small optional
 Paperclip connector** (below). It is static files (GitHub
 Pages, or opened locally) plus browser storage. This overrides every mention below of the Quest server, the polling
@@ -192,11 +200,14 @@ endpoint, the local runner and server-side file writes.
   2026-10-03: no `Access-Control-Allow-Origin` from `127.0.0.1:3100`), so a page can't read it directly. We ship a
   small Node script that the player starts only if they use Paperclip. It is only a connector: it passes the game's
   Paperclip reads through (adding the header for the game's origin) and posts sealed decisions as comments. It holds
-  the Paperclip key, answers only the player's own machine, and does nothing else: no agents, no runner, no saves, no
-  game logic. With it off, the game runs on the Local Ledger. There is no agent-relay path to Paperclip. Built in R4
-  or later; until then the game uses the Local Ledger only.
-- **Agents:** only through the `/work` copy-paste page. The player copies a prompt into their own agent and pastes
-  the result back. No polling, no local runner, and the game never starts a process.
+  the Paperclip key, answers only the player's own machine, and ~~does nothing else: no agents, no runner, no saves, no
+  game logic~~ (*reversed* 2026-10-03: it becomes the Bridge, which also carries agents and the Source chat; still no
+  saves and no game logic). With it off, the game runs on the Local Ledger. Agents never write to Paperclip directly: only sealed
+  decisions are posted. Built in R4.5 as the Bridge; until then the game uses the Local Ledger only.
+- **Agents:** ~~only through the `/work` copy-paste page~~ (*reversed in full* 2026-10-03: opt-in, an agent can also
+  connect through the Bridge, over MQTT or polling/webhook on request, or WebLLM can act as one, and get work and report
+  with no paste). Copy-paste stays the default: the player copies a prompt into their own agent and pastes the result
+  back. The game itself still never starts a process. ~~No polling~~ (*reversed*).
 - **The game's LLM:** WebLLM and templates; Ollama only when the page is on `localhost` (Ollama allows localhost
   origins by default). No `claude` CLI provider.
 - **Saves:** IndexedDB plus a downloaded save file; the atomic-write, checksum and fallback rules apply to the
@@ -227,7 +238,8 @@ work for it on the `/work` page, and only registered agents get work. Agent cont
 resume, recall one run = cancel, the Recall Bell = pause all) are protocol actions, so every source offers them;
 each one is a sealed decision with a token readout. 
 
-**How agents connect: the `/work` relay page** (user, 2026-10-03; the polling endpoint was dropped with the server).
+**How agents connect: the `/work` relay page** (user, 2026-10-03; ~~the polling endpoint was dropped with the server~~, *reversed* 2026-10-03: the Bridge offers
+polling or a webhook as a fallback to MQTT).
 A `/work` route on the game site (works on GitHub
 Pages, no server) lists queued work per agent as ready-to-copy prompts. The player pastes a prompt into their own
 agent (e.g. Claude Code), then pastes the result back on the page, and it enters the protocol like any other
@@ -294,9 +306,25 @@ feature list; releases pick from them.
   from **one fenced `quest-report` block** the prompt asks for (kind progress/done/blocked, summary, question, branch,
   token counts); with no valid block the player picks the kind by hand, and the paste is always kept verbatim (user,
   2026-10-03). Contract built 2026-10-03 (`parseReport`, `emberLeft`, `branchFor`, lease/Ember rules, `wandered`).
-- **R5 "The first Sealed Hall":** one hand-made dungeon themed from its milestone, and a Sigil.
-- **R6 "Your own Realm":** the full Local Ledger (planner NPC, teammates), New Game / Load, split save with archiving.
-- **R7+:** shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes, 2D parity.
+- **R4.5 "The Bridge"** (was "the Paperclip connector"; user, 2026-10-03): one optional local process for all
+  communication: Paperclip reads and sealed write-back, agents (opt-in: get work and report with no paste), and later
+  the Source chat. MQTT first, polling or a webhook when a user or agent asks for one. It is the first way work reaches
+  agents without a human paste, so it ships with these safety lines, each with a safety test added in R4.5: only
+  registered Keepers get work over the Bridge; Bridge messages are data, never commands, shown as plain text with True
+  Sight; the Bridge answers only the player's own machine, and MQTT/webhook credentials are per Realm, never in
+  prompts; the Recall Bell also tells the Bridge to stop handing out work.
+- **R5 "Missions and the first Sealed Hall"** (user, 2026-10-03): missions (a parent Work and its children; the saga is
+  their Hall), backlog pressure against the release date and its gate on side content, the Sealed Hall as the saga's
+  finale and its Sigil, and Keepers summoned with Ember, joining and released. The R4 controls already respect
+  summoned/released (`f08151c`), so R5 only adds summon, join and release. Contract built 2026-10-03 (`0e54f1d`).
+- **R6 "Drama":** "Previously on…" / "Next time…" recaps and promises from the event log, the finale battle with phases
+  (extends R2's boss), and Grill the Keeper (R1's asks, real text verbatim).
+- **R7 "Your own Realm"** (was R6): the full Local Ledger (planner NPC, teammates), New Game / Load, split save with
+  archiving, and checking the event log's chain on load (warn, never refuse).
+- **R8 "The Source":** auto mode (plays, stops for the human) and the Source chat over the Bridge, with the in-game
+  Help panel's "Connect your model" instructions.
+- **R9+** (was R7+): shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes,
+  2D parity, and an MCP server for agents (from mnehmos/rpg.mcp: one tool per area with an `action` field).
 Cost accepted: R0–R5 are built straight into the 3D code and partly moved into the core later.
 **How a release runs** (user, 2026-10-03): (1) a short **contract** step fixes the shared shapes in code (the ledger
 schema, the Riddle record, the `/work` queue states, the save format) plus a sample data file; (2) every slice is built
@@ -304,6 +332,39 @@ schema, the Riddle record, the `/work` queue states, the save format) plus a sam
 and runs the safety tests. Each feature lives in its own module; only integration edits `public/3d/scene.js`. A round
 is one session long. Exceptions: R2's tuning and playtest run in order after its parallel round, and R7's shared core
 is built alone. The R2 playtest is the gate: nothing from R3 on starts before it passes.
+
+## Missions, Keepers and the Bridge (user, 2026-10-03)
+Prompted by a study of mnehmos/rpg.mcp and r/aigamedev's list of LLM games, and the user's verdict that fights are
+boring: "more fun and drama like Pokémon and DBZ, some story and milestone drive; it should be mostly missions". Not
+Pokémon itself: "don't force Pokémon mechanics".
+- **Missions:** the player goes on one mission at a time. A mission is a sub-milestone: a parent Work and its child
+  Works (`Work.parentId`, Paperclip's parent issue; one level). A Work with neither is a side mission. Briefing from its
+  Keeper, each Work a step, a waiting Riddle a cliffhanger, then a debrief. Mission progress is play state.
+- **Sagas:** the Hall (milestone) strings its missions together; its finale is the Sealed Hall and its Sigil.
+- **Deadlines and timed releases:** "we work on deadlines and time releases". `Hall.dueAt` is the release date (the
+  saga's clock), `Work.dueAt` a deadline. Deadlines are on work, never on answering.
+- **Backlog pressure:** "if backlog is piling up, link that to the game, so we can control gameplay". Open work weight
+  against the time left to the release date drives the villain, the Haze and mission urgency, and above
+  `rules.pressureGate` it locks side content (lore quests, the lore tab, exploring beyond the hub). It never gates
+  `/work`, Riddles, the Lodge, the Recall Bell or saves (safety test), and never changes hit size or answers.
+- **Keepers are agents, made of Ember:** summoning one spends `rules.summonCost` Ember (it comes back as the window
+  moves on); it joins the Lodge after its first approved Work, and can be released to the Hall of Champions (kept, never
+  deleted). Everything else about a Keeper is read from its real work; the game invents no stats, types or levels.
+- **Auto mode:** the game plays itself (picks missions by pressure, walks, wakes and queues Keepers, plays fight
+  beats) and stops for the human at every Riddle, and at every paste for Keepers on copy-paste; Keepers connected
+  through the Bridge report on their own (opt-in).
+- **The Source:** a chat panel with a model of the player's choice over the Bridge. It reads Paperclip and proposes;
+  every proposal becomes an outbox item the steward seals, and it never merges. Its text is plain text, treated as data,
+  with True Sight flags.
+- **Help: "Connect your model":** copyable instructions generated from the contract (like `REPORT_INSTRUCTIONS`), one
+  block to give any agent and one to do by hand (MQTT commands, a `curl` webhook call), with credentials only as
+  placeholders.
+- **Also from the study:** "did you mean" paste errors and a hash-chained event log (both in the R5 contract).
+- **Agents can connect and report on their own, opt-in** (user, 2026-10-03, "Yes, opt-in"): copy-paste on `/work`
+  stays the default. Optionally an agent connects through the Bridge (Claude Code, Ollama, anything) or WebLLM acts as
+  one in the browser, and gets work and sends reports with no paste. Its reports still pass `parseReport` and the same
+  validation, Riddles still stop for the human, the Recall Bell stops everything, and merging is always a person's
+  job.
 
 ## R2 playtest criteria (approved by the user, 2026-10-03)
 The gate before R3. **Setup:** the sample Realm plus a scripted backlog that crosses the boss threshold with three
