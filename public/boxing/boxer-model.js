@@ -205,6 +205,7 @@ export class ModelBoxer {
       mat.diffuseTexture = /Superhero/.test(pbr.name) && skin ? skin : pbr.albedoTexture;
       if (pbr.bumpTexture) { mat.bumpTexture = pbr.bumpTexture; mat.invertNormalMapX = pbr.invertNormalMapX; mat.invertNormalMapY = pbr.invertNormalMapY; }
       mat.specularColor = new B.Color3(0.18, 0.16, 0.15); mat.specularPower = /Eyes/.test(pbr.name) ? 96 : 20;
+      if (/Superhero/.test(pbr.name) && colors.sheen) { mat.specularColor = new B.Color3(0.24, 0.22, 0.2); mat.specularPower = 36; colors.sheen(mat, 0.05, 4); }
       m.material = mat;
     }
     for (const m of this.rig.meshes) { shadow.addShadowCaster(m); m.receiveShadows = true; }
@@ -214,7 +215,10 @@ export class ModelBoxer {
       m.diffuseColor = B.Color3.FromHexString(hex); m.specularColor = new B.Color3(spec, spec, spec); m.specularPower = 48;
       return m;
     };
-    const glove = mat('glove', colors.glove, 0.6), trunks = mat('trunks', colors.trunks, 0.35), band = mat('band', '#f1f1f1', 0.2), boot = mat('boot', '#111318', 0.3);
+    // Street gear (colors.wraps): taped fists instead of gloves, low sneakers instead of high-top boots.
+    const wraps = !!colors.wraps;
+    const glove = mat('glove', colors.glove, wraps ? 0.08 : 0.6), trunks = mat('trunks', colors.trunks, 0.35);
+    const band = mat('band', wraps ? colors.glove : '#f1f1f1', 0.2), boot = mat('boot', wraps && corner === 'red' ? '#e9e9e6' : '#111318', 0.3);
     const keep = (m, material) => { m.material = material; m.rotationQuaternion = new B.Quaternion(); shadow.addShadowCaster(m); return m; };
     this.extras = {
       gloveL: keep(B.MeshBuilder.CreateSphere('gloveL', { diameter: 1, segments: 14 }, scene), glove),
@@ -228,8 +232,11 @@ export class ModelBoxer {
       ankleL: keep(B.MeshBuilder.CreateCylinder('ankleL', { height: 1, diameterTop: 0.105, diameterBottom: 0.125, tessellation: 14 }, scene), boot),
       ankleR: keep(B.MeshBuilder.CreateCylinder('ankleR', { height: 1, diameterTop: 0.105, diameterBottom: 0.125, tessellation: 14 }, scene), boot),
     };
-    this.extras.gloveL.scaling.set(0.14, 0.14, 0.17);
-    this.extras.gloveR.scaling.set(0.14, 0.14, 0.17);
+    const fist = wraps ? [0.095, 0.085, 0.115] : [0.14, 0.14, 0.17];
+    this.extras.gloveL.scaling.set(...fist);
+    this.extras.gloveR.scaling.set(...fist);
+    if (wraps) for (const c of [this.extras.cuffL, this.extras.cuffR]) c.scaling.set(0.82, 1.6, 0.82);
+    this.collarH = wraps ? 0.07 : 0.16;
 
     // Render-side state only.
     this.lastPunch = null; this.retract = null;
@@ -376,8 +383,8 @@ export class ModelBoxer {
       const a = rig.pos(foot), b = rig.pos(ball), d = norm(sub(b, a)), c = add(lerpV(a, b, 0.6), mul(UPV, -0.03));
       mesh.position.set(c.x, c.y, c.z);
       B.Quaternion.FromUnitVectorsToRef(B.Vector3.UpReadOnly, new B.Vector3(d.x, d.y, d.z), mesh.rotationQuaternion);
-      const shin = norm(sub(rig.pos(calf), a)), top = add(a, mul(shin, 0.16)), mid = lerpV(a, top, 0.5);
-      collar.position.set(mid.x, mid.y, mid.z); collar.scaling.y = 0.16;
+      const shin = norm(sub(rig.pos(calf), a)), top = add(a, mul(shin, this.collarH)), mid = lerpV(a, top, 0.5);
+      collar.position.set(mid.x, mid.y, mid.z); collar.scaling.y = this.collarH;
       B.Quaternion.FromUnitVectorsToRef(B.Vector3.UpReadOnly, new B.Vector3(shin.x, shin.y, shin.z), collar.rotationQuaternion);
     }
 

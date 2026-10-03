@@ -40,18 +40,34 @@ Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds 
   feet slide a little), the trunks are a rigid cylinder over the model's briefs, one body model for both corners, no hair.
   LayToIdle (getting up) is unused because the sim has no knockdowns other than the KO.
 
-## Next job: make the 3D view realistic and less dark (user, 2026-10-03: "the game looks dark, make it realist and cool")
+## Done (2026-10-03): street fight setting (stage 3)
 
-Do this first, in a fresh session. Then balance (see Open issues), which the user also picked.
-- Lighting in `createArena3D` (`arena-babylon.js`): brighter, warmer key on the ring; the crowd lit enough to read (today
-  it is near black); a lighter vignette (`vignetteWeight` 2.2); check exposure/contrast with ACES.
-- Reflections: there is no environment map, which is why the skin was rebuilt as StandardMaterial. A realistic look likely
-  wants PBR back with an environment, e.g. a CC0 indoor-arena HDRI from Poly Haven turned into a prefiltered `.env`, or
-  a `ReflectionProbe`. Downloading an HDRI needs the user's yes (name, source, size).
-- Surfaces: a canvas with sheen and wear, glossy gloves, slightly shiny skin (sweat), chrome posts.
-- Optional: SSAO2 / depth of field on ringside cuts, if the frame rate holds.
-- Check with `?debug` (`__bmArena`) at a 16:9 frame (the page is 16:9; a tall pane narrows the field of view).
-  Preview: `boxing-static-2` (port 4794) lives in the main checkout's `.claude/launch.json`, uncommitted.
+The user switched the setting mid-way through the lighting pass: "can we make it street fighting instead? ... and have
+cool street theme". They picked **new setting, same physics**: `CombatSimulation`, logs, RAG and P2P are untouched.
+- `arena-babylon.js`: the ring, truss and stands are gone. `buildStreet()` is a back lot at night, 26 m square, every
+  texture drawn in code. It has wet asphalt with a blurred `MirrorTexture` reflection (fresnel, strongest at a grazing
+  angle), the sim's ring sprayed on the ground (square, red/blue corner dots, centre X, "NO ROPES"), brick walls with
+  lit/dark/TV-flicker windows, roller doors, drainpipes and graffiti pieces, four neon signs with coloured point lights
+  (one stutters), a sodium street lamp, string lights, three fire barrels (flames, smoke, flickering light), two cars
+  with headlight spots and flares, a chain-link fence, a dumpster, pallets, a steaming manhole and rain. The onlookers
+  are thin-instanced people in three rows, open on the hard camera's side.
+- Lighting: moonlight hemi, a work lamp over the fight (the key and the shadow caster) and a wide flood. 13 lights in
+  all, so every material gets `maxSimultaneousLights = 14`. A `ReflectionProbe` (refreshed every 30 frames) stands in
+  for an HDRI on glass, car paint and skin sweat. Post: ACES, exposure 1.2, vignette 1.4, light chromatic aberration,
+  sharpen.
+- `boxer-model.js`: `colors.wraps` gives taped fists instead of gloves and low sneakers instead of high-tops (white on
+  red, black on blue). `colors.sheen` adds sweat to the skin.
+- Overlay: "● LIVE · BACK LOT", with CAM 2 · ROOFTOP and CAM 3 · CROWD.
+- Checked at 1280×720 in the preview: hard, crowd and rooftop shots, about 45 fps, no console errors, `npm test` 93 pass.
+- Not done: the primitive fallback `Boxer` still wears gloves; the onlookers are simple shapes (no arms raised, no
+  phones); there is no rain splash on the ground. The page title, `index.html` copy and names still say "Boxing".
+
+## Next jobs
+
+1. **Character creation** (user, 2026-10-03: "and later give character creation"). Not started and not scoped yet.
+   Ask what it covers (looks only: skin, build, hair, outfit colours, wraps/gloves; or also the starting stats that
+   `FighterModel` already takes) and keep anything that affects the sim deterministic for P2P.
+2. Balance (see Open issues), which the user picked earlier.
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.
