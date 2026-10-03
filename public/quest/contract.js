@@ -57,7 +57,7 @@ export const QUEUE_MOVES = {
 // R1 adds the Riddle's later moves; question-to-answer time is riddle.raised → riddle.answered for the same ref.
 export const EVENT_KIND = ['riddle.raised', 'riddle.answered', 'riddle.deferred', 'riddle.recalled', 'riddle.sealed',
   'riddle.returned', 'riddle.faded', 'riddle.proposed', 'agent.blocked', 'agent.unblocked', 'session.start',
-  'session.end', 'boss.summoned', 'boss.retreated', 'boss.defeated'];
+  'session.end', 'riddle.asked', 'riddle.replied', 'boss.summoned', 'boss.retreated', 'boss.defeated'];
 
 // ---------- lore rules (defaults) ----------
 // A world's lore folder overrides these (PLAN-engine.md, "Customizable through lore files"); until Ink lore lands in
@@ -125,10 +125,13 @@ export const stewardOf = (ledger, marchId) =>
  *             risk: string, state: string, steward: string|null, sealed_by?: string|null,
  *             answer?: { text: string, by: string, at: string }|null,
  *             proposals?: { text: string, by: string, at: string }[],
+ *             asks?: { text: string, by: string, at: string, reply?: { text: string, by: string, at: string }|null }[],
  *             raisedAt: string, outboxUntil?: string|null, deferredUntil?: string|null, deferCount?: number,
  *             fadeNote?: string|null, resolvedAt?: string|null, mark?: Mark }} Riddle
  *   text: the real words, shown verbatim as plain text (never HTML); line: the game's line shown above them
  *   proposals: teammates' answers, shown and never overwritten
+ *   asks: questions asked back to the agent on the Work before answering; the Riddle stays open while they wait. The
+ *         reply is real text (plain text only); until R3 brings the /work page it is pasted in by hand
  *   outboxUntil: while answered, when the recall window closes and the answer may be sealed
  * @typedef {{ start: number, end: number, why: 'addresses-reader'|'addresses-ai'|'instruction'|'link' }} Flag
  *   True Sight's mark on a suspicious stretch of real text (character offsets into text); computed, never stored
@@ -236,6 +239,10 @@ export function validateLedger(l) {
     if (r.state === 'sealed' && !r.sealed_by) bad(`${p}.sealed_by`, 'a sealed Riddle records who sealed it');
     if (r.state === 'answered' && !r.outboxUntil) bad(`${p}.outboxUntil`, 'an answered Riddle waits in the outbox');
     if (r.state === 'deferred' && !r.deferredUntil) bad(`${p}.deferredUntil`, 'a deferred Riddle needs its return time');
+    (r.asks || []).forEach((a, j) => {
+      text(`${p}.asks[${j}].text`, a.text);
+      if (a.reply) text(`${p}.asks[${j}].reply.text`, a.reply.text);
+    });
     if (r.state === 'faded' && !r.fadeNote) bad(`${p}.fadeNote`, 'a faded Riddle leaves a note');
     const steward = r.steward || stewardOf(l, r.marchId);
     if (r.state === 'sealed' && r.sealed_by && r.sealed_by !== steward)

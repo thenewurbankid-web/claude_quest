@@ -167,3 +167,36 @@ test('riddleWeight: 1 + deferrals + 0.1 per day of age; 0 once sealed or faded',
   assert.equal(riddleWeight(riddle(s, 'r3'), NOW), 0);
   assert.equal(riddleWeight({ ...r4, state: 'faded' }, NOW), 0);
 });
+
+test('askBack and replyToAsk: a question back keeps the Riddle open and waits for the agent', async () => {
+  const { askBack, replyToAsk } = await import('../public/quest/riddles.js');
+  const { memoryStore, applyChanges, validateLedger } = await import('../public/quest/contract.js');
+  const { readFileSync } = await import('node:fs');
+  const s = memoryStore(JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url))));
+  const at = new Date('2026-10-03T12:00:00Z');
+  await applyChanges(s, askBack(await s.snapshot(), 'r1', { text: 'What are Paddle\'s fees?', by: 'player' }, at));
+  let r1 = (await s.snapshot()).riddles.find(r => r.id === 'r1');
+  assert.equal(r1.state, 'open');
+  assert.deepEqual(r1.asks.map(a => [a.text, a.reply]), [['What are Paddle\'s fees?', null]]);
+  await applyChanges(s, replyToAsk(await s.snapshot(), 'r1', { text: '5% plus 50c, tax included.', by: 'Quill' }, at));
+  const l = await s.snapshot();
+  r1 = l.riddles.find(r => r.id === 'r1');
+  assert.equal(r1.asks[0].reply.by, 'Quill');
+  assert.deepEqual(l.events.slice(-2).map(e => e.kind), ['riddle.asked', 'riddle.replied']);
+  assert.throws(() => replyToAsk(l, 'r1', { text: 'again', by: 'Quill' }), /no question waiting/);
+  assert.throws(() => askBack(l, 'r3', { text: 'why?', by: 'player' }), /sealed/);
+  assert.deepEqual(validateLedger(l).filter(p => !p.repair), []);
+});
+
+test('riddleContext: project, milestone and task first, then the facts', async () => {
+  const { riddleContext } = await import('../public/quest/riddles.js');
+  const { readFileSync } = await import('node:fs');
+  const l = JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
+  const c = riddleContext(l, 'r1', new Date('2026-10-03T15:00:00Z'));
+  assert.deepEqual(c.path, ['The Ferry March', 'Hall of the Tollkeeper', 'Payment provider']);
+  const f = Object.fromEntries(c.facts);
+  assert.equal(f.Status, 'blocked');
+  assert.equal(f.Priority, 'critical');
+  assert.equal(f.Keeper, 'Quill (builder)');
+  assert.equal(f.Asked, '2026-10-02 (1 day ago)');
+});

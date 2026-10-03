@@ -144,6 +144,15 @@ const CSS = `
   color: var(--qcv-text); font-size: 14px; }
 .qcv-props { margin: 0; padding: 0; list-style: none; font-size: 14px; }
 .qcv-props li { padding: 2px 0; }
+.qcv-ctx[hidden], .qcv-more[hidden] { display: none; }
+.qcv-crumbs { margin: 0; color: var(--qcv-dim); font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.qcv-more { font-size: 14px; }
+.qcv-more > summary { cursor: pointer; color: var(--qcv-dim); font-size: 13px; width: fit-content; }
+.qcv-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 6px 0 0; }
+.qcv-facts dt { color: var(--qcv-dim); }
+.qcv-facts dd { margin: 0; }
+.qcv-asks { flex: 1 1 100%; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.qcv-asks .qcv-reply { padding-left: 12px; margin-bottom: 4px; color: var(--qcv-dim); }
 .qcv-seal { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .qcv-seal input { flex: 1 1 180px; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 2px solid var(--qcv-line);
   background: #0b0d14; color: var(--qcv-text); font: inherit; }
@@ -200,7 +209,9 @@ let uid = 0;
  * @param {HTMLElement} container
  * @returns {{ say: (lines: string[], speaker: { name: string, sprite?: string }) => Promise<void>,
  *   ask: (riddle: object, opts: { speaker: { name: string, sprite?: string }, tier?: 'normal'|'confirm'|'never',
- *     flags?: { start: number, end: number, why: string }[], workTitle?: string }) => Promise<{ choice: string }|null>,
+ *     flags?: { start: number, end: number, why: string }[], workTitle?: string, agentName?: string,
+ *     context?: { path: string[], facts: [string, string][] } })
+ *     => Promise<{ choice: string }|{ askBack: string }|{ reply: string }|null>,
  *   close: () => void, unmount: () => void }}
  */
 export function mountConversation(container) {
@@ -223,6 +234,21 @@ export function mountConversation(container) {
   const main = el('div', 'qcv-main');
   const live = el('div', 'qcv-sr');
   live.setAttribute('aria-live', 'polite');
+  // Where the question comes from: March › Hall › Work always shown, the rest in an expandable section.
+  const ctx = el('div', 'qcv-ctx');
+  const crumbs = el('p', 'qcv-crumbs');
+  const more = el('details', 'qcv-more');
+  const moreSum = el('summary', '', 'More about this task');
+  const facts = el('dl', 'qcv-facts');
+  more.append(moreSum, facts);
+  ctx.append(crumbs, more);
+  const fillContext = c => {
+    crumbs.textContent = (c?.path || []).filter(Boolean).join(' › ');
+    facts.replaceChildren();
+    for (const [k, v] of c?.facts || []) facts.append(el('dt', '', String(k)), el('dd', '', String(v ?? '')));
+    more.hidden = !(c?.facts || []).length;
+    more.open = false;
+  };
   const line = el('p', 'qcv-line');
   line.setAttribute('aria-hidden', 'true'); // typed out visually; the live region carries it whole
   const real = el('p', 'qcv-real');
@@ -241,7 +267,7 @@ export function mountConversation(container) {
   next.setAttribute('aria-keyshortcuts', 'ArrowRight Enter Space');
   closeBtn.setAttribute('aria-keyshortcuts', 'Escape');
   nav.append(count, back, next, closeBtn);
-  main.append(live, line, real, note, props, seal, nav);
+  main.append(live, ctx, line, real, note, props, seal, nav);
   root.append(speakerBox, main);
   container.appendChild(root);
 
@@ -328,6 +354,7 @@ export function mountConversation(container) {
     const last = s.i === s.bubbles.length - 1;
     seal.replaceChildren();
     props.replaceChildren();
+    ctx.hidden = !(s.kind === 'ask' && s.opts?.context);
 
     if (s.kind === 'say') {
       line.hidden = true;
@@ -364,35 +391,77 @@ export function mountConversation(container) {
     next.textContent = s.kind === 'say' && last ? 'Done' : 'Next';
   }
 
+  // The Warden's Seal: the answer choices, plus "Other…" (your own answer), "Ask back…" (a question to the agent on the
+  // Work instead of answering) and, while a question waits, "Paste reply…" (by hand until R3's /work page).
   function renderSeal() {
     const s = session;
-    if (s.opts.tier === 'never') {
-      seal.append(el('p', 'qcv-never', NEVER_NOTE));
-      const later = button(ASK_LATER, 'qcv-choice');
-      later.addEventListener('click', () => choose(ASK_LATER));
-      seal.append(later);
-      return;
-    }
-    const choices = choicesFor(s.riddle);
-    if (choices) {
-      for (const c of choices) {
-        const b = button(c, 'qcv-choice');
-        b.addEventListener('click', () => choose(c));
-        seal.append(b);
+    const agent = s.opts.agentName || 'the Keeper';
+    const asks = Array.isArray(s.riddle.asks) ? s.riddle.asks : [];
+    if (asks.length) {
+      const list = el('ul', 'qcv-asks');
+      list.setAttribute('aria-label', 'Questions asked back');
+      for (const a of asks) {
+        list.append(el('li', '', `You asked: ${a?.text ?? ''}`));
+        list.append(el('li', 'qcv-reply', a?.reply ? `${a.reply.by ?? agent} replied: ${a.reply.text ?? ''}` : `Waiting on ${agent}.`));
       }
-      return;
+      seal.append(list);
     }
-    const input = el('input');
-    input.type = 'text';
-    input.setAttribute('aria-label', 'Your answer');
-    input.placeholder = 'Your answer';
-    const sealBtn = button('Seal', 'qcv-choice');
-    const go = () => { const v = input.value.trim(); if (v) choose(v); else input.focus(); };
-    sealBtn.addEventListener('click', go);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+    const waiting = asks.some(a => !a?.reply);
+    if (s.entry) return renderEntry(agent);
+    const open = mode => { s.entry = mode; render(); seal.querySelector('input')?.focus(); };
+    const choices = s.opts.tier === 'never' ? null : choicesFor(s.riddle);
+    if (s.opts.tier === 'never') seal.append(el('p', 'qcv-never', NEVER_NOTE));
+    for (const c of choices || []) {
+      if (c === ASK_LATER) continue;
+      const b = button(c, 'qcv-choice');
+      b.addEventListener('click', () => choose(c));
+      seal.append(b);
+    }
+    if (s.opts.tier !== 'never') {
+      const other = button(choices ? 'Other…' : 'Answer…', 'qcv-choice');
+      other.addEventListener('click', () => open('other'));
+      seal.append(other);
+    }
+    const ask = button('Ask back…', 'qcv-choice');
+    ask.addEventListener('click', () => open('ask'));
+    seal.append(ask);
+    if (waiting) {
+      const paste = button(`Paste ${agent}'s reply…`, 'qcv-choice');
+      paste.addEventListener('click', () => open('reply'));
+      seal.append(paste);
+    }
     const later = button(ASK_LATER, 'qcv-choice');
     later.addEventListener('click', () => choose(ASK_LATER));
-    seal.append(input, sealBtn, later);
+    seal.append(later);
+  }
+
+  // One text field for the three typed actions. Typed text is shown back only through textContent.
+  function renderEntry(agent) {
+    const s = session;
+    const [label, send] = {
+      other: ['Your answer', 'Seal'],
+      ask: [`Your question for ${agent}`, 'Ask'],
+      reply: [`${agent}'s reply, pasted`, 'Add reply'],
+    }[s.entry];
+    const input = el('input');
+    input.type = 'text';
+    input.setAttribute('aria-label', label);
+    input.placeholder = label;
+    const go = () => {
+      const v = input.value.trim();
+      if (!v) return input.focus();
+      if (s.entry === 'other') { s.entry = null; choose(v); }
+      else finish(s.entry === 'ask' ? { askBack: v } : { reply: v });
+    };
+    const sendBtn = button(send, 'qcv-choice');
+    sendBtn.addEventListener('click', go);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); go(); }
+      e.stopPropagation(); // typing never moves the box or the player
+    });
+    const cancel = button('Cancel');
+    cancel.addEventListener('click', () => { s.entry = null; render(); seal.querySelector('button')?.focus(); });
+    seal.append(input, sendBtn, cancel);
   }
 
   function choose(choice) {
@@ -488,6 +557,7 @@ export function mountConversation(container) {
       const o = { tier: 'normal', flags: [], ...opts };
       if (!['normal', 'confirm', 'never'].includes(o.tier)) o.tier = 'confirm'; // unknown tier: the safer one
       const bubbles = bubblesOf(String(r.text ?? ''));
+      fillContext(o.context);
       return new Promise(resolve => open({ kind: 'ask', bubbles, i: 0, speaker: o.speaker, riddle: r, opts: o,
         resolve, view: 'talk', pending: null }));
     },

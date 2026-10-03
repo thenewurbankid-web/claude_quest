@@ -39,6 +39,14 @@ const CSS = `
 .qbh-sec > summary > span:first-child { flex: 1; }
 .qbh-count { color: var(--qbh-dim); font-weight: 400; }
 .qbh-body { padding: 0 12px 10px; }
+.qbh-root.qbh-folded { width: auto; max-width: calc(100vw - 32px); border-radius: 999px; }
+.qbh-root.qbh-folded > :not(.qbh-chip) { display: none; }
+.qbh-root.qbh-folded .qbh-chip { padding: 6px 12px; }
+.qbh-badge { min-width: 20px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.14);
+  font-size: 12px; font-weight: 700; text-align: center; }
+.qbh-badge:empty { display: none; }
+.qbh-caret { color: var(--qbh-dim); font-size: 11px; transition: transform .15s; }
+.qbh-root:not(.qbh-folded) .qbh-caret { transform: rotate(180deg); }
 .qbh-h { margin: 6px 0 4px; color: var(--qbh-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 .qbh-list { list-style: none; margin: 0; padding: 0; }
 .qbh-list li { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
@@ -114,10 +122,19 @@ export function mountBeaconHud(container, store) {
   reasons.id = `qbh-reasons-${Math.random().toString(36).slice(2, 8)}`;
   reasons.hidden = true;
   chip.setAttribute('aria-controls', reasons.id);
-  chip.addEventListener('click', () => {
-    reasons.hidden = !reasons.hidden;
-    chip.setAttribute('aria-expanded', String(!reasons.hidden));
-  });
+  // Folded by default: only the chip shows (the Beacon's dot, the Realm and how many items wait), so the panel
+  // stays out of the world until opened. The chip opens and folds the whole panel.
+  const badge = el('span', 'qbh-badge'), caret = el('span', 'qbh-caret', '▾');
+  chip.append(badge, caret);
+  let folded = true;
+  const fold = f => {
+    folded = f;
+    root.classList.toggle('qbh-folded', f);
+    reasons.hidden = f;
+    chip.setAttribute('aria-expanded', String(!f));
+    chip.title = f ? 'Open the Realm panel' : 'Fold the Realm panel';
+  };
+  chip.addEventListener('click', () => fold(!folded));
 
   const section = (title, open) => {
     const d = el('details', 'qbh-sec');
@@ -135,6 +152,7 @@ export function mountBeaconHud(container, store) {
   const freeN = bench('Keepers free'), busyN = bench('Keepers busy'), restN = bench('resting');
 
   root.append(chip, reasons, log.d, halls.d, benches);
+  fold(true);
   container.append(root);
 
   const bannerOf = (l, marchId) => l.marches.find(m => m.id === marchId)?.banner;
@@ -159,7 +177,9 @@ export function mountBeaconHud(container, store) {
     dot.dataset.color = b.color;
     realm.textContent = l.realm?.name || 'The Realm';
     word.textContent = b.color;
-    chip.setAttribute('aria-label', `${realm.textContent}: Beacon ${b.color}. ${b.reasons.length ? 'Show reasons' : 'All is well'}`);
+    const waiting = gameLog(l, { resolved: 0 }).open.length;
+    badge.textContent = waiting ? String(waiting) : '';
+    chip.setAttribute('aria-label', `${realm.textContent}: Beacon ${b.color}, ${waiting} waiting. ${folded ? 'Open the panel' : 'Fold the panel'}`);
     reasons.replaceChildren(...(b.reasons.length ? b.reasons : ['All is well in the Realm.']).map(r => el('li', '', r)));
 
     const g = gameLog(l, { resolved: 5 });

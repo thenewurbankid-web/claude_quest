@@ -133,3 +133,58 @@ export function riddleWeight(riddle, now = new Date(), rules = DEFAULT_RULES) {
   const age = Math.max(0, (now.getTime() - Date.parse(riddle.raisedAt)) / DAY) || 0;
   return 1 + (riddle.deferCount || 0) * rules.deferWeightGrowth + 0.1 * age;
 }
+
+/**
+ * Asks a question back to the agent on the Riddle's Work instead of answering. The Riddle stays open (no answer is
+ * implied) and the question waits for a reply. Anyone may ask; it is not a decision. Throws unless open or deferred.
+ */
+export function askBack(ledger, riddleId, { text, by } = {}, now = new Date()) {
+  const r = clone(findRiddle(ledger, riddleId));
+  if (!['open', 'deferred'].includes(r.state)) throw new Error(`Riddle ${riddleId} is ${r.state}; it can't take a question`);
+  const words = typeof text === 'string' ? text.trim() : '';
+  if (!words) throw new Error('a question needs text');
+  const at = now.toISOString();
+  r.asks = [...(r.asks || []), { text: words, by: by || 'unknown', at, reply: null }];
+  return change(r, 'riddle.asked', at);
+}
+
+/** Records the agent's reply to the oldest unanswered question on a Riddle. Throws when none is waiting. */
+export function replyToAsk(ledger, riddleId, { text, by } = {}, now = new Date()) {
+  const r = clone(findRiddle(ledger, riddleId));
+  const i = (r.asks || []).findIndex(a => !a.reply);
+  if (i < 0) throw new Error(`Riddle ${riddleId} has no question waiting for a reply`);
+  const words = typeof text === 'string' ? text.trim() : '';
+  if (!words) throw new Error('a reply needs text');
+  const at = now.toISOString();
+  r.asks[i] = { ...r.asks[i], reply: { text: words, by: by || 'unknown', at } };
+  return change(r, 'riddle.replied', at);
+}
+
+/**
+ * Where a Riddle comes from, for the conversation box: path is [March, Hall, Work] names, facts are label/value pairs
+ * for the expandable section. All real text, shown as plain text.
+ */
+export function riddleContext(ledger, riddleId, now = new Date()) {
+  const r = findRiddle(ledger, riddleId);
+  const w = ledger.works.find(x => x.id === r.workId) || null;
+  const m = ledger.marches.find(x => x.id === r.marchId) || null;
+  const h = w?.hallId ? ledger.halls.find(x => x.id === w.hallId) : null;
+  const k = w?.keeperId ? ledger.keepers.find(x => x.id === w.keeperId) : null;
+  const title = id => ledger.works.find(x => x.id === id)?.title || id;
+  const days = Math.max(0, Math.floor((now.getTime() - Date.parse(r.raisedAt)) / DAY));
+  const facts = [
+    ['Project', m?.name || r.marchId],
+    ['Milestone', h ? `${h.name} (${h.status})` : 'none'],
+    ['Task', w ? w.title : r.workId],
+    ['Status', w ? w.status.replace('_', ' ') : 'unknown'],
+    ['Priority', w?.priority || 'unknown'],
+  ];
+  if (w?.size) facts.push(['Size', w.size]);
+  facts.push(['Keeper', k ? `${k.name} (${k.role})` : 'nobody']);
+  if (w?.blockedBy?.length) facts.push(['Blocked by', w.blockedBy.map(title).join(', ')]);
+  facts.push(['Asked', `${r.raisedAt.slice(0, 10)}${days ? ` (${days} day${days === 1 ? '' : 's'} ago)` : ' (under a day ago)'}`]);
+  if (r.deferCount) facts.push(['Put off', `${r.deferCount} time${r.deferCount === 1 ? '' : 's'}`]);
+  facts.push(['Sealed by', r.steward || stewardOf(ledger, r.marchId) || 'nobody']);
+  for (const d of w?.decisions || []) facts.push(['Decided before', `${d.question} → ${d.answer}`]);
+  return { path: [m?.name, h?.name, w?.title].filter(Boolean), facts };
+}

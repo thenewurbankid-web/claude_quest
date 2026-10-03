@@ -10,7 +10,7 @@ import { mountLedgerPanel } from './ledger-panel.js';
 import { mountBeaconHud } from './beacon-hud.js';
 import { beacon } from './status.js';
 import { applyChanges, DEFAULT_RULES } from './contract.js';
-import { riddleNpcs, answerRiddle, tickRiddles, trueSight } from './riddles.js';
+import { riddleNpcs, riddleContext, answerRiddle, askBack, replyToAsk, tickRiddles, trueSight } from './riddles.js';
 import { mountConversation } from './conversation.js';
 import { startOutbox, mountOutbox } from './outbox.js';
 import { mountDigest, trackSession } from './digest.js';
@@ -83,10 +83,20 @@ addEventListener('quest:talk', async e => {
   lock(true);
   try {
     const speaker = { name: npc.keeper?.name || 'A villager' };
-    const res = await talk.ask(npc.riddle, { speaker, tier: npc.tier, flags: trueSight(npc.riddle.text), workTitle: npc.work.title });
+    const agentName = npc.keeper?.name || 'the Keeper';
+    const res = await talk.ask(npc.riddle, { speaker, tier: npc.tier, flags: trueSight(npc.riddle.text),
+      workTitle: npc.work.title, agentName, context: riddleContext(l, npc.riddle.id) });
     if (!res) return;
     const now = await store.snapshot(); // the ledger may have moved while the box was open
-    await applyChanges(store, answerRiddle(now, npc.riddle.id, { text: res.choice, by: now.realm.owner }, new Date(), rules));
+    const me = now.realm.owner, id = npc.riddle.id;
+    if (res.askBack) {
+      await applyChanges(store, askBack(now, id, { text: res.askBack, by: me }));
+      await talk.say([`I'll ask about that and come back to you.`], speaker);
+    } else if (res.reply) {
+      await applyChanges(store, replyToAsk(now, id, { text: res.reply, by: agentName }));
+    } else {
+      await applyChanges(store, answerRiddle(now, id, { text: res.choice, by: me }, new Date(), rules));
+    }
   } catch (err) {
     await talk.say([`That answer didn't take: ${err.message}`], { name: 'Lumi' });
   } finally {
