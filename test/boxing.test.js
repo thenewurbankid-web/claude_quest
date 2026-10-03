@@ -142,3 +142,20 @@ test('a look in the profile does not change the fight', () => {
   for (const sim of [plain, dressed]) while (sim.phase !== 'fight_over') { sim.startRound({ red: 'pressure', blue: 'outbox' }); sim.runRoundToEnd(); }
   assert.equal(JSON.stringify(plain.rounds), JSON.stringify(dressed.rounds));
 });
+
+test('profileOf ships a normalized look; receivedProfile rebuilds a peer look with the corner outfit', async () => {
+  const { profileOf, receivedProfile } = await import('../public/boxing/profile.js');
+  const { PHOTO_OUTFITS, normalizeLook } = await import('../public/boxing/boxer-model.js');
+  const f = { name: 'A', stats: { ...AVG }, points: 3, look: { topStyle: 'tank', top: '#123456', junk: 1 } };
+  const p = profileOf(f);
+  assert.deepEqual(Object.keys(p).sort(), ['look', 'name', 'stats']);
+  assert.equal(p.look.topStyle, 'tank');
+  assert.ok(!('junk' in p.look));
+  assert.notEqual(p.stats, f.stats);
+  assert.deepEqual(Object.keys(profileOf({ name: 'B', stats: AVG })).sort(), ['name', 'stats']);
+  // the look survives a JSON round trip (Dexie / P2P message) unchanged
+  assert.deepEqual(normalizeLook(JSON.parse(JSON.stringify(p)).look), p.look);
+  const r = receivedProfile({ name: 'C', stats: AVG, look: { skin: 'x', top: 'url(evil)', chain: 'yes' } }, 'blue');
+  assert.deepEqual(r.look, normalizeLook(undefined, PHOTO_OUTFITS.blue));
+  assert.deepEqual(receivedProfile({ name: 'D', stats: AVG }, 'red').look, normalizeLook(undefined, PHOTO_OUTFITS.red));
+});

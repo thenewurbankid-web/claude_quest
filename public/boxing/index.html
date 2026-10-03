@@ -267,6 +267,7 @@ import { GameDB, toLLMContext } from './game-db.js';
 import { createArena3D } from './arena-babylon.js';
 import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
+import { profileOf, receivedProfile } from './profile.js';
 
 // ─── Small helpers ──────────────────────────────────────────────────────────
 
@@ -413,10 +414,6 @@ const ARCHETYPES = {
   grinder:    { name: 'Diesel Dean',   stats: { speed: 48, power: 55, stamina: 85, ringIQ: 45 } },
 };
 
-/** Profile shipped to the physics engine and stored in logs. */
-// `look` is render-only: FighterModel never reads it, so it rides along in P2P `start` messages without touching lockstep.
-const profileOf = (f) => (f.look ? { name: f.name, stats: { ...f.stats }, look: { ...f.look } } : { name: f.name, stats: { ...f.stats } });
-
 /** The automated corner: reads gas, health and the score, and picks a tactic. */
 function aiCorner(sim, corner) {
   const me = sim.fighters[corner], opp = sim.fighters[corner === 'red' ? 'blue' : 'red'];
@@ -431,6 +428,7 @@ function aiCorner(sim, corner) {
 // ─── Fight lifecycle ────────────────────────────────────────────────────────
 
 function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner }) {
+  red = receivedProfile(red, 'red'); blue = receivedProfile(blue, 'blue');   // the other player's look is untrusted
   state.game?.destroy();
   state.arena?.destroy(); state.arena = null;
   const sim = new CombatSimulation({
