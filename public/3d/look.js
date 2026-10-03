@@ -3,7 +3,7 @@
 // lifts the night so people stay readable; 0 restores the old, much darker night.
 export const LOOK = {
   camera: { height: 9.2, back: 17, fov: 32, follow: 10 },
-  light: { sun: 1.5, sunAz: -6, sky: 0.45, fire: 0.55, fireReach: 4, exposure: 0.85, shadowSoft: 2.25, moon: 1 },
+  light: { sun: 1.5, sunAz: -6, sky: 0.45, fire: 0.55, fireReach: 4, exposure: 0.85, shadowSoft: 2.25, moon: 1.8 },
   lens: { bloom: 1.05, tilt: 0.8, focus: 0.65, vignette: 0.17, warmth: 0.055, saturation: 0.92, contrast: 1.06 },
   move: { walk: 4.6, npcPace: 0.6 },
   // '3d' = KayKit Adventurers (CC0, rigged, turn to face any way); 'pixel' = Sunnyside sprites. ?chars=pixel overrides.

@@ -515,8 +515,8 @@ function updateSky(dt) {
   const moon = (1 - day) * LOOK.light.moon * (0.4 + 0.6 * w.sun);
   sun.intensity = (0.1 + day * 1.7) * (0.25 + 0.75 * w.sun) * LOOK.light.sun + moon * 0.4;
   sun.color.setHSL(0.09, 0.6 * w.sun, 0.55 + day * 0.35).lerp(MOONLIGHT, 1 - day);
-  hemi.intensity = (0.12 + day * 0.3) * LOOK.light.sky + moon * 0.22 + flash * 1.6;
-  renderer.toneMappingExposure = (0.6 + day * 0.25) * (0.85 + 0.15 * w.sun) * LOOK.light.exposure + moon * 0.05 + flash * 0.5;
+  hemi.intensity = (0.12 + day * 0.3) * LOOK.light.sky + moon * 0.3 + flash * 1.6;
+  renderer.toneMappingExposure = (0.6 + day * 0.25) * (0.85 + 0.15 * w.sun) * LOOK.light.exposure + moon * 0.1 + flash * 0.5;
   scene.backgroundIntensity = (0.12 + day * 0.88) * (0.55 + 0.45 * w.sun);
   scene.environmentIntensity = (0.12 + day * 0.4) * LOOK.light.sky;
   // Overcast skies grey the haze out; fog pulls it in close.

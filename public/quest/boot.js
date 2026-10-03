@@ -122,7 +122,7 @@ addEventListener('quest:battle', e => lock(!!e.detail?.open));
 const veil = document.createElement('div');
 veil.setAttribute('aria-hidden', 'true');
 Object.assign(veil.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: 5, opacity: '0',
-  transition: 'opacity 3s ease', background: 'radial-gradient(ellipse at 50% 55%, rgba(120,96,190,0) 30%, rgba(120,96,190,.55) 75%, rgba(70,52,130,.85) 100%)' });
+  transition: 'opacity 3s ease', background: 'radial-gradient(ellipse at 50% 55%, rgba(170,150,235,0) 35%, rgba(170,150,235,.35) 75%, rgba(150,128,225,.55) 100%)' });
 document.body.append(veil);
 let lastHaze = null;
 const tellHaze = l => {
