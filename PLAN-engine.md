@@ -306,6 +306,7 @@ feature list; releases pick from them.
   from **one fenced `quest-report` block** the prompt asks for (kind progress/done/blocked, summary, question, branch,
   token counts); with no valid block the player picks the kind by hand, and the paste is always kept verbatim (user,
   2026-10-03). Contract built 2026-10-03 (`parseReport`, `emberLeft`, `branchFor`, lease/Ember rules, `wandered`).
+- *Build order (user, 2026-10-03): R5 Missions goes before R4.5 The Bridge; missions don't need the Bridge.*
 - **R4.5 "The Bridge"** (was "the Paperclip connector"; user, 2026-10-03): one optional local process for all
   communication: Paperclip reads and sealed write-back, agents (opt-in: get work and report with no paste), and later
   the Source chat. MQTT first, polling or a webhook when a user or agent asks for one. It is the first way work reaches

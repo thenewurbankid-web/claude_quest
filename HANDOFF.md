@@ -4,6 +4,11 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**Latest (2026-10-03, end of R4 session):** R4 tidy committed (`f08151c`); a parallel session merged its plan
+(`2b00dc3`: R4.5 The Bridge, R5 Missions, R6 Drama, R7 Own Realm, R8 The Source, R9+) and committed the R5 contract
+(`0e54f1d`). **User: build R5 Missions next, before R4.5** (after their R4 play notes). R5 plan: PLAN-engine.md
+"Missions, Keepers and the Bridge" and ~/.claude/plans/study-this-and-see-calm-giraffe.md ("Step 2").
+
 **Latest (2026-10-03, R4 session, later): R4 Bring your Keeper is built and integrated.** Slices (a) `/work` page
 (`public/work.html`, `quest/work-queue.js`, `quest/work-page.js`; `work.html?sample` loads the sample) and (b) Keeper
 controls (`quest/keeper-controls.js`, `quest/keeper-hud.js`, `dev-keepers.html`) merged into 3d-world. Wiring: E next to
