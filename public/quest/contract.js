@@ -21,7 +21,7 @@ export const WORK_RESOLVED = ['done', 'cancelled'];
 export const HALL_STATUS = ['planned', 'active', 'achieved'];
 export const PRIORITY = ['critical', 'high', 'medium', 'low'];
 export const SIZE = ['S', 'M', 'L']; // pebble, stone, boulder
-export const KEEPER_STATUS = ['free', 'busy', 'resting'];
+export const KEEPER_STATUS = ['free', 'busy', 'resting', 'wandered']; // wandered: its lease lapsed (R4)
 export const BEACON = ['gold', 'amber', 'red'];
 
 // Every action and response carries a mark: where it is in its life, and where it came from.
@@ -55,7 +55,7 @@ export const QUEUE_STATE = ['queued', 'leased', 'returned', 'lapsed', 'cancelled
 export const QUEUE_MOVES = {
   queued: ['leased', 'cancelled'],
   leased: ['leased', 'returned', 'lapsed', 'cancelled'],
-  lapsed: ['queued', 'cancelled'],
+  lapsed: ['queued', 'leased', 'returned', 'cancelled'], // a late paste while still lapsed: the Keeper found its way back
   returned: [],
   cancelled: [], // pasted results for a cancelled item are refused
 };
@@ -64,7 +64,10 @@ export const QUEUE_MOVES = {
 // R1 adds the Riddle's later moves; question-to-answer time is riddle.raised → riddle.answered for the same ref.
 export const EVENT_KIND = ['riddle.raised', 'riddle.answered', 'riddle.deferred', 'riddle.recalled', 'riddle.sealed',
   'riddle.returned', 'riddle.faded', 'riddle.proposed', 'agent.blocked', 'agent.unblocked', 'session.start',
-  'session.end', 'riddle.asked', 'riddle.replied', 'boss.summoned', 'boss.retreated', 'boss.defeated', 'boss.pushed'];
+  'session.end', 'riddle.asked', 'riddle.replied', 'boss.summoned', 'boss.retreated', 'boss.defeated', 'boss.pushed',
+  // R4: the /work page and the Keeper controls (ref: the queue item, or the Keeper for rested/resumed)
+  'work.queued', 'work.leased', 'work.reported', 'work.returned', 'work.lapsed', 'work.cancelled',
+  'keeper.rested', 'keeper.resumed', 'bell.rung'];
 
 // ---------- lore rules (defaults) ----------
 // A world's lore folder overrides these (PLAN-engine.md, "Customizable through lore files"); until Ink lore lands in
@@ -92,6 +95,11 @@ export const DEFAULT_RULES = {
   dimMax: 3,
   guardBlock: 1,           // what each freed Keeper takes off the Gloamwyrm's bite
   lanternFromLight: 2,     // what a full light meter gives back to the Lantern when you tend it
+  // R4, Bring your Keeper (first guesses, tuned later like the fight numbers):
+  leaseHours: 4,           // copying a prompt leases the work this long; each pasted progress report renews it
+  emberMax: 100,           // the Well's fuel; at 0 the /work page offers no prompts (safety rule 5)
+  tokensPerEmber: 10000,   // reported tokens (input + output) per Ember
+  emberWindowHours: 24,    // Ember spent in this rolling window counts against emberMax
 };
 
 // ---------- R2: the battle ----------
@@ -193,6 +201,81 @@ export const canMove = (moves, from, to) => (moves[from] || []).includes(to);
 export const stewardOf = (ledger, marchId) =>
   ledger.marches?.find(m => m.id === marchId)?.steward || ledger.realm?.owner || null;
 
+// ---------- R4: Bring your Keeper ----------
+// Agents get work only through the /work page (no server, no polling). The copied prompt ends with REPORT_INSTRUCTIONS,
+// asking the agent to close every reply with one fenced quest-report block. parseReport reads the last such block
+// (the prompt's own example comes first if an agent echoes it). With no valid block the player picks the kind by hand;
+// the paste is always kept verbatim. Agents work on branchFor(work) and never merge (safety rule 12).
+// Keeper controls are state changes on the ledger: wake = queue work for it; rest = Keeper resting, no prompts
+// offered; resume = back to free or busy; cancel = the queue item cancelled, later pastes refused; the Recall Bell =
+// every Keeper resting and every leased item cancelled. The game can't stop a running agent; the player stops it.
+export const REPORT_KIND = ['progress', 'done', 'blocked'];
+export const REPORT_FENCE = 'quest-report';
+export const KEEPER_CONTROL = ['wake', 'rest', 'resume', 'cancel', 'bell'];
+export const branchFor = work => `quest/${work.id}`;
+export const REPORT_INSTRUCTIONS = [
+  'End every reply with exactly one block like this, filled in:',
+  '```' + REPORT_FENCE,
+  'kind: progress | done | blocked',
+  'summary: one line on what changed',
+  'question: only when blocked, the one question you need answered',
+  'branch: the branch you worked on',
+  'input_tokens: tokens read this run, if you know them',
+  'output_tokens: tokens written this run, if you know them',
+  '```',
+  'Work only on your branch and never merge it; a person merges.',
+].join('\n');
+
+const REPORT_KEYS = ['kind', 'summary', 'question', 'branch', 'input_tokens', 'output_tokens'];
+const FENCE_RE = new RegExp('```' + REPORT_FENCE + '[ \\t]*\\r?\\n([\\s\\S]*?)```', 'g');
+
+/**
+ * Reads the last quest-report block in a paste. Returns { report, problems }: report is null when there is no block or
+ * it has any problem (the page then asks the player to pick the kind). Never repairs a field; extra keys are problems.
+ * @returns {{ report: { kind: string, summary: string, question: string|null, branch: string|null,
+ *             usage: { input: number, output: number }|null }|null, problems: { field: string, problem: string }[] }}
+ */
+export function parseReport(pasted) {
+  const blocks = [...String(pasted ?? '').matchAll(FENCE_RE)];
+  if (!blocks.length) return { report: null, problems: [{ field: 'block', problem: `no ${REPORT_FENCE} block` }] };
+  const problems = [];
+  const bad = (field, problem) => problems.push({ field, problem });
+  const f = {};
+  for (const raw of blocks.at(-1)[1].split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^([a-z_]+)\s*:\s*(.*)$/);
+    if (!m) { bad('block', `not a "key: value" line: ${line.slice(0, 40)}`); continue; }
+    if (!REPORT_KEYS.includes(m[1])) { bad(m[1], 'unknown field'); continue; }
+    if (m[1] in f) { bad(m[1], 'given twice'); continue; }
+    f[m[1]] = m[2].trim();
+  }
+  if (!REPORT_KIND.includes(f.kind)) bad('kind', `must be one of ${REPORT_KIND.join(', ')}`);
+  if (!f.summary) bad('summary', 'needs one line');
+  if (f.kind === 'blocked' && !f.question) bad('question', 'a blocked report asks its question');
+  if (f.kind === 'done' && f.question) bad('question', 'a done report asks nothing; report blocked instead');
+  const num = k => {
+    if (f[k] === undefined || f[k] === '') return null;
+    if (!/^\d+$/.test(f[k])) { bad(k, 'a whole number'); return null; }
+    return Number(f[k]);
+  };
+  const input = num('input_tokens'), output = num('output_tokens');
+  if ((input === null) !== (output === null) && !problems.some(p => p.field.endsWith('_tokens')))
+    bad(input === null ? 'input_tokens' : 'output_tokens', 'give both token counts or neither');
+  if (problems.length) return { report: null, problems };
+  return { report: { kind: f.kind, summary: f.summary, question: f.question || null, branch: f.branch || null,
+    usage: input === null ? null : { input, output } }, problems };
+}
+
+/** Ember left now: emberMax less the tokens reported in the last emberWindowHours, never below 0. */
+export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
+  const since = new Date(now).getTime() - rules.emberWindowHours * 3600e3;
+  let tokens = 0;
+  for (const q of ledger.queue || []) for (const r of q.reports || [])
+    if (r.usage && Date.parse(r.at) > since) tokens += r.usage.input + r.usage.output;
+  return Math.max(0, rules.emberMax - tokens / rules.tokensPerEmber);
+}
+
 // ---------- record shapes ----------
 // Ids are strings, unique within their kind. Times are ISO strings. Optional fields may be null or missing.
 /**
@@ -232,7 +315,14 @@ export const stewardOf = (ledger, marchId) =>
  *   "while you were away", counted from the event log after the last session.end
  * @typedef {{ id: string, keeperId: string, workId: string, prompt: string, state: string,
  *             leaseUntil?: string|null, result?: { text: string, usage?: { input: number, output: number },
- *             at: string }|null, createdAt: string }} QueueItem
+ *             at: string }|null, createdAt: string, copiedAt?: string|null, reports?: Report[] }} QueueItem
+ *   prompt: what the player copies (the Work, the branch, REPORT_INSTRUCTIONS); copiedAt: when the lease started
+ *   result: the final pasted text once returned (verbatim, plain text); reports: every paste, oldest first
+ * @typedef {{ kind: string, summary: string, question?: string|null, branch?: string|null,
+ *             usage?: { input: number, output: number }|null, text: string, relayed: 'player', manual: boolean,
+ *             at: string }} Report
+ *   R4: one paste on /work. text: the whole paste, verbatim; manual: no valid quest-report block was found, so the
+ *   player picked the kind by hand (summary is then the paste's first line). A question raises a Riddle on the Work.
  * @typedef {{ at: string, kind: string, ref?: string|null }} Event
  * @typedef {{ id: string, startedAt: string, phase: string, score: number, strength: number, hp: number, maxHp: number,
  *             riddleIds: string[], lodgeIds: string[], resolvedIds: string[], current: string|null, turn: number,
@@ -356,6 +446,14 @@ export function validateLedger(l) {
     ref(`${p}.workId`, q.workId, 'works');
     oneOf(`${p}.state`, q.state, QUEUE_STATE);
     if (q.state === 'leased' && !q.leaseUntil) bad(`${p}.leaseUntil`, 'a leased item needs its lease end');
+    if (q.state === 'returned' && !q.result) bad(`${p}.result`, 'a returned item keeps its result');
+    const w = l.works.find(w => w.id === q.workId);
+    if (w && isGameOnly(w)) bad(`${p}.workId`, 'game-only Works never go to an agent');
+    (q.reports || []).forEach((r, j) => {
+      oneOf(`${p}.reports[${j}].kind`, r.kind, REPORT_KIND);
+      text(`${p}.reports[${j}].text`, r.text);
+      if (r.kind === 'blocked') text(`${p}.reports[${j}].question`, r.question);
+    });
   });
   l.events.forEach((e, i) => oneOf(`events[${i}].kind`, e.kind, EVENT_KIND));
   return out;

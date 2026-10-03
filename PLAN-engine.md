@@ -289,9 +289,11 @@ feature list; releases pick from them.
 - **R3 "Lore quests":** play for days with no work: shared area lore from local weather and real local happenings
   becomes game-only Riddles and errands, and the hub's board gets a Town news tab (user, 2026-10-03; see "R3 Lore
   quests" below).
-- **R4 "Bring your Keeper":** the `/work` copy-paste page and agent registry, the Paperclip connector (R4 or later,
-  user 2026-10-03), start work from an NPC with a token
-  readout.
+- **R4 "Bring your Keeper":** the `/work` copy-paste page and agent registry, start work from an NPC with a token
+  readout. **The Paperclip connector is its own small release after R4** (user, 2026-10-03). Pasted results are read
+  from **one fenced `quest-report` block** the prompt asks for (kind progress/done/blocked, summary, question, branch,
+  token counts); with no valid block the player picks the kind by hand, and the paste is always kept verbatim (user,
+  2026-10-03). Contract built 2026-10-03 (`parseReport`, `emberLeft`, `branchFor`, lease/Ember rules, `wandered`).
 - **R5 "The first Sealed Hall":** one hand-made dungeon themed from its milestone, and a Sigil.
 - **R6 "Your own Realm":** the full Local Ledger (planner NPC, teammates), New Game / Load, split save with archiving.
 - **R7+:** shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes, 2D parity.

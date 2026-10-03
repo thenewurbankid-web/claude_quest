@@ -4,6 +4,16 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**Latest (2026-10-03, R4 session): R4 contract done.** User decisions: pastes are read from one fenced `quest-report`
+block (manual kind pick as fallback, paste kept verbatim); the Paperclip connector moves to its own release after R4.
+`contract.js` adds `REPORT_KIND`, `REPORT_INSTRUCTIONS`, `parseReport` (last block wins, never repairs), `branchFor`,
+`KEEPER_CONTROL`, `emberLeft` (rolling-window Ember from reported tokens), Keeper status `wandered`, late pastes on a
+lapsed lease, `work.*`/`keeper.*`/`bell.rung` events, rules `leaseHours`/`emberMax`/`tokensPerEmber`/
+`emberWindowHours`; validation refuses game-only Works in the queue and returned items without a result. Sample:
+`public/quest/sample-work.json`. `npm test` 123 pass. **Next:** the R4 slices side by side: (a) the `/work` page + lease
+(lapse → `wandered`) ∥ (b) start work from an NPC, the Ember readout, Keeper controls and the Recall Bell; then
+integration.
+
 **Latest (2026-10-03, R3 session): R3 Lore quests is built; what is left is the user's one-time setup.** Contract
 (`'lore'` mark source, `isGameOnly`, area-lore entry/index/`cells.json` shapes, Work `endsAt`), client
 (`public/quest/area-lore.js`: geohash-4 cell + 8 neighbours, reads `cells.json` first so no 404s, calendar fallback,

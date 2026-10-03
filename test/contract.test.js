@@ -7,6 +7,7 @@ import {
   validateLedger, emptyLedger, memoryStore, makeSave, ledgerFromSave, canMove, RIDDLE_MOVES, QUEUE_MOVES, stewardOf,
   DEFAULT_RULES, EVENT_KIND, applyChanges, mergeChanges, noChanges, validateBattle, BATTLE_MOVES,
   isGameOnly, validateAreaLore, validateAreaLoreIndex, validateAreaLoreCells, MARK_SOURCE,
+  KEEPER_STATUS, parseReport, emberLeft, branchFor, REPORT_INSTRUCTIONS,
 } from '../public/quest/contract.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -182,4 +183,63 @@ test('R3: lore/cells.json lists the cells that have an index', () => {
   assert.deepEqual(validateAreaLoreCells(c), []);
   assert.deepEqual(c.cells, ['gcpv']);
   assert.deepEqual(validateAreaLoreCells({ ...c, cells: ['nope!'] }).map(p => p.path), ['cells']);
+});
+
+// ---------- R4: Bring your Keeper ----------
+const work = () => JSON.parse(readFileSync(new URL('../public/quest/sample-work.json', import.meta.url)));
+
+test('R4: the sample /work queue is sound against the sample Realm', () => {
+  const l = sample();
+  l.queue = work().queue;
+  assert.deepEqual(validateLedger(l).filter(p => !p.repair), []);
+});
+
+test('R4: returned items keep a result, reports have a kind, and game-only Works never go to an agent', () => {
+  const l = sample();
+  l.queue = work().queue;
+  delete l.queue[1].result;
+  l.queue[0].reports[0].kind = 'finished';
+  l.works[2].mark = { status: 'sent', source: 'lore', sourceId: 'gcpv/x', real: false, at: '2026-10-03T06:00:00Z' };
+  assert.deepEqual(validateLedger(l).filter(p => !p.repair).map(p => p.path).sort(),
+    ['queue[0].reports[0].kind', 'queue[0].workId', 'queue[1].result']);
+});
+
+test('R4: a late paste on a lapsed lease is taken back; a cancelled one never is', () => {
+  assert.ok(canMove(QUEUE_MOVES, 'lapsed', 'leased'));
+  assert.ok(canMove(QUEUE_MOVES, 'lapsed', 'returned'));
+  assert.ok(!canMove(QUEUE_MOVES, 'cancelled', 'leased'));
+  assert.ok(!canMove(QUEUE_MOVES, 'returned', 'leased'));
+  assert.ok(KEEPER_STATUS.includes('wandered'));
+  for (const k of ['work.leased', 'work.reported', 'work.lapsed', 'bell.rung']) assert.ok(EVENT_KIND.includes(k), k);
+});
+
+test('R4: parseReport reads the last block, so an echoed example is skipped', () => {
+  const { pastes } = work();
+  assert.deepEqual(parseReport(pastes.blocked), { problems: [], report: { kind: 'blocked',
+    summary: 'Both providers wired behind a flag', question: 'Stripe or Paddle for launch?', branch: 'quest/w4',
+    usage: { input: 61000, output: 12000 } } });
+  assert.deepEqual(parseReport(pastes.echoedThenDone).report,
+    { kind: 'done', summary: 'Calendar renders the harvest months', question: null, branch: 'quest/w8', usage: null });
+});
+
+test('R4: parseReport never repairs: no block, bad fields and half token counts are problems', () => {
+  const { pastes } = work();
+  assert.deepEqual(parseReport(pastes.noBlock), { report: null, problems: [{ field: 'block', problem: 'no quest-report block' }] });
+  assert.deepEqual(parseReport(pastes.broken).problems.map(p => p.field).sort(), ['input_tokens', 'kind', 'mood', 'summary']);
+  const half = '```quest-report\nkind: progress\nsummary: s\ninput_tokens: 5\n```';
+  assert.deepEqual(parseReport(half).problems.map(p => p.field), ['output_tokens']);
+  const doneAsking = '```quest-report\nkind: done\nsummary: s\nquestion: q?\n```';
+  assert.deepEqual(parseReport(doneAsking).problems.map(p => p.field), ['question']);
+  assert.equal(parseReport(null).report, null);
+  assert.ok(REPORT_INSTRUCTIONS.includes('never merge'));
+  assert.equal(branchFor({ id: 'w3' }), 'quest/w3');
+});
+
+test('R4: Ember is spent by reported tokens inside the window and never goes below 0', () => {
+  const l = sample();
+  l.queue = work().queue;
+  assert.equal(emberLeft(l, '2026-10-03T12:00:00Z'), DEFAULT_RULES.emberMax - 5.1);
+  assert.equal(emberLeft(l, '2026-10-05T12:00:00Z'), DEFAULT_RULES.emberMax); // outside the window
+  l.queue[0].reports[0].usage = { input: 2e6, output: 0 };
+  assert.equal(emberLeft(l, '2026-10-03T12:00:00Z'), 0);
 });

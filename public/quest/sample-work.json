@@ -1,0 +1,28 @@
+{
+  "note": "R4 sample: /work queue items for sample-realm.json (merge as its queue) and pastes as an agent would send them.",
+  "queue": [
+    { "id": "q1", "keeperId": "k1", "workId": "w3", "prompt": "Work: Pricing page (branch quest/w3).", "state": "leased",
+      "createdAt": "2026-10-03T08:00:00Z", "copiedAt": "2026-10-03T08:05:00Z", "leaseUntil": "2026-10-03T13:20:00Z",
+      "reports": [
+        { "kind": "progress", "summary": "Pricing table laid out; tiers still placeholder", "question": null, "branch": "quest/w3",
+          "usage": { "input": 42000, "output": 9000 }, "text": "Laid out the table.\n```quest-report\nkind: progress\nsummary: Pricing table laid out; tiers still placeholder\nbranch: quest/w3\ninput_tokens: 42000\noutput_tokens: 9000\n```",
+          "relayed": "player", "manual": false, "at": "2026-10-03T09:20:00Z" }
+      ] },
+    { "id": "q2", "keeperId": "k3", "workId": "w6", "prompt": "Work: Plant catalogue import (branch quest/w6).", "state": "returned",
+      "createdAt": "2026-10-02T09:00:00Z", "copiedAt": "2026-10-02T09:01:00Z", "leaseUntil": null,
+      "result": { "text": "Import runs; 12 rows had no Latin name. Left them out for now.", "usage": null, "at": "2026-10-03T08:00:00Z" },
+      "reports": [
+        { "kind": "done", "summary": "Import runs; 12 rows had no Latin name. Left them out for now.", "question": null, "branch": null,
+          "usage": null, "text": "Import runs; 12 rows had no Latin name. Left them out for now.",
+          "relayed": "player", "manual": true, "at": "2026-10-03T08:00:00Z" }
+      ] },
+    { "id": "q3", "keeperId": "k4", "workId": "w8", "prompt": "Work: Harvest calendar (branch quest/w8).", "state": "queued",
+      "createdAt": "2026-10-03T09:00:00Z" }
+  ],
+  "pastes": {
+    "blocked": "Tried both SDKs.\n```quest-report\nkind: blocked\nsummary: Both providers wired behind a flag\nquestion: Stripe or Paddle for launch?\nbranch: quest/w4\ninput_tokens: 61000\noutput_tokens: 12000\n```",
+    "echoedThenDone": "You asked:\n```quest-report\nkind: progress | done | blocked\nsummary: one line on what changed\n```\nDone.\n```quest-report\nkind: done\nsummary: Calendar renders the harvest months\nbranch: quest/w8\n```",
+    "noBlock": "All finished, opened a PR.",
+    "broken": "```quest-report\nkind: finished\nsummary:\nmood: great\ninput_tokens: lots\n```"
+  }
+}
