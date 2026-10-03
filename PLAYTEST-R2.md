@@ -14,6 +14,8 @@ Open http://localhost:4791/?playtest and accept the confirm. Walk around for abo
   this run as fight 1. Replay with `?playtest` (it resets the backlog and the retreat count).
   Why (player): unclear what to do, so the Payment provider was put off and the fight abandoned. Possible miss against
   criteria 1 and 3: check that the fight says how to land a hit and what the Lodge pause asks of you.
+  On the replay the player asked "where are these questions coming from?": the fight never says they are the agents'
+  questions on real Works, waiting on you. The March › Hall › Work line is in the conversation box, not the fight.
 - [ ] Time at cut-in: ______
 - [ ] Before facing anything, open "Why?" under the hp bar. I can name which Works feed it and why it's that size.
 - [ ] Plant catalogue (asked in the fight): picked a real answer.
@@ -54,3 +56,5 @@ Open http://localhost:4791/?playtest=heavier.
 - [ ] Every line holds: R2 passes, R3 may start.
 - Misses (rethink before R3, see PLAN-engine.md "Risks"):
   - Possible: fight 1 attempt 1 was abandoned because it was unclear what to do (wording of the fight and the Lodge pause).
+  - Finding: the fight doesn't say where its questions come from (the agents' work, waiting on you), so answering them
+    feels arbitrary. Fix before the replay counts.
