@@ -209,7 +209,8 @@ test('raiseRiddle: a new open Riddle on a live Work, logged as riddle.raised, th
   assert.deepEqual(r.options, ['Monthly', 'Yearly', ASK_LATER]);
   assert.equal(r.marchId, 'ferry');
   assert.deepEqual([r.state, r.risk, r.raisedAt], ['open', 'normal', NOW.toISOString()]);
-  assert.deepEqual(c.events, [{ at: NOW.toISOString(), kind: 'riddle.raised', ref: r.id }]);
+  assert.deepEqual(c.events, [{ at: NOW.toISOString(), kind: 'riddle.raised', ref: r.id },
+    { at: NOW.toISOString(), kind: 'agent.blocked', ref: 'w3' }]);
   const after = await apply(sample(), c);
   assert.equal(after.works.find(w => w.id === 'w3').status, 'blocked');
   assert.ok(riddleNpcs(after, NOW).some(n => n.riddle.id === r.id));

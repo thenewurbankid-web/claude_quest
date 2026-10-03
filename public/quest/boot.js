@@ -12,12 +12,13 @@
 import { openLedger } from './ledger-idb.js';
 import { mountLedgerPanel } from './ledger-panel.js';
 import { mountBeaconHud } from './beacon-hud.js';
+import { mountStatsBoard } from './stats-board.js';
 import { beacon } from './status.js';
 import { applyChanges, DEFAULT_RULES } from './contract.js';
 import { riddleNpcs, riddleContext, tickRiddles, trueSight, riddleStanding } from './riddles.js';
 import { mountConversation } from './conversation.js';
 import { startOutbox, mountOutbox } from './outbox.js';
-import { mountDigest, trackSession } from './digest.js';
+import { mountDigest, trackSession, realmStats } from './digest.js';
 import { mountBattle, applyTalk } from './battle.js';
 import { bossScore, hazeLevel, shouldSummon, emptyBossPlay } from './boss.js';
 import { playtestRealm } from './playtest.js';
@@ -107,11 +108,25 @@ Object.assign(prompt.style, { position: 'fixed', left: '50%', bottom: '120px', t
   padding: '8px 16px', borderRadius: '999px', border: '1px solid rgba(255,255,255,.3)', background: 'rgba(14,16,24,.85)',
   color: '#eef0f4', font: '600 14px system-ui, sans-serif', cursor: 'pointer' });
 document.body.append(prompt);
+// near: a Riddle id, 'lodge' (the stats board) or null
 let near = null, talking = false;
-addEventListener('quest:near', e => { near = e.detail?.riddleId || null; prompt.hidden = !near || talking; });
-prompt.addEventListener('click', () => near && dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: near } })));
+addEventListener('quest:near', e => {
+  near = e.detail?.riddleId || (e.detail?.place === 'lodge' ? 'lodge' : null);
+  prompt.textContent = near === 'lodge' ? 'Stats board (E)' : 'Talk (E)';
+  prompt.hidden = !near || talking;
+});
+prompt.addEventListener('click', () => near && dispatchEvent(near === 'lodge' ? new CustomEvent('quest:lodge')
+  : new CustomEvent('quest:talk', { detail: { riddleId: near } })));
 
 const lock = locked => { talking = locked; prompt.hidden = locked || !near; dispatchEvent(new CustomEvent('quest:input', { detail: { locked } })); };
+
+// The stats board in the Keeper's Lodge (success measures, from the local event log)
+const board = mountStatsBoard(document.body);
+addEventListener('quest:lodge', async () => {
+  if (talking || battle.open) return;
+  lock(true);
+  try { await board.show(realmStats(await store.snapshot())); } finally { lock(false); }
+});
 addEventListener('quest:talk', async e => {
   if (talking || battle.open) return; // a log click during a fight is ignored
   const l = await store.snapshot();

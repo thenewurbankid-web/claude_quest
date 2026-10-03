@@ -98,8 +98,10 @@ export function raiseRiddle(ledger, { workId, text, line = null, options = [], h
     options: [...opts, ASK_LATER], risk: high ? 'high' : 'normal', state: 'open', steward: null,
     raisedAt: now.toISOString() };
   const c = change(r, 'riddle.raised', r.raisedAt);
-  if (['todo', 'in_progress'].includes(w.status))
+  if (['todo', 'in_progress'].includes(w.status)) {
     c.puts.push({ kind: 'works', record: { ...clone(w), status: 'blocked', updatedAt: r.raisedAt } });
+    c.events.push({ at: r.raisedAt, kind: 'agent.blocked', ref: w.id });
+  }
   return c;
 }
 

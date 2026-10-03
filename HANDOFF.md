@@ -101,6 +101,14 @@ collecting (PLAN-adventure §5 rewritten).
   outbox and when it seals, sealed by whom with what, faded with its note, or open on a Work no one waits on). Clicks
   are ignored during a fight. `npm test` 87 pass; checked on 4793 (open, deferred, sealed rows; no console errors).
   Next: the Keepers' stats board.
+- **Pre-R3 gap 3 of 3 done (2026-10-03): the stats board in the Keeper's Lodge.** Stand at the Lodge door (the
+  prompt says "Stats board (E)"; a Riddle beside the Lodge comes first) and press E or tap. `realmStats` in
+  `digest.js`: last 7 days and all time (Riddles raised, answered, put off, sealed, faded; Keepers stuck and going
+  again; Gloamwyrms beaten and retreats; play sessions and time played; median question-to-answer time), plus "Who
+  waits on you" per Keeper. `stats-board.js` draws it (Escape, Close or a click outside). Raising a Riddle now also
+  logs `agent.blocked`. The door area is wider than the 2x2 plot because the house draws larger than its cells.
+  `npm test` 89 pass; checked on 4793 by walking there, at 375px, no console errors. **All three pre-R3 gaps are
+  closed; R3 waits only on the R2 playtest gate.**
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
