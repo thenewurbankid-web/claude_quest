@@ -192,8 +192,9 @@ export const stewardOf = (ledger, marchId) =>
  * @typedef {{ id: string, marchId: string, hallId: string|null, title: string, status: string, priority: string,
  *             size?: string|null, weight?: number|null, risk?: 'high'|null, keeperId?: string|null,
  *             blockedBy?: string[], failures?: number, createdAt: string, updatedAt: string,
- *             resolvedAt?: string|null, decisions?: Decision[], mark?: Mark }} Work
+ *             resolvedAt?: string|null, decisions?: Decision[], mark?: Mark, endsAt?: string|null }} Work
  *   hallId null is allowed but is a repair quest ("this Work belongs to no Hall")
+ *   endsAt: R3 lore only, when its area-lore entry ends; the Work closes then and its open Riddle fades
  * @typedef {{ riddleId: string, question: string, answer: string, sealed_by: string, at: string,
  *             sent?: { to: 'paperclip', at: string, ref?: string|null }|null }} Decision
  *   a sealed Riddle written back to its Work (rule 9); sent: set once the connector has posted it as a comment
