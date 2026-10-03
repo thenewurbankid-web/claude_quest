@@ -190,6 +190,9 @@ export function mountBattle(container, { store, talk, rules = DEFAULT_RULES, pla
       const out = [el('div', 'qbt-row')];
       out[0].append(back);
       if (b.phase === 'retreated') out.unshift(el('p', 'qbt-note', 'Every answer you gave stays given.'));
+      // Say why it won't be back at once: put-off questions return later and feed the next one.
+      const off = l.riddles.filter(r => r.state === 'deferred' && r.deferredUntil).sort((x, y) => x.deferredUntil.localeCompare(y.deferredUntil));
+      if (b.phase === 'won' && off.length) out.unshift(el('p', 'qbt-note', `${off.length} question${off.length === 1 ? ' was' : 's were'} put off. The first comes back ${new Date(off[0].deferredUntil).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}, and the Gloamwyrm with it.`));
       queueMicrotask(() => back.focus());
       return out;
     }
