@@ -286,6 +286,9 @@ Riddles, agents, the Beacon) for any source.
 10. Teammates' answers are shown, never overwritten.
 11. The Recall Bell stops all work, from anywhere.
 12. Agents work on branches, and merging always takes a human.
+    *Exception (user, 2026-10-04):* this rule is about Keepers' work in the game. Quest Dev, the Paperclip agent that
+    builds the game, now reviews its own diff against these safety lines and fast-forward-merges its own
+    `quest-dev/*` branch into `3d-world` once `npm test` passes (paperclip/AGENTS.md, "End of every run").
 
 ## Releases (build order, user 2026-10-03; replaces "M0 first")
 Playable slices first; the shared-core refactor waits until the fun is proven. The milestones below stay as the

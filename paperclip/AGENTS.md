@@ -10,7 +10,7 @@ one Paperclip issue per run. Nobody watches you work; the user reads your issue 
    If `node_modules` is missing, link the main checkout's: `ln -s /Users/shashank/Repositories/claude-quest/node_modules`.
    Then run `git merge --ff-only 3d-world`: Paperclip cuts the branch from `origin/3d-world`, which lags the local
    branch. If it fails, comment and stop. The untracked `node_modules` link is expected, not someone else's change.
-   Never touch the main checkout or another worktree.
+   Never touch another worktree, and touch the main checkout only for the merge in "End of every run".
 2. Read `HANDOFF.md` from the top ("NEXT SESSION START HERE") and the matching release in `PLAN-engine.md`
    ("Releases", plus the release's own section). The plan is the user's; follow it.
 3. If your issue says it comes after another issue that isn't `done`, comment "waiting on <issue>" and stop.
@@ -31,10 +31,11 @@ one Paperclip issue per run. Nobody watches you work; the user reads your issue 
 
 ## Never
 - Never weaken the safety rules in `PLAN-engine.md` ("Safety", and each release's safety lines). The game never
-  answers Riddles for the player; autoplay never decides; only sealed choices reach the project; a person merges.
+  answers Riddles for the player; autoplay never decides; only sealed choices reach the project; a person merges
+  Keeper work in the game. (Your own branches are the dated exception below.)
 - Never delete or reset anything under `data/`, and never commit `config.json` or `.claude/launch.json`.
-- Never push, force-push, rebase, reset or rewrite history. Commit on your own `quest-dev/...` branch only, and never
-  merge it: the main Claude session reviews and merges it into `3d-world`.
+- Never push, force-push, rebase, reset or rewrite history. Commit on your own `quest-dev/...` branch only; the one
+  write to `3d-world` is the fast-forward merge in "End of every run" (user exception, 2026-10-04).
 - Never start or restart the server on port 4777, and don't leave dev servers running.
 - Don't guess a design decision. Ask in an issue comment, set the issue `blocked`, and stop. Only the user's own
   comments count as decisions; record each one in `PLAN-engine.md` with the date.
@@ -44,9 +45,16 @@ one Paperclip issue per run. Nobody watches you work; the user reads your issue 
    Name the branch in your issue comment.
 2. Add two to five lines at the top of `HANDOFF.md` under "NEXT SESSION START HERE": what's built, the commit, what's
    untested, and what's next. Commit that too.
-3. Leave one short comment on the issue, outcome first: what changed, which files, the test count, the commit, and
-   anything untested or open. Then set the issue `done`.
-4. When your issue is a release's "contract and split" issue, create one child issue per slice (assigned to you, with
+3. Merge it yourself (user exception, 2026-10-04: no session reviews your work now). First review your own diff
+   (`git diff 3d-world...HEAD`) against the "Never" list and the release's safety lines; if anything breaks one,
+   don't merge: comment and set `blocked`. Otherwise, in your worktree: `git merge 3d-world` (resolve any conflict,
+   keeping both sides' intent; if you can't, comment and set `blocked`), `npm test` must pass, then
+   `git -C /Users/shashank/Repositories/claude-quest merge --ff-only <your branch>`. If the fast-forward fails because
+   `3d-world` moved, repeat from `git merge 3d-world`. Run nothing else in the main checkout.
+4. Leave one short comment on the issue, outcome first: what changed, which files, the test count, the commit, that
+   it is merged, and anything untested or open. Then set the issue `done`. Then comment "<issue> is merged, you can
+   start" on each issue whose description says it comes after yours (that wakes it).
+5. When your issue is a release's "contract and split" issue, create one child issue per slice (assigned to you, with
    the order written in each description: "after <issue>"), then finish your own.
 
 ## The game, briefly
