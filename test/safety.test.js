@@ -136,3 +136,23 @@ test('combat: the Gloamwyrm never bites while a question or the Lodge is open, a
   const pushed = beat({ ...fight, battle: { ...fight.battle, resolvedIds: [], lantern: 1 } }, T0).play;
   assert.equal(pushed.retreats, fight.retreats || 0);
 });
+
+test('R5 pressure gate: only side content locks; /work, Riddles, the Lodge, the Recall Bell and saves never do', async () => {
+  const { gated, GATED } = await import('../public/quest/missions.js');
+  const { startable, wake, ringBell } = await import('../public/quest/keeper-controls.js');
+  const { makeSave, playFromSave, ledgerFromSave } = await import('../public/quest/contract.js');
+  const late = new Date('2026-10-09T12:00:00Z');                     // the Tollkeeper's release is a day away
+  const l = sample();
+  assert.equal(gated(l, late).gated, true);
+  for (const real of ['work', 'riddles', 'lodge', 'bell', 'saves']) assert.ok(!GATED.includes(real), real);
+  const start = startable(l)[0];                                       // /work: work can still be started
+  assert.ok(start);
+  const woke = wake(l, 'k4', start.id, {}, late);
+  assert.ok(!woke.problem && woke.puts.length, 'a Keeper can still be woken');
+  const lodge = answerRiddle(l, 'r1', { text: 'Stripe', by: 'player' }, late); // risk:high, answered in the Lodge
+  assert.ok(lodge.puts.some(p => p.kind === 'riddles' && p.record.state === 'answered'));
+  assert.ok(ringBell(l, late).events.some(e => e.kind === 'bell.rung'));
+  const save = makeSave(l, {});
+  assert.equal(ledgerFromSave(save).works.length, l.works.length);
+  assert.deepEqual(playFromSave(save).problems, []);
+});
