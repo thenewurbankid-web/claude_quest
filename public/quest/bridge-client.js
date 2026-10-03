@@ -2,7 +2,7 @@
 // Local Ledger and /work copy-paste. MQTT over WebSocket to 127.0.0.1 as client id `game`; the Realm's login lives in
 // the browser's settings only (never a save, ledger, prompt or Bridge message). Everything received is data: plain
 // text with True Sight, never obeyed. Rules are in contract.js; reports go through pasteResult's rules.
-import { BRIDGE_HOST, BRIDGE_VERSION, bridgeTopic, parseBridgeTopic, validateRegistration, credentialPlaceholder,
+import { BRIDGE_HOST, BRIDGE_VERSION, bridgeTopic, parseBridgeTopic, validateRegistration, credentialPlaceholder, keeperList,
   applyChanges, noChanges, DEFAULT_RULES } from './contract.js';
 import { pasteResult } from './work-queue.js';
 import { trueSight } from './riddles.js';
@@ -96,6 +96,11 @@ export function createBridgeClient({ connect, realmId, settings, on = () => {} }
       for (const id of ids) if (!keepers.has(id)) { keepers.add(id); subscribe(topic('register', id)); subscribe(topic('report', id)); }
     },
     bell() { if (up) client.publish(topic('bell'), JSON.stringify({ v: BRIDGE_VERSION }), { qos: 1 }); return up; },
+    /** Publish the opted-in Keepers (retained, so the Bridge has them when it starts). Nothing else of the ledger. */
+    publishKeepers(list) {
+      if (up) client.publish(topic('keepers'), JSON.stringify(keeperList(list)), { qos: 1, retain: true });
+      return up;
+    },
     open() { if (up) client.publish(topic('open'), JSON.stringify({ v: BRIDGE_VERSION }), { qos: 1 }); return up; },
     /** Publish the opted-in Keepers (work-queue.js keepersMessage), retained: the only ledger data the Bridge gets. */
     keepers(message) { if (up) client.publish(topic('keepers'), JSON.stringify(message), { qos: 1, retain: true }); return up; },

@@ -348,8 +348,8 @@ export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
 // runs on the Local Ledger and /work copy-paste exactly as before. Everything on the wire is data: plain strings that
 // are shown as plain text with True Sight and never obeyed. Topics are quest/<realmId>/...; who may publish or
 // subscribe where is fixed here (topicAllowed), so an agent can only speak for itself.
-//   game → bridge:  bell (stop handing out work), open (the player lets it hand out work again), keepers (retained: only the
-//                   opted-in Keepers, their status and ready-made offers; the Bridge never holds the full ledger)
+//   game → bridge:  bell (stop handing out work), open (the player lets it hand out work again), keepers (retained: the
+//                   opted-in Keepers and their status, nothing else of the ledger); offers are built by the bridge
 //   agent → bridge: register (the Keeper registration record), report (one report per message)
 //   bridge → agent: work (one offer for that Keeper), status
 // The Bell halts the Bridge until the player opens it again; an agent can never open it.
@@ -395,6 +395,7 @@ export function topicAllowed(who, topic, action) {
   if (who.role === 'agent') {
     if (!who.keeperId || !BRIDGE_ID.test(who.keeperId)) return false;
     if (t.kind === 'status') return !pub;
+    if (t.kind === 'keepers') return false;
     return t.keeperId === who.keeperId && (pub ? ['register', 'report'].includes(t.kind) : t.kind === 'work');
   }
   return false;
@@ -435,6 +436,15 @@ export function bridgeMayOffer(ledger, registration, halted) {
   if (['resting', 'released'].includes(k.status)) return { ok: false, why: `${k.name} is ${k.status}` };
   return { ok: true, why: null };
 }
+
+/**
+ * The retained Keeper list the game publishes on the keepers topic: only the Keepers the player opted in (the caller
+ * passes those), and only id, name and status. No Work text, no skills, no credential.
+ * @returns {{ v: number, keepers: { id: string, name: string, status: string }[] }}
+ */
+export const keeperList = keepers =>
+  ({ v: BRIDGE_VERSION, keepers: (keepers || []).filter(k => k && BRIDGE_ID.test(k.id || '') && ONE_LINE(k.name))
+    .map(k => ({ id: k.id, name: k.name, status: String(k.status ?? '') })) });
 
 /**
  * The retained message the game publishes on the keepers topic: the Keepers the player opted in (being listed IS the

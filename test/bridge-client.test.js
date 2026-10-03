@@ -105,3 +105,21 @@ test('the client against the real Bridge: bell, open, registration, a report, an
     await waitFor(() => !bridge.state.halted);
   } finally { agent.end(true); game.stop(); await bridge.stop(); }
 });
+
+test('publishKeepers: retained, qos 1, opted-in Keepers only as id, name and status; nothing while the link is down', () => {
+  const sent = [], handlers = {};
+  const fake = { on: (e, f) => { handlers[e] = f; }, subscribe() {}, publish: (t, p, o) => sent.push({ t, p: JSON.parse(p), o }), end() {} };
+  const game = createBridgeClient({ connect: () => fake, realmId: 'lantern', settings: { on: true, port: 4779, username: 'u', password: 'p' } });
+  game.start();
+  const keepers = realm().keepers.map(k => ({ ...k, skills: ['a skill'], password: 'hunter2' }));
+  assert.equal(game.publishKeepers(keepers), false);                // not connected yet
+  assert.equal(sent.length, 0);
+  handlers.connect();
+  assert.equal(game.publishKeepers(keepers.slice(0, 2)), true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].t, 'quest/lantern/keepers');
+  assert.deepEqual(sent[0].o, { qos: 1, retain: true });
+  assert.equal(sent[0].p.keepers.length, 2);
+  assert.ok(!JSON.stringify(sent[0].p).includes('hunter2') && !JSON.stringify(sent[0].p).includes('a skill'));
+  for (const k of sent[0].p.keepers) assert.deepEqual(Object.keys(k), ['id', 'name', 'status']);
+});

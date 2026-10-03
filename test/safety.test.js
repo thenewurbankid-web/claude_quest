@@ -220,6 +220,23 @@ test('R4.5 Bridge: the Recall Bell stops the Bridge handing out work, until the 
   assert.equal(bridgeMayOffer(l, reg, bridgeHalt(halted, 'open')).ok, true);
 });
 
+test('R4.5 Bridge: only the game publishes the Keeper list, and it carries only id, name and status', async () => {
+  const { topicAllowed, bridgeTopic, keeperList } = await import('../public/quest/contract.js');
+  const t = bridgeTopic('keepers', 'lantern');
+  assert.ok(topicAllowed({ role: 'game', realmId: 'lantern' }, t, 'publish'));
+  assert.ok(topicAllowed({ role: 'bridge', realmId: 'lantern' }, t, 'subscribe'));
+  assert.ok(!topicAllowed({ role: 'bridge', realmId: 'lantern' }, t, 'publish'));
+  assert.ok(!topicAllowed({ role: 'game', realmId: 'lantern' }, t, 'subscribe'));
+  for (const action of ['publish', 'subscribe'])
+    assert.ok(!topicAllowed({ role: 'agent', keeperId: 'k4', realmId: 'lantern' }, t, action), `an agent may not ${action}`);
+  assert.ok(!topicAllowed({ role: 'game', realmId: 'other' }, t, 'publish'));
+  const l = sample();
+  l.keepers[0].skills = ['secret skill']; l.keepers[0].password = 'hunter2';
+  const json = JSON.stringify(keeperList(l.keepers));
+  assert.ok(!json.includes('secret skill') && !json.includes('hunter2'));
+  for (const k of JSON.parse(json).keepers) assert.deepEqual(Object.keys(k), ['id', 'name', 'status']);
+});
+
 test('R4.5 Bridge: only the game publishes the keepers list; an agent can neither publish nor read it', async () => {
   const { topicAllowed, bridgeTopic, validateKeepersMessage } = await import('../public/quest/contract.js');
   const t = bridgeTopic('keepers', 'lantern');

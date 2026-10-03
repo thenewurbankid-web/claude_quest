@@ -8,6 +8,8 @@ one Paperclip issue per run. Nobody watches you work; the user reads your issue 
    cut from `3d-world` (user, 2026-10-04: up to two issues run in parallel). Run `git branch --show-current`: it must
    be `quest-dev/...`, never `3d-world`. If `git status` shows changes you didn't make, comment and stop (`blocked`).
    If `node_modules` is missing, link the main checkout's: `ln -s /Users/shashank/Repositories/claude-quest/node_modules`.
+   Then run `git merge --ff-only 3d-world`: Paperclip cuts the branch from `origin/3d-world`, which lags the local
+   branch. If it fails, comment and stop. The untracked `node_modules` link is expected, not someone else's change.
    Never touch the main checkout or another worktree.
 2. Read `HANDOFF.md` from the top ("NEXT SESSION START HERE") and the matching release in `PLAN-engine.md`
    ("Releases", plus the release's own section). The plan is the user's; follow it.
