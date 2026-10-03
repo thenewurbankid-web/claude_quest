@@ -7,6 +7,11 @@ Run the static server (`node dev/static.js 4791`, or the `quest-static-2` previe
 Open http://localhost:4791/?playtest and accept the confirm. Walk around for about 10 s; the Gloamwyrm cuts in.
 
 ### Fight 1: play it straight (criteria 1, 2, 3, 6)
+- Attempt 1 (2026-10-03, on 4793, read from the event log; not a pass): cut in 06:18:19, 10 s after the session
+  started. Plant catalogue (p1) answered 06:19:49 and sealed 10 s later. Payment provider (p2) put off with "Ask me
+  later" at 06:20:14 instead of answered in the Lodge. Staging server (p3) never resolved. Retreated 06:20:16 with
+  15/49 hp left, about 2 min in. The player first said "all lines held"; the log disagreed and the player confirmed
+  this run as fight 1. Replay with `?playtest` (it resets the backlog and the retreat count).
 - [ ] Time at cut-in: ______
 - [ ] Before facing anything, open "Why?" under the hp bar. I can name which Works feed it and why it's that size.
 - [ ] Plant catalogue (asked in the fight): picked a real answer.
