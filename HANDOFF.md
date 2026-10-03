@@ -82,6 +82,7 @@ collecting (PLAN-adventure §5 rewritten).
   the top Works. `npm test` 84 pass. Open: a fake three-question fight probably runs 1.5–3 min, under the 3–6 min
   target; measure it in the playtest before padding anything. The Lodge stays the plain confirm (rule 3).
   **Next: the playtest (gate):** `/?playtest` on a static server, then `/?playtest=heavier` a day later.
+  Checklist: `PLAYTEST-R2.md` (fill it in during both sessions).
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
