@@ -54,6 +54,13 @@ collecting (PLAN-adventure §5 rewritten).
   (threshold 3 on the sum of `riddleWeight` over open and deferred Riddles, hp per weight, +0.25 strength per retreat,
   mash bonus at most 15% of a hit) and the boss events. `npm test` 72 pass. The sample Realm already crosses the
   threshold. **Next: R2's parallel round** (boss ∥ weights ∥ placeholder art), then tuning, then the playtest (gate).
+- **User feedback on R1, done (2026-10-03):** the conversation box shows where a Riddle comes from (March › Hall ›
+  Work, plus "More about this task": status, priority, Keeper, blockers, age, earlier decisions; `riddleContext`),
+  **Other…** for your own answer, and **Ask back…**: a question to the agent on the Work (`asks` on the Riddle,
+  `askBack`/`replyToAsk`, events `riddle.asked`/`riddle.replied`); the Riddle stays open and shows "Waiting on
+  <Keeper>", and the reply is pasted by hand until R3's /work page delivers it. The Beacon panel and the "While you
+  were away" card both start folded to small chips with counts (the user found the open panel too invasive).
+  `npm test` 74 pass.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
