@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import mqtt from 'mqtt';
+import { keepersMessage } from '../public/quest/work-queue.js';
 import { createBridge } from '../bridge/bridge.js';
 import { memoryStore, applyChanges, validateLedger, credentialLeaks, makeSave, bridgeTopic } from '../public/quest/contract.js';
 import { loadBridgeSettings, saveBridgeSettings, reportToQueue, createBridgeClient, bridgeUrl } from '../public/quest/bridge-client.js';
@@ -73,10 +74,10 @@ test('with the Bridge off no client can be made', () => {
 
 test('the client against the real Bridge: bell, open, registration, a report, and a refusal', async () => {
   const cred = sb().credential, ledger = realm();
-  const bridge = createBridge({ credential: cred, getLedger: () => ledger, httpPort: 0, tcpPort: 0, offerEveryMs: 60000, now: () => T0 });
+  const bridge = createBridge({ credential: cred, origin: 'http://localhost:4777', httpPort: 0, tcpPort: 0, offerEveryMs: 60000, now: () => T0 });
   const ports = await bridge.start();
   const events = [];
-  const game = createBridgeClient({ connect: (url, o) => mqtt.connect(url.replace(/:\d+$/, `:${ports.http}`), { ...o, reconnectPeriod: 0 }), realmId: 'lantern',
+  const game = createBridgeClient({ connect: (url, o) => mqtt.connect(url.replace(/:\d+$/, `:${ports.http}`), { ...o, reconnectPeriod: 0, wsOptions: { origin: 'http://localhost:4777' } }), realmId: 'lantern',
     settings: { on: true, port: ports.http, username: cred.mqtt.username, password: cred.mqtt.password }, on: e => events.push(e) });
   game.setKeepers(['k1']);
   game.start();
@@ -85,6 +86,8 @@ test('the client against the real Bridge: bell, open, registration, a report, an
   try {
     await waitFor(() => game.up);
     await agentUp;
+    assert.equal(game.keepers(keepersMessage(ledger, ['k1'], T0)), true);
+    await waitFor(() => bridge.state.keepers.keepers.length === 1);
     const pub = (t, b) => new Promise((ok, no) => agent.publish(t, JSON.stringify(b), { qos: 1 }, e => e ? no(e) : ok()));
     await pub(bridgeTopic('register', 'lantern', 'k1'), { v: 1, keeperId: 'k1', name: ledger.keepers.find(k => k.id === 'k1').name, skills: ['x'] });
     await waitFor(() => events.find(e => e.kind === 'registered'));
@@ -94,6 +97,8 @@ test('the client against the real Bridge: bell, open, registration, a report, an
     assert.equal(reportToQueue(ledger, got.message, T0).changes.puts.length > 0, true);
     await pub(bridgeTopic('report', 'lantern', 'k1'), { v: 1, queueId: 'q1', kind: 'bogus', summary: 'x' });
     await waitFor(() => events.find(e => e.kind === 'refused'));
+    assert.equal(game.open(), true);
+    await waitFor(() => !bridge.state.halted);
     assert.equal(game.bell(), true);
     await waitFor(() => bridge.state.halted);
     assert.equal(game.open(), true);

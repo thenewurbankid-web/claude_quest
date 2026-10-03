@@ -97,6 +97,8 @@ export function createBridgeClient({ connect, realmId, settings, on = () => {} }
     },
     bell() { if (up) client.publish(topic('bell'), JSON.stringify({ v: BRIDGE_VERSION }), { qos: 1 }); return up; },
     open() { if (up) client.publish(topic('open'), JSON.stringify({ v: BRIDGE_VERSION }), { qos: 1 }); return up; },
+    /** Publish the opted-in Keepers (work-queue.js keepersMessage), retained: the only ledger data the Bridge gets. */
+    keepers(message) { if (up) client.publish(topic('keepers'), JSON.stringify(message), { qos: 1, retain: true }); return up; },
     stop() { if (client) client.end(true); up = false; client = null; },
     get up() { return up; },
   };

@@ -348,13 +348,14 @@ export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
 // runs on the Local Ledger and /work copy-paste exactly as before. Everything on the wire is data: plain strings that
 // are shown as plain text with True Sight and never obeyed. Topics are quest/<realmId>/...; who may publish or
 // subscribe where is fixed here (topicAllowed), so an agent can only speak for itself.
-//   game → bridge:  bell (stop handing out work), open (the player lets it hand out work again), offer is built by the bridge
+//   game → bridge:  bell (stop handing out work), open (the player lets it hand out work again), keepers (retained: only the
+//                   opted-in Keepers, their status and ready-made offers; the Bridge never holds the full ledger)
 //   agent → bridge: register (the Keeper registration record), report (one report per message)
 //   bridge → agent: work (one offer for that Keeper), status
 // The Bell halts the Bridge until the player opens it again; an agent can never open it.
 export const BRIDGE_VERSION = 1;
 export const BRIDGE_HOST = '127.0.0.1'; // the only address it binds to and answers
-export const BRIDGE_TOPIC = ['register', 'work', 'report', 'status', 'bell', 'open'];
+export const BRIDGE_TOPIC = ['register', 'work', 'report', 'status', 'bell', 'open', 'keepers'];
 export const BRIDGE_REPORT_KEYS = ['v', 'queueId', 'kind', 'summary', 'question', 'branch', 'input_tokens', 'output_tokens'];
 export const BRIDGE_CREDENTIAL = ['mqtt', 'webhook', 'paperclip'];
 export const PAPERCLIP_WRITES = ['comment']; // write-back is comments only (user, 2026-10-04); status changes stay manual
@@ -389,8 +390,8 @@ export function topicAllowed(who, topic, action) {
   const t = parseBridgeTopic(topic);
   if (!t || t.realmId !== who.realmId || !['publish', 'subscribe'].includes(action)) return false;
   const pub = action === 'publish';
-  if (who.role === 'game') return pub ? ['bell', 'open'].includes(t.kind) : ['report', 'register', 'status', 'work'].includes(t.kind);
-  if (who.role === 'bridge') return pub ? ['work', 'status'].includes(t.kind) : ['register', 'report', 'bell', 'open'].includes(t.kind);
+  if (who.role === 'game') return pub ? ['bell', 'open', 'keepers'].includes(t.kind) : ['report', 'register', 'status', 'work'].includes(t.kind);
+  if (who.role === 'bridge') return pub ? ['work', 'status'].includes(t.kind) : ['register', 'report', 'bell', 'open', 'keepers'].includes(t.kind);
   if (who.role === 'agent') {
     if (!who.keeperId || !BRIDGE_ID.test(who.keeperId)) return false;
     if (t.kind === 'status') return !pub;
@@ -433,6 +434,30 @@ export function bridgeMayOffer(ledger, registration, halted) {
   if (!k) return { ok: false, why: 'not a registered Keeper' };
   if (['resting', 'released'].includes(k.status)) return { ok: false, why: `${k.name} is ${k.status}` };
   return { ok: true, why: null };
+}
+
+/**
+ * The retained message the game publishes on the keepers topic: the Keepers the player opted in (being listed IS the
+ * opt-in; nobody else is ever offered work), their status, and each live queue item of theirs. offer is the finished
+ * WorkOffer for a queued item the game's own rules (offerable) allow now, else null.
+ * @typedef {{ v: number, keepers: { id: string, name: string, status: string }[],
+ *             queue: { queueId: string, keeperId: string, state: string, offer: WorkOffer|null }[] }} KeepersMessage
+ */
+export function validateKeepersMessage(m) {
+  const p = [], bad = (field, problem) => p.push({ field, problem });
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return [{ field: 'record', problem: 'not an object' }];
+  for (const k of Object.keys(m)) if (!['v', 'keepers', 'queue'].includes(k)) bad(k, 'unknown field');
+  if (m.v !== BRIDGE_VERSION) bad('v', `must be ${BRIDGE_VERSION}`);
+  if (!Array.isArray(m.keepers) || m.keepers.length > 200) return [...p, { field: 'keepers', problem: 'up to 200 Keepers' }];
+  if (!Array.isArray(m.queue) || m.queue.length > 500) return [...p, { field: 'queue', problem: 'up to 500 items' }];
+  m.keepers.forEach((k, i) => {
+    if (!k || !BRIDGE_ID.test(k.id || '') || !ONE_LINE(k.name) || !ONE_LINE(k.status)) bad(`keepers[${i}]`, 'id, name and status are required');
+  });
+  m.queue.forEach((q, i) => {
+    if (!q || !BRIDGE_ID.test(q.queueId || '') || !BRIDGE_ID.test(q.keeperId || '') || !ONE_LINE(q.state)) bad(`queue[${i}]`, 'queueId, keeperId and state are required');
+    else if (q.offer !== null && (typeof q.offer !== 'object' || q.offer?.queueId !== q.queueId || typeof q.offer.prompt !== 'string')) bad(`queue[${i}].offer`, 'must be null or the offer for this item');
+  });
+  return p;
 }
 
 /** Halt state: the Bell halts it; only the game's open message clears it. Nothing an agent sends reaches here. */
