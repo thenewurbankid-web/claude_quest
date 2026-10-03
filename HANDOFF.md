@@ -117,6 +117,12 @@ collecting (PLAN-adventure §5 rewritten).
   static server with `?playtest`.
   **Done (2026-10-03):** the three lines are in `battle.js` and checked in a fight on 4793. Next: the player replays
   fight 1. The player also said the fight "has to be interesting"; that's a bigger design question, not scoped yet.
+- **Open, for a fresh session: make the fight interesting (user, 2026-10-03).** Today a turn is: pick a question,
+  answer it, optionally mash Space. Brainstorm with the user before any code; keep the safety rules (no timers on
+  questions, input lock, the Lodge for confirm/never, hits only from resolving Riddles). Replay fight 1 first if the
+  user wants a baseline with the new wording.
+- **Lore quests (players without work)** are planned in another session (design: ~/.claude/plans/so-ho-do-wekeep-parsed-pie.md).
+  It may touch contract.js, boss.js, riddles.js, digest.js, scene.js and boot.js; check `git log` before editing those.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.
