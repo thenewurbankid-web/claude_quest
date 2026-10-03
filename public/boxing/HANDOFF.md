@@ -132,20 +132,20 @@ and crowd are unchanged. Approved changes from the plan: no roughness maps (a ba
 - Checked at 1280×720 (hard, rooftop, ringside): about 6.5 ms a frame at 2560×1440, `npm test` 93 pass.
 - Not done: the trees are still sparse cards, the cars are boxes, the onlookers are unchanged, and night isn't baked.
 
+## Done (2026-10-04): character creation, looks + name (job 2)
+
+Built in 9717ad6 (WIP) and finished here. `boxer-model.js`: `LOOK_OPTIONS`, `normalizeLook`, skin tones (medium = light texture tinted in `paintOutfit`). `look-preview.js`: live preview, one `ModelBoxer` rebuilt on each change. `index.html`: Look panel; the look is saved in the Dexie `fighters` row and re-normalized on boot. New `profile.js`: `profileOf` (ships `look: normalizeLook(...)`, render-only, `FighterModel` ignores it) and `receivedProfile`, which `startMatch` applies to both corners, so a P2P look always goes through `normalizeLook` before the arena. The AI corner has no look and wears the blue photo outfit; a peer without one gets its corner's photo outfit. Tests: `normalizeLook`, `profileOf`/`receivedProfile`, and a look doesn't change a fight. `npm test` 96 pass.
+- **Untested in a browser** (nothing here has been run): the Look panel at 375px, the preview scene (lighting, framing, rebuild without leaking textures or breaking the arena's shared assets), skin tones, a reload keeping the look, two tabs of P2P showing each other's look, the AI opponent's outfit.
+- Not done: archetype AI opponents all share the blue photo outfit; the primitive fallback fighters ignore looks.
+
 ## Next jobs
 
 1. **Realistic people from Blender** (not picked yet; step 2 after the bake): Blender's MPFB (MakeHuman) add-on has CC0
    output and clothing assets, and its game rig uses UE-style bone names like the Quaternius clips. Character creation
    would then be built on those models.
 
-2. **Character creation, looks + name only** (picked by the user). The sim is untouched. The outfit options are the
-   photo's (user: "the outfits will be the ones in the photo"): top style (tee, tank, varsity, hoodie) and colours,
-   jeans wash, boots (Timberland-style, sneakers), cap (none, forward, backwards; colour), chain, wrap colour, skin
-   tone. `paintOutfit()` and `PHOTO_OUTFITS` are the building blocks. Store a `look` with the fighter in Dexie and add
-   it to `profileOf()` so it rides along in P2P `start` messages (`FighterModel` ignores unknown fields). Show a live
-   preview with one `ModelBoxer` in a small scene.
-3. Night load time (see the known issues above).
-4. Balance (see Open issues).
+2. Night load time (see the known issues above).
+3. Balance (see Open issues).
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.
