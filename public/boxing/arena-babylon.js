@@ -10,7 +10,7 @@
  * a rigged model can replace `Boxer` later without touching the rest.
  */
 import { RING_HALF_M, TICK_MS } from './physics-engine.js';
-import { loadBoxerAssets, ModelBoxer, PHOTO_OUTFITS } from './boxer-model.js';
+import { loadBoxerAssets, loadGltfLoader, ModelBoxer, PHOTO_OUTFITS } from './boxer-model.js';
 import { v, add, sub, mul, dot, len, norm, lerp, bez, clamp, smooth, UP, rotateAbout, solveTwoBone } from './pose-math.js';
 
 const BABYLON_SRC = '/vendor/babylonjs/babylon.js';
@@ -361,14 +361,7 @@ function buildStreet(B, scene, shadow, { night = false } = {}) {
   }
   const manhole = B.MeshBuilder.CreateDisc('manhole', { radius: 0.4, tessellation: 24 }, scene);
   manhole.rotation.x = Math.PI / 2; manhole.position.set(-10.6, 0.006, 3.5); manhole.material = mat('manholeM', '#2a2b2e');
-  const steam = new B.ParticleSystem('steam', 120, scene);
-  steam.particleTexture = radialTexture(B, scene, 'steamTex', 'rgba(220,225,235,0.35)', 'rgba(220,225,235,0)');
-  steam.emitter = new B.Vector3(-10.6, 1.75, 3.5);
-  steam.minEmitBox = new B.Vector3(-0.12, 0, -0.12); steam.maxEmitBox = new B.Vector3(0.12, 0, 0.12);
-  steam.color1 = steam.color2 = new B.Color4(0.85, 0.87, 0.92, 0.3); steam.colorDead = new B.Color4(0.8, 0.8, 0.85, 0);
-  steam.minSize = 0.5; steam.maxSize = 1.6; steam.minLifeTime = 1.5; steam.maxLifeTime = 3; steam.emitRate = 40;
-  steam.direction1 = new B.Vector3(-0.1, 1, -0.1); steam.direction2 = new B.Vector3(0.25, 1, 0.1);
-  steam.minEmitPower = 0.4; steam.maxEmitPower = 0.8; steam.blendMode = B.ParticleSystem.BLENDMODE_STANDARD; steam.start();
+  steamFrom(B, scene, new B.Vector3(-10.6, 1.75, 3.5));
 
   if (night) buildNight(B, scene, shadow, { mat, glow, rand, flicker });
   buildNewYork(B, scene, shadow, mat, glow, rand, { night });
@@ -389,6 +382,19 @@ function buildStreet(B, scene, shadow, { night = false } = {}) {
       crowd.update(t, dt);
     },
   };
+}
+
+/** Steam rising out of the Con Ed stack's top at `at`. */
+function steamFrom(B, scene, at) {
+  const steam = new B.ParticleSystem('steam', 120, scene);
+  steam.particleTexture = radialTexture(B, scene, 'steamTex', 'rgba(220,225,235,0.35)', 'rgba(220,225,235,0)');
+  steam.emitter = at;
+  steam.minEmitBox = new B.Vector3(-0.12, 0, -0.12); steam.maxEmitBox = new B.Vector3(0.12, 0, 0.12);
+  steam.color1 = steam.color2 = new B.Color4(0.85, 0.87, 0.92, 0.3); steam.colorDead = new B.Color4(0.8, 0.8, 0.85, 0);
+  steam.minSize = 0.5; steam.maxSize = 1.6; steam.minLifeTime = 1.5; steam.maxLifeTime = 3; steam.emitRate = 40;
+  steam.direction1 = new B.Vector3(-0.1, 1, -0.1); steam.direction2 = new B.Vector3(0.25, 1, 0.1);
+  steam.minEmitPower = 0.4; steam.maxEmitPower = 0.8; steam.blendMode = B.ParticleSystem.BLENDMODE_STANDARD; steam.start();
+  return steam;
 }
 
 /** Night only: neon signs, string lights over the court, fire barrels and rain. */
@@ -649,6 +655,124 @@ function buildNewYork(B, scene, shadow, mat, glow, rand, { night = false } = {})
     bm.emissiveColor = new B.Color3(0.25, 0.25, 0.25); bm.backFaceCulling = false;
     blade.material = bm; blade.position.set(-11, y, 11); blade.rotation.y = yaw;
   }
+}
+
+/** Puts a mesh on wall `side` (0 far, +z; then +x, −z, −x) the way buildStreet's `place` does: `along` the wall, `up`, `out` from it. */
+function wallPlace(B, mesh, side, along, up, out = 0) {
+  const yaw = side * Math.PI / 2, fwd = new B.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), right = new B.Vector3(fwd.z, 0, -fwd.x);
+  mesh.position.copyFrom(fwd.scale(LOOK.yardM - out)).addInPlace(right.scale(along)); mesh.position.y = up;
+  mesh.rotation.y = yaw;
+  return mesh;
+}
+
+/**
+ * The day court baked in Blender (scripts/bake-court.py → scripts/build-court.mjs → models/court.glb): the same layout as
+ * buildStreet, lit by an overcast HDRI with the light baked into lightmaps and vertex colours.
+ *
+ * Each glTF material is rebuilt as an unlit StandardMaterial. With lighting off, StandardMaterial draws
+ * emissive × albedo, then multiplies by the lightmap, so `tint` (from the material's extras) × albedo × lightmap × `lmLevel`
+ * is the baked colour and no real-time light adds to it. The ground keeps a little real-time light from the key so the
+ * fighters and crowd still cast soft contact shadows onto it: emissive 1 − k plus the key's k gives the same colour
+ * outside a shadow. The canvas-drawn signs and graffiti, the steam and the crowd are added on top, as in buildStreet.
+ * Returns { ground, crowd, lit, skyUp, update } (`lit`: meshes the hemispheric fill must leave alone), or throws.
+ */
+async function buildBakedCourt(B, scene, key) {
+  await loadGltfLoader(B);
+  // Keep the textures' bytes as they are: by default the loader uploads colour images as sRGB buffers, so the GPU would
+  // linearise them on sampling, and StandardMaterial (which works in gamma space) would draw them far too dark.
+  const plug = B.SceneLoader.OnPluginActivatedObservable.add((loader) => { if (loader.name === 'gltf') loader.useSRGBBuffers = false; });
+  const c = await B.SceneLoader.LoadAssetContainerAsync('/boxing/models/', 'court.glb', scene)
+    .finally(() => B.SceneLoader.OnPluginActivatedObservable.remove(plug));
+  c.addAllToScene();
+  const info = c.transformNodes.find((n) => n.name === 'court_info')?.metadata?.gltf?.extras ?? {};
+  const keyShare = key.intensity * Math.max(0, -key.direction.normalizeToNew().y);
+  const made = new Map(), ground = [], lit = [];
+  const white = B.RawTexture.CreateRGBATexture(new Uint8Array([255, 255, 255, 255]), 1, 1, scene);
+  white.level = info.lmLevel ?? 1;
+  for (const mesh of c.meshes) {
+    const pbr = mesh.material;
+    if (!pbr) continue;
+    mesh.isPickable = false;
+    if (!made.has(pbr)) {
+      const x = pbr.metadata?.gltf?.extras ?? {};
+      const tint = B.Color3.FromArray(x.tint ?? [1, 1, 1]);
+      const m = new B.StandardMaterial(pbr.name, scene);
+      m.diffuseTexture = pbr.albedoTexture ?? null;
+      m.specularColor = new B.Color3(0, 0, 0);
+      if (x.ground) { m.emissiveColor = tint.scale(1 - keyShare); m.diffuseColor = tint; } else { m.disableLighting = true; m.emissiveColor = tint; }
+      if (pbr.emissiveTexture) {
+        m.lightmapTexture = pbr.emissiveTexture;          // keeps the glTF's texCoord 1
+        m.lightmapTexture.level = info.lmLevel ?? 1;
+        m.useLightmapAsShadowmap = true;
+      }
+      else if (x.kind === 'vc' || x.kind === 'flat') {
+        // Vertex colours hold the light ÷ lmLevel; a 1×1 white lightmap carries the level (the fence just gets the court's).
+        m.lightmapTexture = white;
+        m.useLightmapAsShadowmap = true;
+        if (x.kind === 'flat') { m.lightmapTexture = white.clone(); m.lightmapTexture.level = info.court ?? 1; }
+      }
+      if (x.alpha) { m.diffuseTexture.hasAlpha = true; m.useAlphaFromDiffuseTexture = true; m.backFaceCulling = false; }
+      else m.backFaceCulling = pbr.backFaceCulling;
+      made.set(pbr, { m, ground: !!x.ground });
+    }
+    const { m, ground: isGround } = made.get(pbr);
+    mesh.material = m;
+    lit.push(mesh);
+    if (isGround) { mesh.receiveShadows = true; ground.push(mesh); }
+    mesh.freezeWorldMatrix();
+  }
+  for (const pbr of made.keys()) pbr.dispose(false, false);
+
+  // The sky: the same HDRI, tone-mapped, on a dome that stays centred on the camera.
+  const dome = B.MeshBuilder.CreateSphere('skyDome', { diameter: 180, segments: 24, sideOrientation: B.Mesh.BACKSIDE }, scene);
+  const dm = new B.StandardMaterial('skyDomeM', scene);
+  dm.emissiveTexture = new B.Texture('/boxing/models/court_sky.webp', scene);
+  dm.emissiveTexture.uScale = -1;                         // seen from inside
+  dm.disableLighting = true; dm.fogEnabled = false; dm.specularColor = new B.Color3(0, 0, 0);
+  dome.material = dm; dome.infiniteDistance = true; dome.isPickable = false;
+
+  // Canvas-drawn pieces on top of the bake: unlit, at about the brightness of the light the bake gives their surface.
+  const flat = (name, tex, level, { alpha = false, twoSided = false } = {}) => {
+    const m = new B.StandardMaterial(name, scene);
+    m.diffuseTexture = tex; m.disableLighting = true; m.emissiveColor = new B.Color3(level, level, level);
+    m.specularColor = new B.Color3(0, 0, 0);
+    if (alpha) { tex.hasAlpha = true; m.useAlphaFromDiffuseTexture = true; }
+    m.backFaceCulling = !twoSided;
+    return m;
+  };
+  const F = COURT.half;
+  const lines = B.MeshBuilder.CreateGround('paint', { width: F * 2, height: F * 2 }, scene);
+  lines.position.y = 0.006; lines.receiveShadows = true;
+  const lm = new B.StandardMaterial('paintM', scene);
+  lm.diffuseTexture = courtLinesTexture(B, scene, F * 2); lm.useAlphaFromDiffuseTexture = true;
+  const paint = 0.82;
+  lm.diffuseColor = new B.Color3(paint, paint, paint); lm.emissiveColor = lm.diffuseColor.scale(1 - keyShare);
+  lm.specularColor = new B.Color3(0, 0, 0);
+  lines.material = lm; ground.push(lines); lit.push(lines);
+  const tags = [['STREET KINGS', '#ff2d95', '#14081a'], ['UPTOWN', '#ffd23f', '#1a1206'], ['BROOKLYN', '#19e3ff', '#04161a'], ['BX 4 LIFE', '#a6ff3a', '#0d1a05']];
+  tags.forEach(([word, fill, line], side) => {
+    const piece = wallPlace(B, B.MeshBuilder.CreatePlane('graffiti', { width: 5.5, height: 2.1 }, scene), side, 3 - side * 1.2, 1.9, 0.05);
+    piece.material = flat('graffitiM' + side, graffitiTexture(B, scene, 'graffitiTex' + side, word, fill, line), 0.7, { alpha: true });
+  });
+  const shop = wallPlace(B, B.MeshBuilder.CreatePlane('bodegaWindow', { width: 4.2, height: 2.1 }, scene), 0, -6.5, 1.45, 0.04);
+  shop.material = flat('bodegaM', bodegaTexture(B, scene), 0.9);
+  const valance = wallPlace(B, B.MeshBuilder.CreatePlane('awningValance', { width: 6.2, height: 0.42 }, scene), 0, -5.4, 2.62, 1.4);
+  valance.material = flat('awningValanceM', signTexture(B, scene, 'awningTex', 'DELI · GROCERY · 24 HR', '#1f4d36', '#f4f1e8', 1024, 72, 'bold 44px "Helvetica Neue", Arial, sans-serif'), 0.62);
+  for (const [text, yaw, y] of [['LENOX AV', 0, 3.1], ['W 125 ST', Math.PI / 2, 3.35]]) {
+    const blade = B.MeshBuilder.CreatePlane('streetSign', { width: 1.5, height: 0.26 }, scene);
+    blade.material = flat('streetSignM' + text, signTexture(B, scene, 'streetSignTex' + text, text, '#0b6b3a', '#ffffff', 512, 96, 'bold 62px "Helvetica Neue", Arial, sans-serif'), 0.75, { twoSided: true });
+    blade.position.set(-11, y, 11); blade.rotation.y = yaw;
+  }
+  const subway = B.MeshBuilder.CreatePlane('subwaySign', { width: 1.9, height: 0.42 }, scene);
+  subway.material = flat('subwaySignM', signTexture(B, scene, 'subwaySignTex', 'SUBWAY', '#111111', '#ffffff', 512, 112, 'bold 74px "Helvetica Neue", Arial, sans-serif'), 0.8);
+  subway.position.set(-LOOK.yardM + 1.625, 2.05, -8); subway.rotation.y = -Math.PI / 2;
+
+  steamFrom(B, scene, new B.Vector3(-10.2, 1.75, 3.5));
+  const crowd = buildCrowd(B, scene);
+  return {
+    ground: lines, crowd, lit, skyUp: info.skyUp,
+    update(t, dt) { crowd.update(t, dt); },
+  };
 }
 
 /**
@@ -1110,7 +1234,7 @@ export async function createArena3D({ parent, sim, names = {}, timeOfDay = 'day'
 
   const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true, antialias: true }, true);
   const scene = new B.Scene(engine);
-  let key, shadow;
+  let key, shadow, hemi;
   if (night) {
     // Night: a dark blue sky glow and a damp haze that the lamps bleed into.
     const haze = new B.Color3(0.05, 0.055, 0.085);
@@ -1138,7 +1262,7 @@ export async function createArena3D({ parent, sim, names = {}, timeOfDay = 'day'
     scene.clearColor = new B.Color4(sky.r, sky.g, sky.b, 1);
     scene.ambientColor = new B.Color3(0.35, 0.36, 0.38);
     scene.fogMode = B.Scene.FOGMODE_EXP2; scene.fogDensity = 0.012; scene.fogColor = sky;
-    const hemi = new B.HemisphericLight('overcast', new B.Vector3(0, 1, 0), scene);
+    hemi = new B.HemisphericLight('overcast', new B.Vector3(0, 1, 0), scene);
     hemi.intensity = 1.05; hemi.diffuse = new B.Color3(0.95, 0.97, 1); hemi.groundColor = new B.Color3(0.42, 0.42, 0.42);
     hemi.specular = new B.Color3(0.05, 0.05, 0.05);
     key = new B.DirectionalLight('cloudSun', new B.Vector3(0.25, -1, 0.35), scene);
@@ -1148,7 +1272,22 @@ export async function createArena3D({ parent, sim, names = {}, timeOfDay = 'day'
     shadow.useBlurExponentialShadowMap = true; shadow.blurKernel = 48; shadow.darkness = 0.25;
   }
 
-  const arena = buildStreet(B, scene, shadow, { night });
+  // Day: the court baked in Blender (models/court.glb). Night, or if the bake fails to load: the procedural street.
+  let arena = null;
+  if (!night) {
+    try {
+      arena = await buildBakedCourt(B, scene, key);
+      hemi.excludedMeshes.push(...arena.lit);         // the bake already holds the sky's light
+      if (arena.skyUp) {
+        // Tint the fighters' fill with the HDRI's own sky colour.
+        const peak = Math.max(...arena.skyUp);
+        hemi.diffuse = new B.Color3(...arena.skyUp.map((c) => (c / peak) ** (1 / 2.2)));
+      }
+    } catch (err) {
+      console.warn('baked court unavailable, using the procedural street:', err);
+    }
+  }
+  arena ??= buildStreet(B, scene, shadow, { night });
   mergeStatic(B, scene, shadow, [arena.ground]);
 
   // Rigged Quaternius boxers when the models load; the primitive boxers otherwise.

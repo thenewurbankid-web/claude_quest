@@ -102,36 +102,41 @@ night toggle**.
   rooftop shot. The paint seams at the garment edges are jagged (they read as frayed). The primitive fallback fighters
   don't get outfits.
 
+## Done (2026-10-03): the day court baked in Blender (job 1 of the last list)
+
+User: "please make the 3d photorealistic", "use blender and texture mapping"; picked "environment bake first". Fighters
+and crowd are unchanged. Approved changes from the plan: no roughness maps (a baked diffuse court never reads them) and no
+`.env` (the fighters are StandardMaterial; the HDRI is used for a sky dome and the fill colour instead).
+- `scripts/bake-court.py` (Blender 5.2, headless): `/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup
+  --python scripts/bake-court.py -- [--quick] [--samples N] [--court 1.35]`, then `node scripts/build-court.mjs`.
+  Full bake about 1 min on the M5 GPU (Metal); `--quick` is 10 s and noisy. Writes `assets-src/build/` (git-ignored,
+  includes `court.blend` to inspect), then `public/boxing/models/court.glb` (3.3 MB) and `court_sky.webp` (118 KB).
+- The script models the court in Babylon coordinates (`C()` converts) at `buildStreet()`/`buildNewYork()`'s layout:
+  court, street ring, sidewalk and curb, tenements with recessed windows (frame, glass, meeting rail), lintels, sills,
+  AC units, bars, fire escapes with slatted decks and stairs, cornices, roofs, roller doors, fence and posts, hoop and
+  chain net, trees with leaf cards, lamppost, cars, dumpster, pallets, awning, water tower, hydrant, trash bags, Con Ed
+  stack, subway posts. Moved slightly so nothing sinks into the 15 cm sidewalk: manhole/stack at x −10.2, hydrant at 11.3.
+- Light: Poly Haven `bethnal_green_entrance` HDRI only. Groups: `court_ground`, `court_walls`, `court_props` get
+  lightmaps on UV1 (2048/2048/1024, Smart UV + concave repack); `court_details`, `court_leaves` get per-corner vertex
+  colours; `court_fence` is unbaked. Light = Cycles diffuse direct+indirect × (0.55 + 0.45 AO). Exposure is calibrated
+  so the court centre comes out at 1.35 × albedo (what the procedural day hemi + key gave). Encoding in the file header;
+  `court_info` extras carry `lmLevel`, `court`, `exposure`, `skyUp`.
+- Babylon: `buildBakedCourt()` in `arena-babylon.js` turns every glTF material into an unlit StandardMaterial
+  (emissive = `tint` extra × albedo × lightmap × `lmLevel`; vertex-colour materials get a 1×1 white lightmap that
+  carries the level). Ground materials keep the key light's share so fighters and crowd still cast contact shadows; the
+  hemi fill excludes the court and takes the HDRI's sky colour. Signs, graffiti, court lines, steam and the crowd stay
+  procedural on top. Night, or a failed load, uses `buildStreet()` (checked by moving `court.glb` away).
+- Two traps: the glTF loader uploads colour images as sRGB buffers, which StandardMaterial (gamma space) draws far too
+  dark, so the court loads with `useSRGBBuffers = false`. In Blender, set an image's colour space before writing its
+  pixels; setting it afterwards clears them.
+- Checked at 1280×720 (hard, rooftop, ringside): about 6.5 ms a frame at 2560×1440, `npm test` 93 pass.
+- Not done: the trees are still sparse cards, the cars are boxes, the onlookers are unchanged, and night isn't baked.
+
 ## Next jobs
 
-1. **Photorealistic environment, baked in Blender** (user, 2026-10-03: "please make the 3d photorealistic", "use
-   blender and texture mapping"; picked "environment bake first"; fighters and crowd stay as they are for now).
-   - Blender 5.2.2 LTS is installed at `/Applications/Blender.app` (no `blender` on PATH). Run it headless:
-     `/Applications/Blender.app/Contents/MacOS/Blender -b --python scripts/<script>.py`. Keep the build scripts in the
-     repo (like `scripts/build-boxing-models.mjs`) so the scene can be rebuilt.
-   - Rebuild the static court in Blender to the same layout and dimensions as `buildStreet()`/`buildNewYork()`
-     (`COURT.half` 9.6, hoop at `COURT.baselineZ` 9, `LOOK.yardM` 13, `LOOK.wallH` 17, 5 floors, window grid
-     −Y+2+3.1k × 4.4+2.6f). That covers the court, sidewalks and curbs, tenements with real window recesses, lintels,
-     sills, fire escapes, AC units, the fence and posts, the hoop and backboard, trees, the deli and awning, the
-     hydrant, the cab and the dumpster. Give it proper UVs (Smart UV Project or box mapping for the architecture) and
-     matte PBR materials from Poly Haven (CC0; the colour, normal and *roughness* maps, kept high-roughness: the user
-     wants no shine).
-   - Light it with a CC0 overcast HDRI from Poly Haven (pick one that matches the photo: grey, soft, slightly cool).
-     Bake Cycles lighting (diffuse with direct and indirect light, plus AO) into lightmaps or combined textures for
-     the static meshes, then export a GLB (Draco or meshopt, with WebP textures; keep it to a few MB) to
-     `public/boxing/models/court.glb`. Record every asset in a CREDITS file.
-   - Babylon side: `createArena3D` loads `court.glb` for the day scene in place of the procedural meshes. Use the
-     baked textures as lightmaps or emissive/unlit so the real-time lights don't double them, light only the fighters
-     and crowd in real time, and use the same HDRI (converted to a prefiltered `.env`) as the environment for them.
-     Keep the procedural `buildStreet()` as the fallback if the GLB fails to load, and for night until night is baked
-     too.
-   - Downloads need the user's yes with name, source and size. The user has already said "you can download" for CC0
-     textures; still list each file before fetching it.
-   - Compare against the reference photo (description under "the reference photo rebuilt" above) at the hard camera,
-     1280×720.
-   - Later, step 2 (not picked yet): realistic people from Blender's MPFB (MakeHuman) add-on, which has CC0 output and
-     clothing assets; its game rig uses UE-style bone names like the Quaternius clips. Character creation would then
-     be built on those models.
+1. **Realistic people from Blender** (not picked yet; step 2 after the bake): Blender's MPFB (MakeHuman) add-on has CC0
+   output and clothing assets, and its game rig uses UE-style bone names like the Quaternius clips. Character creation
+   would then be built on those models.
 
 2. **Character creation, looks + name only** (picked by the user). The sim is untouched. The outfit options are the
    photo's (user: "the outfits will be the ones in the photo"): top style (tee, tank, varsity, hoodie) and colours,

@@ -11,4 +11,5 @@ Downloaded 2026-10-03 at 1k JPG and resized to 512 px WebP by hand (sharp). `*_d
 | sidewalk_* | concrete_floor_worn_001 | sidewalks |
 | rust_* | rusty_metal_02 | barrels, dumpster |
 
-Not wired into the scene yet (see HANDOFF.md).
+These are wired into the procedural court (`buildStreet()`) and, through `scripts/bake-court.py`, into the baked
+`models/court.glb`; the bake's extra Poly Haven files (HDRI, concrete, bark) are listed in `../models/CREDITS.md`.

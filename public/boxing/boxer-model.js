@@ -11,7 +11,7 @@ import { v, add, sub, mul, len, norm, clamp, solveTwoBone } from './pose-math.js
 const LOADER_SRC = '/vendor/babylonjs-loaders/babylon.glTF2FileLoader.min.js';
 let loaderPromise = null;
 
-function loadGltfLoader(B) {
+export function loadGltfLoader(B) {
   if (B.SceneLoader.IsPluginForExtensionAvailable?.('.glb')) return Promise.resolve();
   loaderPromise ??= new Promise((resolve, reject) => {
     const s = document.createElement('script');
