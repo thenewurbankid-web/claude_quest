@@ -16,12 +16,17 @@
 // Keeper in that slot; the prompt then waits on the /work page (work.html). The Ember meter and the Recall Bell (B)
 // sit in a dock at the bottom left. ?lore=<folder/> reads a lore folder
 // (?lore alone: the sample cell, with &cell=gcpv to stand in it); with no folder yet, only the calendar is posted.
+// R5: Missions. The current mission (play.missions in 'quest-play', checked by playFromSave) follows the ledger: briefing
+// and debrief are spoken by the Work's Keeper, the HUD shows it, the notice board has a Missions tab. Past rules.pressureGate
+// the pressure gate hides lore quests and the lore tab and keeps the player in the old town ('quest:explore'); /work,
+// Riddles, the Lodge, the Recall Bell and saves are never gated. A summoned Keeper joins on its first approved Work.
+// A finished saga opens its Sealed Hall by itself (status.js sealedHalls).
 import { openLedger } from './ledger-idb.js';
 import { mountLedgerPanel } from './ledger-panel.js';
 import { mountBeaconHud } from './beacon-hud.js';
 import { mountStatsBoard } from './stats-board.js';
 import { beacon } from './status.js';
-import { applyChanges, DEFAULT_RULES, isGameOnly } from './contract.js';
+import { applyChanges, DEFAULT_RULES, isGameOnly, playFromSave } from './contract.js';
 import { riddleNpcs, riddleContext, tickRiddles, trueSight, riddleStanding } from './riddles.js';
 import { mountConversation } from './conversation.js';
 import { startOutbox, mountOutbox } from './outbox.js';
@@ -32,6 +37,9 @@ import { playtestRealm } from './playtest.js';
 import { geohash, cellAndNeighbours, fetchAreaLore, boardLore, loreChanges, riddleId as loreRiddleId, LORE_MARCH } from './area-lore.js';
 import { mountTownBoard } from './town-board.js';
 import { mountStartWork, mountEmberReadout, mountRecallBell } from './keeper-hud.js';
+import { missionsOf, begin, tickMission, hearBriefing, hearDebrief, gated } from './missions.js';
+import { mountMissionHud, hudView, talk as missionTalk } from './mission-hud.js';
+import { joinSummoned } from './keeper-controls.js';
 import { place } from '../3d/clock.js';
 
 const store = await openLedger();
@@ -187,10 +195,13 @@ addEventListener('quest:board', async () => {
   lock(true);
   let pick = null;
   try {
+    const l = await store.snapshot(), now = new Date();
     pick = await townBoard.show(await boardRows(), { guessed: !!place().guessed && !qs.get('cell'), calendar: loreShown.calendar,
-      onUsePlace: usePlace });
+      onUsePlace: usePlace, missions: missionsOf(l, mp, now, rules), gated: gated(l, now, rules), gate: rules.pressureGate,
+      current: mp.current, onBegin: async id => { const r = begin(mp, await store.snapshot(), id, new Date()); if (!r.problem) await commitMp(r); } });
   } finally { lock(false); }
-  if (pick) dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: pick } }));
+  settleMission();
+  if (pick && !gated(await store.snapshot(), new Date(), rules).gated) dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: pick } }));
 });
 
 // ---------- R4: Bring your Keeper ----------
@@ -211,6 +222,7 @@ addEventListener('quest:talk', async e => {
   if (talking || battle.open) return; // a log click during a fight is ignored
   const l = await store.snapshot();
   const npc = riddleNpcs(l).find(n => n.riddle.id === e.detail?.riddleId);
+  if (npc && isGameOnly(npc.riddle) && gated(l, new Date(), rules).gated) return; // lore quests are locked under pressure
   if (!npc) {
     // picked from the Beacon log but not answerable now: say where it stands instead
     if (e.detail?.from !== 'log' || !l.riddles.some(r => r.id === e.detail.riddleId)) return;
@@ -288,3 +300,54 @@ const maybeSummon = async () => {
 };
 setTimeout(maybeSummon, 8000);
 setInterval(maybeSummon, 15_000);
+
+// ---------- R5: Missions ----------
+const loaded = playFromSave({ play: loadPlay() });
+if (loaded.problems.length) {
+  console.warn('quest-play: the saved missions were unsound and start empty:', loaded.problems.map(p => `${p.path} ${p.problem}`).join('; '));
+  keep({ missions: loaded.play.missions });
+}
+let mp = loaded.play.missions;
+const missionHud = mountMissionHud(document.body);
+async function commitMp(r) {
+  mp = r.mp;
+  keep({ missions: mp });
+  if (r.events.length) await applyChanges(store, { puts: [], events: r.events });
+}
+let missionBusy = false;
+async function settleMission() {
+  if (missionBusy) return;
+  missionBusy = true;
+  try {
+    const l = await store.snapshot();
+    await commitMp(tickMission(mp, l, new Date()));
+    const run = mp.current && mp.runs[mp.current];
+    if (run && ['briefing', 'debrief'].includes(run.state) && !talking && !battle.open) {
+      lock(true);
+      try {
+        await missionTalk(talk, run.state, l, mp, run.id, new Date(), rules);
+        await commitMp(run.state === 'briefing' ? hearBriefing(mp, new Date()) : hearDebrief(mp, new Date()));
+      } finally { lock(false); }
+    }
+    missionHud.update(hudView(await store.snapshot(), mp, new Date(), rules));
+  } catch (err) { console.warn('mission:', err.message); } finally { missionBusy = false; }
+}
+let lastGate = null;
+async function tellGate() {
+  const l = await store.snapshot();
+  const locked = gated(l, new Date(), rules).gated;
+  if (locked === lastGate) return;
+  lastGate = locked;
+  window.__questExploreLocked = locked; // read by the scene if it builds after the first event
+  dispatchEvent(new CustomEvent('quest:explore', { detail: { locked } }));
+}
+let joining = false;
+async function joinKeepers() {
+  if (joining) return;
+  joining = true;
+  try { const c = joinSummoned(await store.snapshot(), new Date()); if (c.puts.length || c.events.length) await applyChanges(store, c); } finally { joining = false; }
+}
+const onLedger = () => { joinKeepers(); settleMission(); tellGate(); };
+store.subscribe(onLedger);
+onLedger();
+setInterval(onLedger, 30_000);

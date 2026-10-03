@@ -11,7 +11,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { SquareGrid } from './grid.js';
-import { HUB, SOLID, START, KEEPER_SPOTS } from './hub.js';
+import { HUB, SOLID, START, KEEPER_SPOTS, TOWN } from './hub.js';
 import { dayPhase, clockLabel } from './clock.js';
 import { createAtmosphere } from './atmosphere.js';
 import { LOOK } from './look.js';
@@ -318,10 +318,16 @@ function play(a, name) {
 const treeCells = new Set();
 const free = (c, r, a) => (a?.swims ? at(c, r) === '~' : !SOLID.has(at(c, r)) && !treeCells.has(c + ',' + r)) && !actors.some(o => (o.c === c && o.r === r))
   && !(villager.visible && villagerCell && villagerCell[0] === c && villagerCell[1] === r);
+// R5: under pressure ('quest:explore' { locked }) the player keeps to the old town in the middle of the map; a player
+// already outside may walk back in or along, never further out. Nothing else is locked.
+let exploreLocked = !!window.__questExploreLocked;
+addEventListener('quest:explore', e => { exploreLocked = !!e.detail?.locked; });
+const inTown = (c, r) => c >= TOWN[0] && c < TOWN[0] + 24 && r >= TOWN[1] && r < TOWN[1] + 16;
 function tryMove(a, dir) {
   a.dir = dir;
   const [c, r] = grid.step(a.c, a.r, dir);
   if (!free(c, r, a)) return false;
+  if (exploreLocked && a === player && inTown(a.c, a.r) && !inTown(c, r)) return false;
   a.from = grid.toWorld(a.c, a.r); a.to = grid.toWorld(c, r); a.c = c; a.r = r; a.k = 0;
   return true;
 }
