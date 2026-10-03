@@ -142,11 +142,41 @@ Built in 9717ad6 (WIP) and finished here. `boxer-model.js`: `LOOK_OPTIONS`, `nor
 `arena-babylon.js`: the overlay now has a loading card ("Setting up the fight", plus "Night takes a little longer the first time" at night). `createArena3D` awaits `scene.whenReadyAsync()` (capped at 60 s) before starting the render loop, so the shaders compile behind the card instead of a frozen page; the card fades out and removes itself. All views and both times of day get it. No lights removed, look unchanged. `npm test` passes (96); no test covers it (needs WebGL).
 - **Untested in a browser**: that the card shows during night's compile, that the page stays responsive, how long night actually takes now, the card at 375px, and that day still starts without a visible flash.
 
+## Done (2026-10-04): realistic people from Blender (BOX-3)
+
+Gate passed first: MPFB 2.0.17 installs from extensions.blender.org with no login, and its base mesh, rig and the `*_cc0.zip`
+asset packs are CC0 (add-on code is GPL-3.0 but only runs at build time). It is installed into Blender's user config
+(`~/Library/Application Support/Blender/5.2/extensions/.user/user_default/mpfb`); the zips are in `assets-src/mpfb/` (git-ignored).
+- `scripts/build-mpfb-boxer.py` (headless Blender; setup and run commands in its docstring) builds a male human on MPFB's
+  `game_engine` rig (UE bone names), one skinned mesh per garment option, poses it into the Quaternius T-pose and bakes that
+  in, then gives every bone its Quaternius name (`root`, `Head`) and rest orientation, so `anims.glb` plays unchanged. It
+  refuses any asset without a CC0 line in its header. The spine pivots are moved to the Quaternius heights (MPFB's sit low and
+  the head swung 15 cm too far). `scripts/_glbdump.py` reads glTF node matrices through Blender. Then
+  `node scripts/build-mpfb-models.mjs` writes `public/boxing/models/person.glb` (3.2 MB: 16 meshes, 53 joints, WebP 1024 px,
+  hair/brows/lashes alpha-tested) and `person_skin_light|medium|deep.webp`. Licences and authors: `models/CREDITS.md`.
+- `boxer-model.js`: `loadBoxerAssets` tries `person.glb` and falls back to `boxer.glb` (`assets.person` says which).
+  `ModelBoxer` with the person: shows only the meshes `personParts(look)` lists, tints garments with `diffuseColor = hex / 0.8`
+  (textures are baked grey at mean 0.8), swaps the skin texture by tone, no `paintOutfit`, no procedural trunks/boots (real jeans
+  and shoes), keeps the procedural cap, chain, wraps and gloves. `ModelRig.ownBones`: the clips carry a translation for every
+  bone, which would stretch another skeleton, so the person keeps its own bone offsets and takes only root/pelvis motion
+  (`CLIP_REST`). `standOn()` computes a `lift` so the soles stand on y = 0 (legs are shorter than the clips' character).
+- Look mapping (my choices, not asked): `tee` and `tank` are the same T-shirt (tank without sleeves); `varsity` is a casual
+  jacket (texture-driven, tintable, `sleeve` colour on its sleeves); `hoodie` is a knit fisherman sweater. Hair is picked by
+  skin tone (brown `short02` for light, black `short01` for medium and deep) and hidden under a cap. No new look option.
+- Tests (4 new, `npm test` 100 pass): person.glb has every garment a look can show and the clip bones; `personParts` and
+  `personTint`; the existing clips pose the person in Babylon's NullEngine (finite bones, soles near 0, fists reach forward on
+  every punch, every clip); fallback to `boxer.glb` when `person.glb` fails.
+- **Untested in a browser** (Babylon ran headless in Node, numbers only, nothing was rendered): how the person looks (texture
+  colours, tint strength, hair, jacket vs sleeves, jeans cut, shoes against the floor), skin tones, poses mid-punch (skinning
+  stretch at the shoulders and spine pivots), gloves and wraps against the hands, the cap on the head, the guard and punch
+  heights (they were tuned on the Quaternius body; head is 1.49 m in the stance vs 1.46), shadows and alpha-tested hair, the look
+  preview at 375px, the fallback in a real 404, load time (3.2 MB).
+- Known gaps: the head leans a few cm forward of the Quaternius stance; the T-shirt's tank/tee share one mesh; the primitive
+  fallback is unchanged.
+
 ## Next jobs
 
-1. **Realistic people from Blender** (not picked yet; step 2 after the bake): Blender's MPFB (MakeHuman) add-on has CC0
-   output and clothing assets, and its game rig uses UE-style bone names like the Quaternius clips. Character creation
-   would then be built on those models.
+1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
 
 2. Balance (see Open issues).
 
