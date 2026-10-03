@@ -4,3 +4,6 @@ config.json
 dist/
 public/packs/
 .orbit/
+
+# Sprite Lab: the Sunnyside World licence forbids sharing it, so it stays local (dev/dashboard.js serves it)
+dev/dashboard/local/

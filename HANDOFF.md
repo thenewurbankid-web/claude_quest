@@ -4,17 +4,16 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
-**In progress (2026-10-04, after /compact): a local Paperclip dashboard (user).** A page on localhost (not an artifact)
-that reads Paperclip at 127.0.0.1:3100 directly and refreshes every few seconds.
-- Pulse: Quest Dev running, idle or blocked, its current run and when it was last seen.
-- Overall progress: the CLA issues per release, R4.5 to R9+.
-- A feed of outcome comments, plus the latest commits on `3d-world`.
-
-User: "unify with and retire, keep whats needed in the new one". Read the three Quest artifacts first (Quest
-3bQdUCKJXB7rcynecnmsu3, Quest Engine Council AAGAmGpWg3xcvDj3XgX577, Ember Hollow Sprite Lab KXfCSDFdAg5UmzaeFCnYfP),
-carry over what's still needed, then republish each as a short "retired" page that points to the local dashboard.
-Paperclip sends no CORS header, so the page needs a tiny same-origin proxy (a dev/ static server route); check
-`dev/static.js` first. Quest Dev (Paperclip) is building R5 as CLA-2..4; don't edit its files while it runs.
+**Done (2026-10-04): Quest Pulse, a local Paperclip dashboard (user).** `node dev/dashboard.js` (launch config
+`quest-pulse`, port 4795) serves `dev/dashboard/index.html`, refreshing every 5 s:
+- Quest Dev's pulse, releases R0 to R9+ (matched to Paperclip issues by title prefix), issues with their latest comment,
+  runs, and the latest `3d-world` commits.
+- `/pc/*` is a GET-only proxy to Paperclip, because Paperclip sends no CORS header.
+- The Sprite Lab is kept at `dev/dashboard/local/sprite-lab.html`, which is git-ignored because its sprite pack's
+  licence forbids sharing it.
+- The three Quest artifacts are republished as "retired" pages that point here.
+- The public name is now **A Vibe Called Quest** (`8ba453d`); code names are unchanged.
+- Open: Paperclip's parent issue CLA-1 is still `todo` although CLA-2..4 are done.
 
 **R5 integration done (CLA-4, 2026-10-04):** `boot.js` loads missions with `playFromSave` (warns, never refuses), runs `tickMission`/`joinSummoned`/the gate on every ledger change and every 30 s, mounts the HUD and the board's Missions tab (Go on it → briefing by the Keeper; debrief when all Works resolve). Gated: lore riddles refuse `quest:talk`, Town news shows the Haze line, and `scene.js` keeps the player inside the old town (`quest:explore`). A finished saga opens its Sealed Hall through `sealedHalls` (no extra wiring). `npm test` 170 pass. **Untested in the browser:** everything here: the Missions tab, Go on it → briefing, debrief, HUD position (top-left, may overlap other HUDs), the explore lock at the town edge (set a Hall `dueAt` soon so pressure >= 0.75), summoned Keeper joining, 375px. **Next:** R5 browser check on `quest-static` (4790), then R4.5 The Bridge.
 **R5 UI built (CLA-3, 2026-10-04):** `mission-hud.js` (HUD, `briefingLines`/`debriefLines` spoken by the Work's Keeper through `conversation.say`, `talk`), a Missions tab in `town-board.js` (opts `missions`, `gated`, `onBegin`; gated Town news shows the Haze line), and `dev-missions.html`. No `boot.js`/`scene.js` edits. `npm test` 170 pass. **Untested in the browser:** the whole Missions tab, HUD position (top-left, may sit near other HUDs), briefing/debrief boxes, 375px. **Next:** CLA-4, R5 integration (also: the gated Town news must hide lore quests too; open the Sealed Hall on a finished saga).
