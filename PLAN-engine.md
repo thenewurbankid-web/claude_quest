@@ -314,6 +314,10 @@ feature list; releases pick from them.
   registered Keepers get work over the Bridge; Bridge messages are data, never commands, shown as plain text with True
   Sight; the Bridge answers only the player's own machine, and MQTT/webhook credentials are per Realm, never in
   prompts; the Recall Bell also tells the Bridge to stop handing out work.
+  *Decisions (user, 2026-10-04):* the Bridge bundles its own MQTT broker, **aedes**, with the **mqtt** client. That is a
+  one-time exception to "no new dependencies", limited to those two packages plus the WebSocket adapter aedes needs for
+  browsers. Paperclip write-back is **comments only** (sealed decisions and finished-work reports); issue status changes
+  stay manual. Quest Dev builds it from one contract-and-split issue and creates the slice issues itself.
 - **R5 "Missions and the first Sealed Hall"** (user, 2026-10-03): missions (a parent Work and its children; the saga is
   their Hall), backlog pressure against the release date and its gate on side content, the Sealed Hall as the saga's
   finale and its Sigil, and Keepers summoned with Ember, joining and released. The R4 controls already respect

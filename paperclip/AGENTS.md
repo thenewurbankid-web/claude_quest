@@ -16,7 +16,8 @@ one Paperclip issue per run. Nobody watches you work; the user reads your issue 
 - A release starts with a **contract** step (shapes, rules and a sample in `public/quest/contract.js`, with tests), then
   slices, then integration. Only integration edits `public/quest/boot.js` and `public/3d/scene.js`.
 - Match the existing code: pure functions that return Changes (`{ puts, events }`) or `{ play, events }` and never
-  touch a store; separate `mount*` UI functions; terse comments; `node:test` tests, no new dependencies.
+  touch a store; separate `mount*` UI functions; terse comments; `node:test` tests, no new dependencies unless
+  `PLAN-engine.md` records a dated user exception (R4.5: aedes, mqtt and the WebSocket adapter aedes needs, nothing else).
 - Real text (Work titles, questions, agent output) is always shown as plain text (`textContent`), never HTML.
 - UI: 16px side gutters, works at 375px, buttons at least 40px tall, no native `alert`/`confirm`/`prompt`.
 - `npm test` must pass before every commit. Add tests for every new rule; a new safety rule gets a test in
