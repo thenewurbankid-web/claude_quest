@@ -104,14 +104,43 @@ night toggle**.
 
 ## Next jobs
 
-1. **Character creation, looks + name only** (picked by the user). The sim is untouched. The outfit options are the
+1. **Photorealistic environment, baked in Blender** (user, 2026-10-03: "please make the 3d photorealistic", "use
+   blender and texture mapping"; picked "environment bake first"; fighters and crowd stay as they are for now).
+   - Blender 5.2.2 LTS is installed at `/Applications/Blender.app` (no `blender` on PATH). Run it headless:
+     `/Applications/Blender.app/Contents/MacOS/Blender -b --python scripts/<script>.py`. Keep the build scripts in the
+     repo (like `scripts/build-boxing-models.mjs`) so the scene can be rebuilt.
+   - Rebuild the static court in Blender to the same layout and dimensions as `buildStreet()`/`buildNewYork()`
+     (`COURT.half` 9.6, hoop at `COURT.baselineZ` 9, `LOOK.yardM` 13, `LOOK.wallH` 17, 5 floors, window grid
+     −Y+2+3.1k × 4.4+2.6f). That covers the court, sidewalks and curbs, tenements with real window recesses, lintels,
+     sills, fire escapes, AC units, the fence and posts, the hoop and backboard, trees, the deli and awning, the
+     hydrant, the cab and the dumpster. Give it proper UVs (Smart UV Project or box mapping for the architecture) and
+     matte PBR materials from Poly Haven (CC0; the colour, normal and *roughness* maps, kept high-roughness: the user
+     wants no shine).
+   - Light it with a CC0 overcast HDRI from Poly Haven (pick one that matches the photo: grey, soft, slightly cool).
+     Bake Cycles lighting (diffuse with direct and indirect light, plus AO) into lightmaps or combined textures for
+     the static meshes, then export a GLB (Draco or meshopt, with WebP textures; keep it to a few MB) to
+     `public/boxing/models/court.glb`. Record every asset in a CREDITS file.
+   - Babylon side: `createArena3D` loads `court.glb` for the day scene in place of the procedural meshes. Use the
+     baked textures as lightmaps or emissive/unlit so the real-time lights don't double them, light only the fighters
+     and crowd in real time, and use the same HDRI (converted to a prefiltered `.env`) as the environment for them.
+     Keep the procedural `buildStreet()` as the fallback if the GLB fails to load, and for night until night is baked
+     too.
+   - Downloads need the user's yes with name, source and size. The user has already said "you can download" for CC0
+     textures; still list each file before fetching it.
+   - Compare against the reference photo (description under "the reference photo rebuilt" above) at the hard camera,
+     1280×720.
+   - Later, step 2 (not picked yet): realistic people from Blender's MPFB (MakeHuman) add-on, which has CC0 output and
+     clothing assets; its game rig uses UE-style bone names like the Quaternius clips. Character creation would then
+     be built on those models.
+
+2. **Character creation, looks + name only** (picked by the user). The sim is untouched. The outfit options are the
    photo's (user: "the outfits will be the ones in the photo"): top style (tee, tank, varsity, hoodie) and colours,
    jeans wash, boots (Timberland-style, sneakers), cap (none, forward, backwards; colour), chain, wrap colour, skin
    tone. `paintOutfit()` and `PHOTO_OUTFITS` are the building blocks. Store a `look` with the fighter in Dexie and add
    it to `profileOf()` so it rides along in P2P `start` messages (`FighterModel` ignores unknown fields). Show a live
    preview with one `ModelBoxer` in a small scene.
-2. Night load time (see the known issues above).
-3. Balance (see Open issues).
+3. Night load time (see the known issues above).
+4. Balance (see Open issues).
 
 The user's decisions (2026-10-03):
 - **Renderer: Babylon.js**, not three.js and not Phaser. It should look like a real televised boxing match.
