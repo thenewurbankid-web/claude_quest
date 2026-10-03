@@ -318,6 +318,11 @@ feature list; releases pick from them.
   one-time exception to "no new dependencies", limited to those two packages plus the WebSocket adapter aedes needs for
   browsers. Paperclip write-back is **comments only** (sealed decisions and finished-work reports); issue status changes
   stay manual. Quest Dev builds it from one contract-and-split issue and creates the slice issues itself.
+  *Where it runs (user, 2026-10-04):* one Bridge core module (no top-level listen), hosted two ways: as a **Paperclip
+  plugin** worker (`@paperclipai/plugin-sdk`: Paperclip events pushed instead of polled, comments through
+  `ctx.issues.createComment`, and no `issues.update` capability, so write-back stays comments only), and **standalone**
+  (`npm run bridge`) for players without Paperclip, so Paperclip stays optional. The plugin is built and tested in the
+  repo; the user installs it into Paperclip (`paperclipai plugin install --local`).
 - **R5 "Missions and the first Sealed Hall"** (user, 2026-10-03): missions (a parent Work and its children; the saga is
   their Hall), backlog pressure against the release date and its gate on side content, the Sealed Hall as the saga's
   finale and its Sigil, and Keepers summoned with Ember, joining and released. The R4 controls already respect
