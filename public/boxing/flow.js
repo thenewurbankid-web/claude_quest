@@ -154,6 +154,8 @@ export const TACTIC_BLURB = {
   counter: 'Slip and return fire',
   body_attack: 'Dig to the ribs',
   recover: 'Catch your breath',
+  brawl: 'Swing wild, street style',
+  dirty_boxing: 'Clinch and work inside',
 };
 
 // ─── Settings ───────────────────────────────────────────────────────────────

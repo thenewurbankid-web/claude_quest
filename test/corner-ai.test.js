@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FighterModel, CombatSimulation, TACTICS } from '../public/boxing/physics-engine.js';
-import { emptyDamage, recordDamage } from '../public/boxing/flow.js';
+import { emptyDamage, recordDamage, TACTIC_BLURB } from '../public/boxing/flow.js';
 import {
   TACTIC_KEYS, PLAN_SCHEMA, validatePlan, extractJSON, parsePlan, parseBubbles, keywordPlan, resolveTactic, buildContext, suggestBubbles,
   normalizeAI, publicAI, sourceLabel, aiReady, listModels, askModel, testConnection, planFromText, aiBubbles, AI_KINDS, plannerMessages,
@@ -17,6 +17,11 @@ const ctxOf = (over = {}) => {
   });
   return { ...base, ...over, you: { ...base.you, ...over.you }, opponent: { ...base.opponent, ...over.opponent } };
 };
+
+test('every sim tactic has a blurb and a trainer line, so a new tactic cannot show as undefined', () => {
+  for (const k of Object.keys(TACTICS)) assert.ok(TACTIC_BLURB[k], `blurb for ${k}`);
+  for (const k of Object.keys(TACTICS)) assert.ok(keywordPlan({ recover: 'rest', outbox: 'jab', counter: 'counter', body_attack: 'body', pressure: 'pressure', brawl: 'brawl', dirty_boxing: 'clinch' }[k]).say);
+});
 
 test('the schema lists exactly the sim tactics, and every tactic key exists in the sim', () => {
   assert.deepEqual(PLAN_SCHEMA.properties.tactic.enum, Object.keys(TACTICS));
@@ -70,6 +75,8 @@ test('keyword fallback maps phrases to the right plan', () => {
   assert.equal(t('get on the outside'), 'outbox');
   assert.equal(t('walk him down, finish him'), 'pressure');
   assert.equal(t('catch your breath'), 'recover');
+  assert.equal(t('swing for the fences, brawl'), 'brawl');
+  assert.equal(t('tie him up and clinch'), 'dirty_boxing');
   assert.equal(t('you look tired, rest'), 'recover');
   assert.equal(keywordPlan('what is the weather'), null);
   assert.equal(keywordPlan(''), null);
