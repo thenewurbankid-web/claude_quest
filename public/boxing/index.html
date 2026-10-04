@@ -302,6 +302,17 @@
   .bag::before { content: ''; position: absolute; left: 50%; top: -36px; width: 3px; height: 36px; background: #777; }
   .bag.hit { animation: swing .35s ease-out; }
   @keyframes swing { 0% { transform: rotate(0) } 25% { transform: rotate(9deg) } 60% { transform: rotate(-4deg) } 100% { transform: rotate(0) } }
+  .bag.speedy { width: 56px; height: 96px; }
+  .bag.speedy.hit { animation-duration: .15s; }
+  .road { position: relative; height: 150px; margin: 14px 0; }
+  .road .core, .road .ring { position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 50%; }
+  .road .core { background: var(--accent); }
+  .road .core.hit { animation: swing .25s ease-out; }
+  .road .ring { border: 4px solid #d9a12b; will-change: transform; }
+  .spar { display: flex; justify-content: space-around; align-items: center; height: 150px; margin: 14px 0; }
+  .glove { width: 76px; height: 76px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #d44, #7a1c1c); border: 3px solid #2a0d0d; opacity: .45; transition: transform .12s, opacity .12s; }
+  .glove.load { opacity: 1; transform: scale(1.5); box-shadow: 0 0 22px #d9a12b; }
+  .hit-btn.half { flex: 1; }
   .hit-btn { min-height: 92px; font: 400 40px var(--display); letter-spacing: .1em; }
   .grade { font: 400 54px/1 var(--display); text-align: center; color: var(--accent-2); margin: 8px 0 0; }
   .tip-c { margin: 10px 0 0; padding: 8px 12px; background: rgba(194,81,47,.12); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 14px; }
@@ -550,7 +561,7 @@ import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
 import { profileOf, receivedProfile } from './profile.js';
 import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, aiPlan, emptyDamage, recordDamage, zoneHeat, DAMAGE_ZONES, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
-import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, markerAt, drillResult, applyDrill, trainerTip } from './career.js';
+import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, SPAR_CUES, markerAt, beatAt, sparPos, drillResult, applyDrill, trainerTip } from './career.js';
 import { createSfx } from './sfx.js';
 import { statSources, tendencies, learnedFromLog, learnedLines, fighterSummary, changeLines } from './fightiq.js';
 
@@ -1357,50 +1368,94 @@ function careerChanges(r) {
 // ─── Gym: a timing drill ─────────────────────────────────────────────────────
 
 let drill = null;   // { raf, t0, taps: [], done }
-function stopDrill() { if (drill) cancelAnimationFrame(drill.raf); drill = null; }
+function stopDrill() { if (drill) { cancelAnimationFrame(drill.raf); drill.stop?.(); } drill = null; }
 
 function renderGym() {
   stopDrill();
   const c = state.fighter.career;
   if (!c) return show('career');
   $('g-energy').textContent = `Energy ${c.energy}`;
-  const d = DRILLS.heavybag, ok = canDrill(c), val = state.fighter.stats[d.stat];
-  const t = c.trained[d.stat];
+  const ok = canDrill(c);
   $('gym-body').replaceChildren(
     el('div', { className: 'tip-c', textContent: `Trainer: "${trainerTip(state.fighter.stats, c)}"` }),
-    el('div', { className: 'card', style: 'margin-top:14px' }, el('h3', { textContent: d.name }),
-      el('div', { className: 'bag' }),
-      el('p', { textContent: `Trains ${STAT_LABEL[d.stat]} (now ${val}). ${d.blurb} ${d.hits} hits. Costs ${ENERGY.drill} energy and a week.` }),
-      el('p', { className: 'muted small', textContent: t ? `${t.sessions} session${t.sessions > 1 ? 's' : ''}, +${t.gain} ${STAT_LABEL[d.stat]} so far.` : 'Never trained here.' })));
-  $('gym-foot').replaceChildren(el('button', { className: 'big primary', disabled: !ok, textContent: ok ? 'Start drill' : 'Too tired. Rest first', onclick: () => { sfx.click(); beginDrill('heavybag'); } }));
+    ...Object.entries(DRILLS).map(([key, d]) => {
+      const t = c.trained[d.stat];
+      return el('div', { className: 'card', style: 'margin-top:14px' }, el('h3', { textContent: d.name }),
+        el('p', { textContent: `Trains ${STAT_LABEL[d.stat]} (now ${state.fighter.stats[d.stat]}). ${d.blurb} ${d.hits} ${d.kind === 'read' ? 'reads' : 'taps'}. Costs ${ENERGY.drill} energy and a week.` }),
+        el('p', { className: 'muted small', textContent: t ? `${t.sessions} session${t.sessions > 1 ? 's' : ''}, +${t.gain} ${STAT_LABEL[d.stat]} so far.` : 'Never trained here.' }),
+        el('button', { className: 'big primary', style: 'width:100%', disabled: !ok, textContent: ok ? 'Start drill' : 'Too tired. Rest first', onclick: () => { sfx.click(); beginDrill(key); } }));
+    }));
+  $('gym-foot').replaceChildren(el('button', { className: 'big', textContent: 'Back', onclick: () => { sfx.click(); show('career'); } }));
 }
 
 function beginDrill(key) {
-  const d = DRILLS[key], c = state.fighter.career;
-  const mk = el('i', { className: 'mk' }), bar = el('div', { className: 'drill-bar' }, mk);
+  const d = DRILLS[key];
   const count = el('div', { className: 'muted', style: 'text-align:center', textContent: `0 / ${d.hits}` });
-  const bag = el('div', { className: 'bag' });
-  const btn = el('button', { className: 'big primary hit-btn', style: 'width:100%', textContent: 'HIT' });
-  $('gym-body').replaceChildren(el('div', { className: 'tip-c', textContent: 'Hit when the marker is in the gold.' }), bag, bar, count);
-  $('gym-foot').replaceChildren(btn);
+  const tip = el('div', { className: 'tip-c', textContent: d.blurb });
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   stopDrill();
   drill = { t0: performance.now(), taps: [], raf: 0 };
-  const me = drill;
-  const frame = () => {
-    if (drill !== me) return;
-    mk.style.left = `${50 + 50 * markerAt((performance.now() - me.t0) / 1000, d.speed)}%`;
-    me.raf = requestAnimationFrame(frame);
-  };
-  frame();
-  btn.onpointerdown = (e) => {
-    e.preventDefault();
-    if (drill !== me || me.taps.length >= d.hits) return;
-    me.taps.push(markerAt((performance.now() - me.t0) / 1000, d.speed));
-    bag.classList.remove('hit'); void bag.offsetWidth; bag.classList.add('hit');
+  const me = drill, now = () => (performance.now() - me.t0) / 1000;
+  const push = (pos) => {
+    me.taps.push(pos);
     sfx.click();
     count.textContent = `${me.taps.length} / ${d.hits}`;
     if (me.taps.length === d.hits) finishDrill(key, me.taps);
   };
+  const press = (btn, fn) => { btn.onpointerdown = (e) => { e.preventDefault(); if (drill === me && me.taps.length < d.hits) fn(); }; };
+  const loop = (fn) => { const frame = () => { if (drill !== me) return; fn(); me.raf = requestAnimationFrame(frame); }; frame(); };
+  const flick = (n, cls) => { n.classList.remove(cls); void n.offsetWidth; n.classList.add(cls); };
+
+  if (d.kind === 'read') {
+    const gl = { L: el('i', { className: 'glove l' }), R: el('i', { className: 'glove r' }) };
+    const spar = el('div', { className: 'spar' }, gl.L, gl.R);
+    const bL = el('button', { className: 'big primary hit-btn half', textContent: '◀ SLIP' });
+    const bR = el('button', { className: 'big primary hit-btn half', textContent: 'SLIP ▶' });
+    $('gym-body').replaceChildren(tip, spar, count);
+    $('gym-foot').replaceChildren(bL, bR);
+    let i = 0, cue = null, shown = 0, timer = 0;
+    const next = () => {
+      if (drill !== me || i >= SPAR_CUES.length) return;
+      timer = setTimeout(() => {
+        if (drill !== me) return;
+        cue = SPAR_CUES[i]; shown = performance.now();
+        gl[cue.side].classList.add('load');
+        timer = setTimeout(() => answer(null), 1100);   // too slow: counts as a miss
+      }, SPAR_CUES[i].wait * 1000);
+    };
+    const answer = (side) => {
+      if (!cue) return;   // nothing loaded yet: ignore
+      clearTimeout(timer);
+      gl.L.classList.remove('load'); gl.R.classList.remove('load');
+      push(side ? sparPos(cue, side, performance.now() - shown) : 1);
+      cue = null; i++;
+      if (me.taps.length < d.hits) next();
+    };
+    me.stop = () => clearTimeout(timer);
+    press(bL, () => answer('L')); press(bR, () => answer('R'));
+    next();
+    return;
+  }
+
+  const bag = el('div', { className: 'bag' });
+  const btn = el('button', { className: 'big primary hit-btn', style: 'width:100%', textContent: d.kind === 'beat' ? 'STEP' : 'HIT' });
+  $('gym-foot').replaceChildren(btn);
+  if (d.kind === 'beat') {
+    const ring = el('i', { className: 'ring' }), core = el('i', { className: 'core' });
+    $('gym-body').replaceChildren(tip, el('div', { className: 'road' }, core, ring), count);
+    loop(() => {
+      const p = ((now() / d.period) % 1);
+      ring.style.transform = `scale(${reduced ? 1 : 2.2 - 1.2 * p})`;
+      ring.style.opacity = String(0.25 + 0.75 * p);
+    });
+    press(btn, () => { flick(core, 'hit'); push(beatAt(now(), d.period)); });
+    return;
+  }
+  const mk = el('i', { className: 'mk' }), bar = el('div', { className: 'drill-bar' }, mk);
+  $('gym-body').replaceChildren(tip, bag, bar, count);
+  if (key === 'speedbag') bag.classList.add('speedy');
+  loop(() => { mk.style.left = `${50 + 50 * markerAt(now(), d.speed)}%`; });
+  press(btn, () => { flick(bag, 'hit'); push(markerAt(now(), d.speed)); });
 }
 
 async function finishDrill(key, taps) {

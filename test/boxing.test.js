@@ -388,7 +388,7 @@ test('settings: junk falls back to the defaults', () => {
 });
 
 // ─── Career mode (career.js) ───
-import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, ladder, rankOf, offersFor, rest, applyFight, DRILLS, markerAt, hitScore, drillResult, applyDrill, canDrill, tierIndex } from '../public/boxing/career.js';
+import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, ladder, rankOf, offersFor, rest, applyFight, DRILLS, SPAR_CUES, beatAt, sparPos, markerAt, hitScore, drillResult, applyDrill, canDrill, tierIndex } from '../public/boxing/career.js';
 
 test('career flow: Title to Career to Fight card to Fight to Result back to Career; Gym and decline return', () => {
   let s = 'title';
@@ -479,6 +479,26 @@ test('gym drill: the marker is deterministic, centre taps score best, gains shri
   assert.equal(canDrill({ ...c, energy: 19 }), false);
 });
 
+test('gym drills: speed bag, roadwork and sparring each train their own stat with deterministic scoring', () => {
+  assert.deepEqual(['speedbag', 'roadwork', 'sparring'].map((k) => DRILLS[k].stat), ['speed', 'stamina', 'ringIQ']);
+  assert.ok(DRILLS.speedbag.speed > DRILLS.heavybag.speed);
+  assert.equal(beatAt(0.62, 0.62), 0);
+  assert.ok(Math.abs(beatAt(0.62 * 3 - 0.01, 0.62)) < 0.05 && beatAt(0.62 * 1.5, 0.62) === -1);
+  assert.ok(beatAt(0.62 + 0.1, 0.62) > 0 && beatAt(0.62 - 0.1, 0.62) < 0);
+  const cue = SPAR_CUES[0], other = cue.side === 'L' ? 'R' : 'L';
+  assert.equal(sparPos(cue, cue.side, 300), 1);           // slipped into the glove
+  assert.equal(hitScore(sparPos(cue, other, 300)), 1);    // fast and correct
+  assert.ok(hitScore(sparPos(cue, other, 500)) < 1 && hitScore(sparPos(cue, other, 500)) > 0);
+  assert.equal(hitScore(sparPos(cue, other, 5000)), 0);
+  const stats = { speed: 50, power: 50, stamina: 50, ringIQ: 50 };
+  const good = drillResult('sparring', SPAR_CUES.map((c) => sparPos(c, c.side === 'L' ? 'R' : 'L', 300)), 50);
+  assert.deepEqual([good.grade, good.gain], ['Perfect', 3]);
+  assert.equal(drillResult('sparring', SPAR_CUES.map((c) => sparPos(c, c.side, 300)), 50).gain, 0);
+  const d = applyDrill(newCareer(1), stats, 'roadwork', drillResult('roadwork', Array(DRILLS.roadwork.hits).fill(0), 50));
+  assert.equal(d.stats.stamina, 53);
+  assert.equal(d.career.trained.stamina.sessions, 1);
+});
+
 test('normalizeCareer drops junk and clamps numbers', () => {
   assert.equal(normalizeCareer(null), null);
   const n = normalizeCareer({ week: -4, money: 'x', rep: 1e12, energy: 500, injury: 99, rivals: { Bad: { arch: 'nope' }, Ok: { arch: 'slugger', w: 2, grudge: 1 } }, log: [{ text: 5 }], trained: { power: { gain: 2, sessions: 1 }, evil: {} } });
@@ -490,7 +510,9 @@ test('normalizeCareer drops junk and clamps numbers', () => {
 test('trainer tip points at a stat the gym can train, tiredness first', async () => {
   const { trainerTip } = await import('../public/boxing/career.js');
   const stats = { speed: 10, power: 50, stamina: 50, ringIQ: 50 };
-  assert.match(trainerTip(stats, newCareer(1)), /heavy bag/);
+  assert.match(trainerTip(stats, newCareer(1)), /speed bag/);
+  assert.match(trainerTip({ ...stats, speed: 60, power: 20 }, newCareer(1)), /heavy bag/);
+  assert.match(trainerTip({ ...stats, speed: 60, ringIQ: 20 }, newCareer(1)), /Spar/);
   assert.match(trainerTip(stats, { ...newCareer(1), energy: 5 }), /Rest/);
   assert.match(trainerTip(stats, { ...newCareer(1), injury: 2 }), /hurt/);
 

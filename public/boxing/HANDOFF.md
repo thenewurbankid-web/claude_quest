@@ -4,6 +4,11 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): more gym drills (BOX-19)
+
+Three new `DRILLS` in `career.js`, each a phone mini-game scored through the same `hitScore`/`drillResult`/`applyDrill` path as the heavy bag: **Speed bag** (speed; fast marker, 14 taps), **Roadwork** (stamina; tap as a closing ring meets its core on a fixed beat, `beatAt`), **Sparring** (ring IQ; a glove loads, slip the other way fast, fixed `SPAR_CUES`, scored by `sparPos`). All deterministic, no randomness. The gym screen now lists every drill as a card with its own Start button; the trainer tip points at the weakest trainable stat, so it now names all four. Files: `career.js`, `index.html` (gym section and CSS), `test/boxing.test.js` (277 tests pass).
+- **Untested in a browser**: drill feel and timing windows (sweep speed 4.6, beat period 0.62 s, 1.1 s sparring window, 300 ms reaction baseline), ring animation, glove layout at 375 px, reduced-motion (ring stops pulsing in scale but still fades).
+
 ## Done (2026-10-03): the 3D view, stage 1 (procedural boxers)
 
 - `public/boxing/arena-babylon.js`: `createArena3D({ parent, sim, names })` lazily loads `/vendor/babylonjs/babylon.js`

@@ -152,9 +152,24 @@ export function applyFight(c, offer, outcome, ko) {
 
 // ─── Gym drills ─────────────────────────────────────────────────────────────
 
+/** `side` is the glove that loads; the right answer is to slip the other way. */
+export const SPAR_CUES = [
+  { side: 'L', wait: 0.9 }, { side: 'R', wait: 1.2 }, { side: 'R', wait: 0.8 }, { side: 'L', wait: 1.1 },
+  { side: 'R', wait: 1.0 }, { side: 'L', wait: 0.7 }, { side: 'L', wait: 1.3 }, { side: 'R', wait: 0.9 },
+];
+
 export const DRILLS = {
-  heavybag: { stat: 'power', name: 'Heavy bag', blurb: 'Hit when the marker is in the gold.', hits: 8, speed: 2.4 },
+  heavybag: { stat: 'power', name: 'Heavy bag', kind: 'sweep', blurb: 'Hit when the marker is in the gold.', hits: 8, speed: 2.4 },
+  speedbag: { stat: 'speed', name: 'Speed bag', kind: 'sweep', blurb: 'The marker is fast. Stay loose and tap the gold.', hits: 14, speed: 4.6 },
+  roadwork: { stat: 'stamina', name: 'Roadwork', kind: 'beat', blurb: 'Plant a foot on every beat. Tap as the ring closes.', hits: 12, period: 0.62 },
+  sparring: { stat: 'ringIQ', name: 'Sparring', kind: 'read', blurb: 'Read the glove that loads. Slip to the other side, fast.', hits: SPAR_CUES.length },
 };
+
+/** Roadwork: error of a tap at time t in [-1, 1], 0 on the beat (beats at t = period, 2 * period, ...). */
+export const beatAt = (t, period) => { const p = ((t / period) % 1 + 1) % 1; return p < 0.5 ? p * 2 : p * 2 - 2; };
+
+/** Sparring: a fixed cue list (which glove loads, and the wait before it) so a session is reproducible. */
+export const sparPos = (cue, side, ms) => (side === cue.side ? 1 : Math.min(1, Math.max(0, (ms - 300) / 600)));
 
 /** Marker position in [-1, 1] at time t seconds: a sweep with no randomness, so a drill is reproducible. */
 export const markerAt = (t, speed) => Math.sin(t * speed);
