@@ -256,6 +256,11 @@ User standing rule (2026-10-04): ship each slice as soon as it is built and test
 - **Not done in BOX-18**: start/stop/turn clips, mocap footwork (CMU / Quaternius), punch weight transfer and rear-foot pivot (planted feet currently stay put through punches), head movement, blocks/hit reactions, before/after clip on the live site, phone frame-time measure.
 - **Untested by eye** (no browser here): that the steps look like a shuffle rather than a hop, knee direction and foot orientation on the person, leg stretch when lunging, KO fall.
 
+## Done (2026-10-04): BOX-13 landing screen (Boxing UI Dev)
+
+`public/boxing/index.html` only (title section, CSS, `restartTitleIntro`, `startTitleFx`, leave transition in the `[data-go]` click handler). Night-court SVG scene (tenements, fence, hoop, lamp glow, two fighter silhouettes) on a slow camera drift, light rays, drifting haze, film grain, vignette, a canvas of embers and dust. Logo lines slam in with a screen shake, then a glint sweeps "RUCKUS" every few seconds. Menu slides in staggered; hover/press micro-animations; the main button reads Play, or Continue once a career exists. Leaving the title zooms the camera, fades the stage and flashes white (380 ms) into the next screen. `prefers-reduced-motion` turns all of it off. Screenshots `qa/title-*.png` (Chromium at 375 px). `npm test` 269 pass, career-e2e passes, no console errors.
+Untested: real phones (grain/blur cost on low-end GPUs), Safari, the music toggle. Fighter silhouettes are static shapes, not a looping fight teaser yet.
+
 ## Next jobs
 
 0. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
