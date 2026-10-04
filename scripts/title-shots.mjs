@@ -16,7 +16,7 @@ try {
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`http://localhost:${PORT}/boxing/`);
     await page.waitForSelector('#t-career'); await page.waitForTimeout(4500);
-    await page.screenshot({ path: `${dir}/box-30-${tag}-${w}.png` });
+    await page.screenshot({ path: `${dir}/box-${process.env.BOX || 30}-${tag}-${w}.png` });
     await page.close();
   }
 } finally { await browser.close(); server.kill(); }

@@ -20,6 +20,15 @@ Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds 
 - **Numbers** (`node scripts/motion-metrics.mjs [seed]`, seed 11, 35 s round, pressure vs outbox): foot steps/s red 7.1 -> 3.65, blue 9.84 -> 4.04. Not the 1.5-2/s asked for: **the sim itself keeps both fighters moving (avg 0.7 m/s, mostly radial in/out, not oscillation); smoothing harder did not shorten the path.** Getting to <=2/s needs the sim's constant locomotion reduced, which is a sim change (pinned hash), not mine. Decision for you.
 - **Tests**: 332 pass (new: idle-noise and real-round cadence test using `scripts/motion-metrics.mjs`; standing-still step test now asserts no steps in the last 1.5 s). `measure-boxing.mjs`: 5.7 ms CPU/frame at 400x760 headless, no errors; `shot-arena2d.mjs` no console errors.
 - **Untested**: how it looks (sway, twist, hands, hip drop, 2D crossfade and sway) in a real browser, a real phone's frame time, and no before/after clip or frame strip (I can't open a browser; check at http://localhost:4792/boxing/ via `npm run static -- 4792`). Not pushed or synced: AGENTS.md says never push, the issue says push main and sync bring-the-ruckus; waiting on you.
+## Done (2026-10-04): real tag-wall photo behind a clean type title (BOX-32)
+
+- **Background**: the SVG night scene is gone. The title now sits on a real photo of tags on white metal doors, CC0, by Fons Heijnsbroek (Wikimedia Commons, URL in `img/CREDITS.md`). `scripts/build-wall.py` crops (portrait 2:3 and landscape), near-greys, darkens and writes `img/wall-p-540.webp` (15 KB), `wall-p-900.webp` (37 KB), `wall-l-1600.webp` (46 KB); `<picture>` picks portrait or landscape by orientation. Tried and rejected: a black outline tag on brick (reads as a blob). Visible fragments ("18", "RXU") are partial, no crew name dominates; no people, no logos.
+- **Title**: "BRING THE" over "RUCKUS" is live text in Barlow Condensed 700, white, tight tracking, a thin stroke for weight and a faint speckle mask for print texture (`.logo` in `index.html`). Slam-in animation, off under reduced motion. `aria-label` carries the name; the long-press debug handler on `#logo` is unchanged. Only the 700 weight is loaded, so "heavy" is 700 plus stroke.
+- **Removed**: `img/logo-ruckus-*.webp` (generated logo). `scripts/build-logo.mjs` stays, output unused.
+- BOX-30 idle fighters kept; they sit on the wall and read well. The stage is capped at 460 px so the 1440 menu is no longer stretched.
+- Shots: `BOX=32 node scripts/title-shots.mjs after` writes `qa/box-32-after-{375,1440}.png`; before = `qa/box-30-after-*.png`. `npm test` 334 pass, no console errors.
+- **Untested**: real phones, Safari (`mask-image` with `-webkit-` prefix is set), Firefox, the speckle at device pixel ratio 3, wall crop on very short or very wide windows.
+
 ## Done (2026-10-04): BOX-30 title follow-up (logo word gap, photoreal fighters)
 
 - **Logo**: `scripts/build-logo.mjs` now has a clear word gap (BRING / THE), a stronger slant (0.30), and more joined strokes (B-R-I-N-G run on, R-U in RUCKUS). First-row scale 2.3 so both rows fit. Rebuilt `img/logo-ruckus-{640,1100}.webp` (105 KB / 231 KB).

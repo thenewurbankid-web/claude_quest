@@ -77,7 +77,8 @@
   /* ── Title ── */
   #s-title { justify-content: flex-end; padding: 0 22px calc(var(--bottom) + 26px); overflow: hidden; background: #05070b; --sh: 0; }
   #s-title .cam { filter: saturate(.18) contrast(1.08); position: absolute; inset: -6%; animation: drift 38s ease-in-out infinite alternate; will-change: transform; }
-  #s-title .cam svg { width: 100%; height: 100%; display: block; }
+  #s-title .wall, #s-title .wall img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #s-title .wall img { object-fit: cover; object-position: 60% 40%; filter: brightness(.72); }
   #s-title .duel { position: absolute; top: 0; bottom: 0; left: 50%; width: min(100%, 520px); transform: translateX(-50%); pointer-events: none; }
   #s-title .fgt { position: absolute; top: 12%; height: 30%; aspect-ratio: 200 / 536; background-size: 800% 200%; background-repeat: no-repeat; background-position: 0 0;
     filter: brightness(.58) contrast(1.06); -webkit-mask-image: linear-gradient(#000 70%, transparent 97%); mask-image: linear-gradient(#000 70%, transparent 97%); }
@@ -101,12 +102,13 @@
   #s-title .fade-in { position: absolute; inset: 0; background: #000; pointer-events: none; animation: fadein 1.4s .1s ease-out both; }
   @keyframes fadein { to { opacity: 0; visibility: hidden; } }
   #s-title .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
-  #s-title .stage { position: relative; }
-  .logo { position: relative; margin: 0 0 18px; line-height: 0; }
-  .logo img { display: block; width: min(88%, 440px); max-height: 30dvh; height: auto; object-fit: contain; object-position: left top; filter: drop-shadow(0 8px 22px rgba(0,0,0,.65));
-    -webkit-mask: linear-gradient(100deg, #000 35%, transparent 55%) 100% 0 / 320% 100% no-repeat; mask: linear-gradient(100deg, #000 35%, transparent 55%) 100% 0 / 320% 100% no-repeat;
-    animation: spray 1.5s .55s cubic-bezier(.3,.7,.3,1) both; }
-  @keyframes spray { 0% { opacity: 0; filter: blur(7px) drop-shadow(0 8px 22px rgba(0,0,0,.65)); -webkit-mask-position: 100% 0; mask-position: 100% 0; } 25% { opacity: 1; } 100% { opacity: 1; filter: blur(0) drop-shadow(0 8px 22px rgba(0,0,0,.65)); -webkit-mask-position: 0 0; mask-position: 0 0; } }
+  #s-title .stage { position: relative; width: 100%; max-width: 460px; margin: 0 auto; }
+  .logo { position: relative; margin: 0 0 16px; padding: 0; font: 400 clamp(60px, 22vw, 112px)/.8 var(--display); text-transform: uppercase; color: #f5f5f3; letter-spacing: -.015em; animation: slam .7s .5s cubic-bezier(.2,.8,.2,1) both; }
+  .logo span { display: block; -webkit-text-stroke: .035em #f5f5f3; text-shadow: 0 .06em .5em rgba(0,0,0,.7);
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -9 7.7'/></filter><rect width='100%' height='100%' filter='url(%23p)'/></svg>"); mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -9 7.7'/></filter><rect width='100%' height='100%' filter='url(%23p)'/></svg>"); }
+  .logo .l1 { font-size: .46em; letter-spacing: .28em; margin-bottom: .16em; }
+  .logo .l2 { font-size: 1.28em; }
+  @keyframes slam { from { opacity: 0; transform: scale(1.08) translateY(-4px); filter: blur(4px); } to { opacity: 1; transform: none; filter: blur(0); } }
   .tag { position: relative; margin: 0 0 22px; color: #c7d0de; letter-spacing: .22em; text-transform: uppercase; font-size: var(--t-xs); text-shadow: 0 1px 4px #000; animation: rise .7s 1.5s ease-out both; }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   .menu { position: relative; display: grid; gap: 8px; }
@@ -121,8 +123,7 @@
   @keyframes flash { 0% { opacity: 0; } 70% { opacity: .85; } 100% { opacity: 1; } }
   #s-title.replay .fade-in { animation-duration: .5s; animation-delay: 0s; }
   @media (prefers-reduced-motion: reduce) {
-    #s-title .cam, #s-title .rays, #s-title .haze, #s-title .grain, #s-title .stage, .logo img, .tag, .menu .big, .ver, #s-title .fade-in { animation: none !important; }
-    .logo img { -webkit-mask: none; mask: none; filter: drop-shadow(0 8px 22px rgba(0,0,0,.65)); }
+    #s-title .cam, #s-title .rays, #s-title .haze, #s-title .grain, #s-title .stage, .logo, .tag, .menu .big, .ver, #s-title .fade-in { animation: none !important; }
     #s-title.leaving .cam { transition: none; } #s-title.leaving .stage { transition: opacity .15s; transform: none; } #s-title.leaving .flash { animation: none; }
   }
 
@@ -407,32 +408,7 @@
 <!-- ─── Title ─── -->
 <section class="screen" id="s-title">
   <div class="cam" aria-hidden="true">
-    <svg viewBox="0 0 400 700" preserveAspectRatio="xMidYMid slice">
-      <defs>
-        <linearGradient id="tsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a0f1c"/><stop offset=".55" stop-color="#1d2740"/><stop offset="1" stop-color="#3a3340"/></linearGradient>
-        <radialGradient id="tlamp" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe2ab" stop-opacity=".95"/><stop offset=".25" stop-color="#ffb55a" stop-opacity=".35"/><stop offset="1" stop-color="#c2512f" stop-opacity="0"/></radialGradient>
-        <linearGradient id="tfloor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3a40"/><stop offset="1" stop-color="#0c0c10"/></linearGradient>
-        <pattern id="tfence" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0H9M0 0V9" stroke="#8c97aa" stroke-opacity=".28" stroke-width=".7" fill="none"/></pattern>
-        <pattern id="twin" width="22" height="26" patternUnits="userSpaceOnUse"><rect x="5" y="6" width="9" height="13" fill="#0a0d14"/><rect x="5" y="6" width="9" height="13" fill="#ffc46b" opacity=".0"/></pattern>
-      </defs>
-      <rect width="400" height="700" fill="url(#tsky)"/>
-      <g fill="#10141f"><rect x="-10" y="90" width="150" height="330"/><rect x="262" y="60" width="150" height="360"/><rect x="120" y="150" width="60" height="270" fill="#0c101a"/><rect x="215" y="170" width="60" height="250" fill="#0c101a"/></g>
-      <g fill="url(#twin)"><rect x="-10" y="90" width="150" height="330"/><rect x="262" y="60" width="150" height="360"/></g>
-      <g fill="#ffc46b">
-        <rect x="27" y="124" width="9" height="13" opacity=".9"/><rect x="71" y="176" width="9" height="13" opacity=".7"/><rect x="49" y="228" width="9" height="13" opacity=".85"/><rect x="93" y="280" width="9" height="13" opacity=".6"/>
-        <rect x="27" y="332" width="9" height="13" opacity=".8"/><rect x="115" y="124" width="9" height="13" opacity=".5"/><rect x="291" y="96" width="9" height="13" opacity=".8"/><rect x="335" y="148" width="9" height="13" opacity=".9"/>
-        <rect x="313" y="252" width="9" height="13" opacity=".7"/><rect x="357" y="304" width="9" height="13" opacity=".85"/><rect x="291" y="356" width="9" height="13" opacity=".6"/><rect x="379" y="200" width="9" height="13" opacity=".8"/>
-      </g>
-      <g fill="#070a10"><rect x="0" y="360" width="400" height="14"/></g>
-      <rect y="250" width="400" height="190" fill="url(#tfence)"/>
-      <g stroke="#06080d" stroke-width="3" fill="none"><path d="M0 250H400M0 250V440M400 250V440M100 250V440M300 250V440"/></g>
-      <g transform="translate(300 190)" fill="none" stroke="#0a0c12"><path d="M0 60V-6" stroke-width="5"/><path d="M0 -6H-18" stroke-width="4"/><rect x="-52" y="-34" width="38" height="26" fill="#1a1f2b" stroke-width="2"/><ellipse cx="-33" cy="2" rx="12" ry="3" stroke="#c8532b" stroke-width="2"/></g>
-      <g transform="translate(70 120)"><path d="M0 0v34" stroke="#0a0c12" stroke-width="3"/><rect x="-10" y="30" width="20" height="5" fill="#0a0c12"/></g>
-      <circle cx="280" cy="170" r="190" fill="url(#tlamp)"/><circle cx="70" cy="156" r="90" fill="url(#tlamp)" opacity=".55"/>
-      <rect y="430" width="400" height="270" fill="url(#tfloor)"/>
-      <g stroke="#d9d4c4" stroke-opacity=".35" stroke-width="1.6" fill="none"><path d="M-40 560Q200 500 440 560"/><path d="M60 700L170 436M340 700L230 436"/><ellipse cx="200" cy="560" rx="150" ry="34"/></g>
-      <ellipse cx="200" cy="540" rx="190" ry="40" fill="#ffd9a0" opacity=".1"/>
-    </svg>
+    <picture class="wall"><source media="(orientation: landscape)" srcset="img/wall-l-1600.webp"><img src="img/wall-p-540.webp" srcset="img/wall-p-540.webp 540w, img/wall-p-900.webp 900w" sizes="100vw" alt="" decoding="async" draggable="false"></picture>
     <div class="duel"><span class="fgt red" data-s="red"></span><span class="fgt blue" data-s="blue"></span></div>
   </div>
   <div class="rays" aria-hidden="true"></div>
@@ -441,7 +417,7 @@
   <div class="grain" aria-hidden="true"></div>
   <div class="vig" aria-hidden="true"></div>
   <div class="stage">
-    <h1 class="logo" id="logo"><img src="img/logo-ruckus-1100.webp" srcset="img/logo-ruckus-640.webp 640w, img/logo-ruckus-1100.webp 1100w" sizes="(max-width: 520px) 88vw, 440px" alt="Bring The Ruckus" width="1100" height="666" decoding="async" draggable="false"></h1>
+    <h1 class="logo" id="logo" aria-label="Bring The Ruckus"><span class="l1" aria-hidden="true">Bring the</span><span class="l2" aria-hidden="true">Ruckus</span></h1>
     <p class="tag">Street boxing · Uptown NYC</p>
     <div class="menu">
       <button class="big primary" id="t-career" data-go="career" style="--i:0">Career</button>

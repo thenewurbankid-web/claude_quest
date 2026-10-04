@@ -6,6 +6,6 @@ Self-hosted, downloaded 2026-10-04 from Google Fonts (static TTF). Both are lice
 |---|---|---|---|
 | BarlowCondensed-500.ttf, -700.ttf | Barlow Condensed | Jeremy Tribby | Body text, numbers, and (700, as `Barlow Display`) buttons, titles and banners |
 
-## Logo build (not shipped)
+## Title
 
-`img/logo-ruckus-*.webp` is built by `scripts/build-logo.mjs`. No font is used: every letter is a pen path authored in that script (a marker handstyle: one slant, joined strokes, chisel-nib pressure, translucent ink, drips), treated with bleed into the CC0 brick photo in `textures/brick_dirty_diff.webp` (Poly Haven, see `textures/CREDITS.md`). No real writer's tag was copied.
+The "BRING THE RUCKUS" title is plain Barlow Condensed 700 set in CSS over a photographed tag wall (`img/CREDITS.md`). The earlier generated logo images were removed.
