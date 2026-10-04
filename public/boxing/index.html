@@ -2,13 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Boxing Manager AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Bring The Ruckus</title>
 <!--
-  Boxing Manager AI: browser-only, serverless prototype.
-    physics-engine.js  deterministic 240 Hz fight physics + Phaser scene + telemetry serializer
-    game-db.js         Dexie (IndexedDB) fight logs + RAG retrieval for the LLM worker
-    this page          manager shell: fighter stats, training camp, single-player and P2P modes
+  Bring The Ruckus: a street-fight manager game, browser-only.
+    physics-engine.js  deterministic 240 Hz fight physics (the single source of truth) + telemetry serializer
+    arena-babylon.js   the 3D court; only reads the sim
+    game-db.js         Dexie (IndexedDB) fight logs, record, RAG retrieval
+    flow.js            screen flow, progression, unlocks, scorecards (no DOM, tested)
+    sfx.js             WebAudio sounds
+    this page          the screens: Title → Fighter → Opponent → Fight → Result, plus Upgrade and Settings
+  Debug tools (telemetry, JSON, logs, data export) live in a drawer: open the page with ?debug or long-press the logo.
   Serve with: npm run static, then open http://localhost:4790/boxing/
 -->
 <script type="importmap">{ "imports": { "dexie": "https://cdn.jsdelivr.net/npm/dexie@4.4.6/dist/dexie.mjs" } }</script>
@@ -16,250 +22,326 @@
 <script src="linkcrypto.js"></script>
 <style>
   :root {
-    --bg: #0d1117; --panel: #151b23; --panel-2: #1c2430; --line: #2a3441;
-    --ink: #e6edf3; --muted: #8b98a8; --accent: #f0883e;
-    --red: #e5484d; --blue: #3e8fe0; --ok: #3fb950; --warn: #d29922;
-    --radius: 10px; --gap: 16px;
+    --bg: #0b0d12; --panel: #141821; --panel-2: #1c222e; --line: #2a3140;
+    --ink: #eef1f5; --muted: #8e99aa; --accent: #ff9a3c; --accent-2: #ffcf5a;
+    --red: #e5484d; --blue: #3e8fe0; --ok: #3fb950; --warn: #d9a12b;
+    --display: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Arial Black', system-ui, sans-serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --top: env(safe-area-inset-top, 0px); --bottom: env(safe-area-inset-bottom, 0px);
     color-scheme: dark;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
-  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
-  header .db { margin-left: auto; color: var(--muted); font-size: 12px; }
-  main { display: grid; gap: var(--gap); padding: var(--gap); grid-template-columns: 300px minmax(0, 1fr) 340px; align-items: start; }
-  @media (max-width: 1100px) { main { grid-template-columns: 1fr 1fr; } #center { grid-column: 1 / -1; order: -1; } }
-  @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
-  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: var(--gap); }
-  section.card > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; display: flex; justify-content: space-between; }
-  button, select, input[type=text], textarea {
-    font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
-  }
-  button { min-height: 36px; padding: 0 12px; cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--muted); }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #1a0f05; font-weight: 600; }
-  button.sm { min-height: 28px; min-width: 28px; padding: 0 8px; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; overscroll-behavior: none;
+    font: 15px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-user-select: none; user-select: none; }
+  input, textarea, pre { -webkit-user-select: text; user-select: text; }
+  button, select, input[type=text], textarea { font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+  button { min-height: 44px; padding: 0 14px; cursor: pointer; touch-action: manipulation; }
+  button:active:not(:disabled) { transform: scale(.97); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  input[type=text], select { min-height: 36px; padding: 0 10px; width: 100%; }
-  textarea { width: 100%; min-height: 76px; padding: 8px; font: 11px/1.35 var(--mono); resize: vertical; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .muted { color: var(--muted); }
-  .small { font-size: 12px; }
-  label.field { display: block; margin-bottom: 10px; }
-  label.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 
-  /* Stats */
-  .stat { display: grid; grid-template-columns: 70px 1fr 34px auto; gap: 8px; align-items: center; margin: 8px 0; }
-  .stat .bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; position: relative; }
-  .stat .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
-  .stat .bar b { position: absolute; inset: 0 auto 0 0; background: var(--ok); opacity: .55; border-radius: 4px; }
-  .stat .val { font-variant-numeric: tabular-nums; text-align: right; }
-  .points { font-variant-numeric: tabular-nums; color: var(--accent); }
-  .derived { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font: 11px var(--mono); color: var(--muted); margin-top: 10px; }
-  .derived span:nth-child(even) { color: var(--ink); text-align: right; }
+  /* ── Screens ── */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--bg); }
+  .screen[hidden] { display: none; }
+  .top { display: flex; align-items: center; gap: 10px; padding: calc(var(--top) + 10px) 14px 10px; }
+  .top h2 { margin: 0; font: 400 26px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; flex: 1; }
+  .back { width: 44px; padding: 0; font-size: 22px; }
+  .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font: 600 13px var(--mono); }
+  .scroll { flex: 1; overflow-y: auto; padding: 4px 14px 16px; -webkit-overflow-scrolling: touch; }
+  .bottom { padding: 10px 14px calc(var(--bottom) + 12px); background: linear-gradient(transparent, var(--bg) 30%); display: flex; gap: 10px; }
+  .big { min-height: 56px; font: 400 24px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; border-radius: 12px; flex: 1; }
+  .big small { display: block; font: 500 12px/1.3 system-ui; letter-spacing: 0; text-transform: none; opacity: .75; margin-top: 3px; }
+  .primary { background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: #b86a1c; color: #1b1004; box-shadow: 0 6px 20px rgba(255,154,60,.25); }
+  .ghost { background: transparent; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 8px; font: 400 15px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 
-  /* Ring */
-  #ring-wrap { position: relative; background: #0e1620; border-radius: var(--radius); aspect-ratio: 1; max-height: 62vh; margin: 0 auto; overflow: hidden; }
-  #ring { width: 100%; height: 100%; position: relative; }
-  #ring-wrap.headless #ring { display: none; }
-  #ring-wrap.wide { aspect-ratio: 16 / 9; max-height: none; }
-  #ring-wrap .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); text-align: center; padding: 20px; }
-  .scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
-  .corner { display: grid; gap: 4px; }
-  .corner.blue { text-align: right; }
-  .corner .name { font-weight: 600; }
-  .corner.red .name { color: var(--red); } .corner.blue .name { color: var(--blue); }
-  .meter { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
-  .meter i { display: block; height: 100%; transition: width .15s linear; }
-  .meter.hp i { background: var(--ok); } .meter.gas i { background: var(--warn); }
-  .corner.blue .meter i { margin-left: auto; }
-  .clock { font: 600 18px var(--mono); text-align: center; }
-  .tactics { display: flex; gap: 6px; flex-wrap: wrap; }
-  .tactics button[aria-pressed=true] { border-color: var(--accent); background: #3a2414; }
+  /* ── Title ── */
+  #s-title { justify-content: flex-end; padding: 0 22px calc(var(--bottom) + 26px); overflow: hidden; }
+  #s-title .bg { position: absolute; inset: 0; background: radial-gradient(120% 80% at 50% 20%, #26324a, #0b0d12 70%); }
+  #s-title .bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,13,18,.55) 0%, rgba(11,13,18,.05) 28%, rgba(11,13,18,.7) 62%, #0b0d12 92%); }
+  .logo { position: relative; margin: 0 0 22px; font: 400 clamp(64px, 21vw, 110px)/.86 var(--display); letter-spacing: .02em; text-transform: uppercase; transform: rotate(-3deg);
+    text-shadow: 3px 4px 0 #000, 0 0 30px rgba(0,0,0,.6); }
+  .logo span { display: block; }
+  .logo em { font-style: normal; background: linear-gradient(180deg, #ffd45e, #ff6a2b 70%, #e5484d); -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: none; filter: drop-shadow(3px 4px 0 #000); }
+  .tag { position: relative; margin: -8px 0 24px; color: #c7d0de; letter-spacing: .22em; text-transform: uppercase; font-size: 12px; text-shadow: 0 1px 4px #000; }
+  .menu { position: relative; display: grid; gap: 12px; }
+  .menu .big { flex: none; }
+  #s-title .menu .ghost { background: rgba(11,13,18,.55); backdrop-filter: blur(4px); }
+  .ver { position: relative; margin-top: 16px; text-align: center; font-size: 11px; color: var(--muted); }
 
-  /* Feed and telemetry */
+  /* ── Fighter ── */
+  .preview { position: relative; flex: 0 0 min(36dvh, 300px); min-height: 190px; margin: 0 14px; border-radius: 14px; overflow: hidden; background: radial-gradient(90% 90% at 50% 30%, #2a3345, #12161e); }
+  .preview .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 12px; }
+  .namefield { display: block; margin: 12px 0; }
+  .namefield input { width: 100%; min-height: 48px; padding: 0 14px; font: 400 22px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .look { display: grid; grid-template-columns: 64px 1fr; gap: 10px 10px; align-items: center; margin-bottom: 10px; }
+  .look > span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .swatches button { width: 38px; height: 38px; min-height: 0; padding: 0; border-radius: 50%; border: 2px solid var(--line); position: relative; }
+  .swatches button[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { flex: 1 1 0; min-width: 56px; padding: 0 8px; font-size: 14px; }
+  .seg button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: #2a1c0e; }
+  .locked { opacity: .45; }
+  .locked::after { content: 'LOCKED'; position: absolute; left: 0; right: 0; bottom: 1px; font: 700 7px/1 system-ui; letter-spacing: .06em; color: #fff; text-shadow: 0 0 3px #000; }
+  .seg .locked { position: relative; padding-bottom: 6px; }
+  .link { background: none; border: 0; color: var(--muted); text-decoration: underline; min-height: 36px; padding: 0; }
+  .mini { display: grid; grid-template-columns: 62px 1fr 28px; gap: 8px; align-items: center; margin: 6px 0; font-size: 13px; }
+  .mini .bar, .urow .bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; position: relative; }
+  .mini .bar i, .urow .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
+  .urow .bar b { position: absolute; inset: 0 auto 0 0; background: var(--ok); opacity: .6; border-radius: 4px; }
+  .mini .val { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ── Upgrade ── */
+  .points-big { text-align: center; padding: 6px 0 14px; }
+  .points-big b { display: block; font: 400 64px/1 var(--display); color: var(--accent); }
+  .urow { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .urow .nm { font: 400 20px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .urow .nm span { font: 600 18px var(--mono); color: var(--accent); margin-left: 8px; }
+  .urow .fx { grid-column: 1; font-size: 12px; color: var(--muted); }
+  .urow .bar { grid-column: 1; }
+  .urow .btns { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 8px; }
+  .urow .btns button { width: 52px; min-height: 52px; font-size: 26px; padding: 0; }
+  .urow .cost { font-size: 11px; color: var(--muted); text-align: center; }
+
+  /* ── Opponent ── */
+  .opp { display: grid; grid-template-columns: 76px 1fr; gap: 12px; padding: 10px; margin-bottom: 10px; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; width: 100%; text-align: left; height: auto; min-height: 96px; }
+  .opp[aria-pressed=true] { border-color: var(--accent); background: #231a10; }
+  .avatar { position: relative; width: 76px; height: 76px; border-radius: 12px; overflow: hidden; display: grid; place-items: center; font: 400 38px var(--display); color: rgba(255,255,255,.9); }
+  .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .opp .nm { font: 400 22px/1.1 var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .opp .style { font-size: 12.5px; color: var(--muted); margin: 2px 0 6px; }
+  .opp .mini { grid-template-columns: 54px 1fr; margin: 3px 0; font-size: 11px; }
+  .opp .mini .bar { height: 5px; }
+  .rounds { display: flex; align-items: center; gap: 10px; padding: 4px 0 8px; }
+  .rounds .seg { flex: 1; }
+
+  /* ── Fight ── */
+  #s-fight { background: #000; }
+  #ring { position: absolute; inset: 0; }
+  #ring canvas { touch-action: none; }
+  #ring .bm3d-bug, #ring .bm3d-cam, #ring .bm3d-third { display: none !important; }
+  .flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+  .hud { position: absolute; top: 0; left: 0; right: 0; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: start;
+    padding: calc(var(--top) + 10px) 12px 24px; pointer-events: none; background: linear-gradient(rgba(0,0,0,.65), transparent); }
+  .side { display: grid; gap: 4px; }
+  .side.blue { text-align: right; }
+  .side .nm { font: 400 19px/1 var(--display); letter-spacing: .07em; text-transform: uppercase; text-shadow: 0 2px 4px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side.red .nm { color: #ff7478; } .side.blue .nm { color: #6fb0ff; }
+  .meter { position: relative; height: 12px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.25); border-radius: 3px; overflow: hidden; transform: skewX(-14deg); }
+  .meter.gas { height: 6px; border-radius: 2px; }
+  .meter i, .meter b { position: absolute; inset: 0 auto 0 0; width: 100%; }
+  .side.blue .meter i, .side.blue .meter b { inset: 0 0 0 auto; }
+  .meter i { background: linear-gradient(180deg, #7cf08a, #25a244); transition: width .12s linear; }
+  .meter b { background: #fff; opacity: .85; transition: width .7s ease .35s; }
+  .meter.low i { background: linear-gradient(180deg, #ff8a8a, #d63031); }
+  .meter.gas i { background: linear-gradient(180deg, #ffe08a, #d9a12b); }
+  .mid { text-align: center; font: 400 14px/1.1 var(--display); letter-spacing: .12em; text-shadow: 0 2px 4px #000; }
+  .mid #clock { font-size: 30px; letter-spacing: .04em; }
+  .hud-btns { position: absolute; right: 10px; top: calc(var(--top) + 74px); display: grid; gap: 8px; }
+  .hud-btns button { width: 44px; min-height: 40px; padding: 0; background: rgba(0,0,0,.55); border-color: rgba(255,255,255,.2); font: 700 13px var(--mono); }
+  .strip { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 12px calc(var(--bottom) + 14px); text-align: center; pointer-events: none; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+  .strip .chip { background: rgba(0,0,0,.6); font: 400 18px var(--display); letter-spacing: .12em; text-transform: uppercase; padding: 6px 16px; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 14px calc(var(--bottom) + 14px); background: linear-gradient(180deg, rgba(14,17,24,.86), rgba(8,10,14,.97));
+    border-top: 2px solid var(--accent); border-radius: 18px 18px 0 0; transform: translateY(0); transition: transform .35s cubic-bezier(.2,.9,.3,1); }
+  .sheet[hidden] { display: block; transform: translateY(110%); pointer-events: none; }
+  .sheet h3 { margin: 0; font: 400 28px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .sheet .last { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+  .sheet .tip { margin: 10px 0 12px; padding: 8px 12px; background: rgba(255,154,60,.12); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 14px; }
+  .tactics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 12px; }
+  .tactics button { grid-column: span 2; min-height: 64px; padding: 6px 4px; line-height: 1.15; position: relative; }
+  .tactics button:nth-child(n+4) { grid-column: span 3; }
+  .tactics button b { display: block; font: 400 17px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .tactics button span { display: block; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .tactics button[aria-pressed=true] { border-color: var(--accent); background: #2a1c0e; }
+  .tactics button .coach { position: absolute; top: -7px; right: 6px; background: var(--accent); color: #1b1004; font: 700 9px system-ui; letter-spacing: .08em; padding: 2px 6px; border-radius: 999px; }
+
+  /* ── Result ── */
+  #s-result .scroll { padding-top: calc(var(--top) + 18px); text-align: center; }
+  .verdict { font: 400 clamp(56px, 18vw, 92px)/.95 var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0; opacity: 0; animation: pop .55s cubic-bezier(.2,1.4,.4,1) forwards; animation-delay: var(--vd, 0s); }
+  .verdict.w { color: var(--accent-2); text-shadow: 0 0 30px rgba(255,154,60,.5), 3px 4px 0 #000; }
+  .verdict.l { color: #ff6b6b; text-shadow: 3px 4px 0 #000; } .verdict.d { color: #c7d0de; text-shadow: 3px 4px 0 #000; }
+  .method { font: 600 14px system-ui; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 6px 0 16px; opacity: 0; animation: fade .4s forwards; animation-delay: var(--vd, 0s); }
+  @keyframes pop { from { opacity: 0; transform: scale(1.7) rotate(-4deg); } to { opacity: 1; transform: none; } }
+  @keyframes fade { to { opacity: 1; } }
+  .cardtbl { width: 100%; border-collapse: collapse; font: 600 16px var(--mono); }
+  .cardtbl th { font: 600 11px system-ui; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding-bottom: 6px; }
+  .cardtbl th.r { color: #ff7478; } .cardtbl th.b { color: #6fb0ff; }
+  .cardtbl td { padding: 6px 0; border-top: 1px solid var(--line); opacity: 0; animation: fade .35s forwards; animation-delay: calc(var(--i) * .55s); }
+  .cardtbl tr.tot td { font-size: 20px; border-top: 2px solid var(--muted); animation-delay: calc(var(--i) * .55s + .3s); }
+  .stat2 { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px 10px; font-size: 14px; align-items: center; }
+  .stat2 b { font: 600 15px var(--mono); } .stat2 span:nth-child(3n+2) { color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+  .stat2 span:nth-child(3n+1) { text-align: right; } .stat2 span:nth-child(3n) { text-align: left; }
+  .reward { display: flex; justify-content: space-around; text-align: center; }
+  .reward b { display: block; font: 400 34px/1 var(--display); color: var(--accent); }
+  .reward span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .unlock { background: linear-gradient(90deg, #2a1c0e, #1c222e); border: 1px solid var(--accent); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; text-align: left; }
+  .unlock b { color: var(--accent); font: 400 13px var(--display); letter-spacing: .12em; text-transform: uppercase; display: block; }
+  #r-actions { display: grid; gap: 10px; padding: 4px 0 8px; opacity: 0; animation: fade .4s forwards; animation-delay: var(--bd, 0s); }
+
+  /* ── Settings ── */
+  .setting { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .setting > span { display: block; font: 400 17px var(--display); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+  .setting p { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+  /* ── Toast, dialog, sheets ── */
+  #toast { position: fixed; left: 50%; bottom: calc(var(--bottom) + 90px); transform: translate(-50%, 20px); background: #000d; border: 1px solid var(--line); padding: 10px 16px; border-radius: 999px; font-size: 14px; opacity: 0; transition: .25s; pointer-events: none; z-index: 50; max-width: 90vw; text-align: center; }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+  .modal { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.7); display: grid; place-items: center; padding: 20px; }
+  .modal[hidden] { display: none; }
+  .modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: min(420px, 100%); }
+  .modal .box p { margin: 0 0 16px; font-size: 17px; }
+  .modal .box .row button { flex: 1; }
+  .drawer { position: fixed; inset: 0; z-index: 70; background: var(--bg); overflow-y: auto; padding: calc(var(--top) + 10px) 14px 30px; }
+  .drawer[hidden] { display: none; }
+  .drawer h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; }
+  .drawer .row { margin-bottom: 8px; }
+  .drawer select, .drawer input[type=text], textarea { min-height: 40px; padding: 0 10px; width: 100%; }
+  textarea { min-height: 76px; padding: 8px; font: 11px/1.35 var(--mono); resize: vertical; }
+  .field { display: block; margin-bottom: 10px; } .field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .status { font-size: 13px; margin-top: 8px; min-height: 18px; } .status.ok { color: var(--ok); } .status.bad { color: var(--red); }
   #feed { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; font: 12px/1.5 var(--mono); }
   #feed li { padding: 3px 0; border-bottom: 1px solid var(--line); }
-  #feed .landed { color: var(--ok); } #feed .blocked { color: var(--warn); } #feed .slipped { color: var(--muted); }
-  #feed .red { color: var(--red); } #feed .blue { color: var(--blue); }
-  #feed .round { color: var(--accent); font-weight: 600; }
-  pre { margin: 0; max-height: 280px; overflow: auto; font: 11px/1.4 var(--mono); background: var(--panel-2); padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
-  details > summary { cursor: pointer; color: var(--muted); margin: 8px 0; }
-
-  /* Tabs */
-  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
-  .tabs button { flex: 1; }
-  .tabs button[aria-selected=true] { border-color: var(--accent); color: var(--accent); }
-  .pane[hidden] { display: none; }
-  .status { font-size: 12px; margin-top: 8px; min-height: 18px; }
-  .status.ok { color: var(--ok); } .status.bad { color: var(--red); }
-
-  /* Intel */
+  #feed .landed { color: var(--ok); } #feed .blocked { color: var(--warn); } #feed .slipped { color: var(--muted); } #feed .red { color: var(--red); } #feed .blue { color: var(--blue); } #feed .round { color: var(--accent); font-weight: 600; }
+  pre { margin: 0; max-height: 260px; overflow: auto; font: 11px/1.4 var(--mono); background: var(--panel-2); padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
   .intel { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
-  .intel li { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
-  .intel .t { font-weight: 600; }
-  .intel .why { font: 11px var(--mono); color: var(--muted); }
-  @media (prefers-reduced-motion: reduce) { .meter i { transition: none; } }
-  /* Character creation */
-  #look-preview { position: relative; height: 240px; background: #1c2430; border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
-  #look-preview .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; text-align: center; padding: 12px; }
-  .look { display: grid; grid-template-columns: 64px 1fr; gap: 8px 10px; align-items: center; margin-bottom: 10px; }
-  .look > span { font-size: 12px; color: var(--muted); }
-  .look select { min-height: 30px; }
-  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
-  .swatches button { width: 26px; height: 26px; min-height: 0; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
-  .swatches button[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
-  .seg { display: flex; gap: 4px; }
-  .seg button { flex: 1; min-height: 30px; padding: 0 6px; font-size: 12px; }
-  .seg button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
+  .intel li { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; } .intel .t { font-weight: 600; } .intel .why { font: 11px var(--mono); color: var(--muted); }
+  #dbg-open { position: fixed; left: 6px; bottom: calc(var(--bottom) + 6px); z-index: 40; min-height: 28px; padding: 0 8px; font: 11px var(--mono); opacity: .6; }
+  .sheetp { position: fixed; left: 0; right: 0; bottom: 0; z-index: 55; max-height: 88dvh; overflow-y: auto; background: var(--panel); border-top: 2px solid var(--accent); border-radius: 18px 18px 0 0; padding: 16px 14px calc(var(--bottom) + 16px); }
+  .sheetp[hidden] { display: none; }
+  .sheetp h3 { margin: 0 0 8px; font: 400 24px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; animation-delay: 0s !important; transition: none !important; } }
+  @media (min-width: 700px) { .screen > .scroll, .screen > .bottom, .screen > .top { width: min(560px, 100%); margin-inline: auto; } .preview { width: min(560px, calc(100% - 28px)); align-self: center; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>🥊 Boxing Manager AI</h1>
-  <span class="muted small">Deterministic physics → telemetry → IndexedDB → local LLM context</span>
-  <span class="db" id="db-status">opening database…</span>
-</header>
 
-<main>
-  <!-- ─── Left: fighter + training camp ─── -->
-  <div id="left">
-    <section class="card" aria-labelledby="fighter-h">
-      <h2 id="fighter-h">Your fighter</h2>
-      <label class="field"><span>Name</span><input type="text" id="fighter-name" maxlength="24" autocomplete="off"></label>
-      <details id="look-details" open>
-        <summary>Look</summary>
-        <div id="look-preview"><div class="placeholder" id="look-preview-msg">Loading preview…</div></div>
-        <div class="look" id="look" role="group" aria-label="Fighter look"></div>
-        <button class="sm" id="look-reset">Back to the photo</button>
-      </details>
-      <div id="stats"></div>
-      <div class="derived" id="derived" aria-label="Derived physics"></div>
-    </section>
-
-    <section class="card" aria-labelledby="camp-h">
-      <h2 id="camp-h">Training camp <span>points <span class="points" id="points">0</span></span></h2>
-      <p class="muted small" style="margin-top:0">Each +1 costs 1 point under 60, 2 under 80, then 3. You earn points from fights (win 6, draw 4, loss 3).</p>
-      <div class="row">
-        <button id="camp-confirm" class="primary">Confirm training</button>
-        <button id="camp-reset">Undo</button>
-      </div>
-      <div class="status" id="camp-status" role="status"></div>
-    </section>
+<!-- ─── Title ─── -->
+<section class="screen" id="s-title">
+  <div class="bg"></div>
+  <h1 class="logo" id="logo" aria-label="Bring the Ruckus"><span>Bring</span><span>The</span><em>Ruckus</em></h1>
+  <p class="tag">Street boxing · Uptown NYC</p>
+  <div class="menu">
+    <button class="big primary" id="t-play" data-go="play">Play</button>
+    <button class="big" id="t-continue" data-go="continue" hidden>Continue<small id="t-continue-sub"></small></button>
+    <button class="big ghost" data-go="settings">Settings</button>
   </div>
+  <div class="ver" id="t-record"></div>
+</section>
 
-  <!-- ─── Centre: ring, round control, feed ─── -->
-  <div id="center">
-    <section class="card">
-      <div class="scoreboard">
-        <div class="corner red">
-          <span class="name" id="red-name">Red</span>
-          <div class="meter hp" title="Health"><i id="red-hp" style="width:100%"></i></div>
-          <div class="meter gas" title="Gas (stamina)"><i id="red-gas" style="width:100%"></i></div>
-        </div>
-        <div class="clock" id="clock" aria-live="off">R0 0:00</div>
-        <div class="corner blue">
-          <span class="name" id="blue-name">Blue</span>
-          <div class="meter hp" title="Health"><i id="blue-hp" style="width:100%"></i></div>
-          <div class="meter gas" title="Gas (stamina)"><i id="blue-gas" style="width:100%"></i></div>
-        </div>
-      </div>
-      <div id="ring-wrap">
-        <div id="ring"></div>
-        <div class="placeholder" id="ring-placeholder">Pick a mode on the right to start a fight.</div>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="corner-h">
-      <h2 id="corner-h">Corner <span id="corner-phase" class="muted"></span></h2>
-      <div class="tactics" id="tactics" role="group" aria-label="Tactic for next round"></div>
-      <div class="row" style="margin-top:10px">
-        <button class="primary" id="start-round" disabled>Start round</button>
-        <label class="row small"><span class="muted">Speed</span>
-          <select id="speed" style="width:auto">
-            <option value="0.5">½× slow</option><option value="1" selected>1× real time</option><option value="4">4×</option>
-            <option value="16">16×</option><option value="instant">Instant</option>
-          </select>
-        </label>
-        <label class="row small">View <select id="view" style="width:auto">
-          <option value="3d" selected>3D broadcast</option><option value="2d">2D top-down</option><option value="headless">Headless</option>
-        </select></label>
-        <label class="row small">Time <select id="time" style="width:auto" title="Applies from the next fight">
-          <option value="day" selected>Day</option><option value="night">Night</option>
-        </select></label>
-      </div>
-      <div class="status" id="corner-status" role="status"></div>
-    </section>
-
-    <section class="card" aria-labelledby="feed-h">
-      <h2 id="feed-h">Exchanges</h2>
-      <ul id="feed" aria-live="polite"></ul>
-      <details><summary>Last exchange telemetry (JSON)</summary><pre id="telemetry">No exchanges yet.</pre></details>
-    </section>
+<!-- ─── Settings ─── -->
+<section class="screen" id="s-settings" hidden>
+  <header class="top"><button class="back" data-go="back" aria-label="Back">‹</button><h2>Settings</h2></header>
+  <div class="scroll">
+    <div class="setting"><span>Sound effects</span><div class="seg" id="set-sfx"></div></div>
+    <div class="setting"><span>Music</span><div class="seg" id="set-music"></div><p>Off by default. A loop made in your browser.</p></div>
+    <div class="setting"><span>Time of day</span><div class="seg" id="set-time"></div><p>Night takes a little longer to load the first time.</p></div>
+    <div class="setting"><span>Fight speed</span><div class="seg" id="set-speed"></div><p>Rounds are three minutes. Fast plays them in 45 seconds.</p></div>
   </div>
+</section>
 
-  <!-- ─── Right: modes and intel ─── -->
-  <div id="right">
-    <section class="card" aria-labelledby="mode-h">
-      <h2 id="mode-h">Mode</h2>
-      <div class="tabs" role="tablist">
-        <button role="tab" id="tab-single" aria-selected="true" aria-controls="pane-single">Single-player</button>
-        <button role="tab" id="tab-p2p" aria-selected="false" aria-controls="pane-p2p">P2P</button>
-      </div>
-
-      <div class="pane" id="pane-single" role="tabpanel">
-        <p class="muted small" style="margin-top:0">AI vs AI. You manage the red corner; the opponent's corner is automated.</p>
-        <label class="field"><span>Opponent archetype</span>
-          <select id="archetype">
-            <option value="slugger">Slugger (power, low speed)</option>
-            <option value="speedster">Speedster (speed, light hands)</option>
-            <option value="technician">Technician (Ring IQ)</option>
-            <option value="grinder">Grinder (stamina)</option>
-            <option value="mirror">Mirror (your stats)</option>
-          </select>
-        </label>
-        <label class="field"><span>Rounds</span>
-          <select id="rounds"><option>3</option><option selected>6</option><option>10</option><option>12</option></select>
-        </label>
-        <button class="primary" id="new-fight">New fight</button>
-      </div>
-
-      <div class="pane" id="pane-p2p" role="tabpanel" hidden>
-        <p class="muted small" style="margin-top:0">Serverless WebRTC. Swap two strings (copy-paste, or a QR of the link). Both browsers run the same seeded physics; only corner calls cross the wire.</p>
-        <div class="row" style="margin-bottom:8px">
-          <button id="p2p-host">Host: create offer</button>
-          <button id="p2p-guest">Guest: answer an offer</button>
-        </div>
-        <label class="field"><span id="p2p-out-label">Your string</span><textarea id="p2p-out" readonly placeholder="Your offer or answer appears here."></textarea></label>
-        <div class="row" style="margin-bottom:10px">
-          <button class="sm" id="p2p-copy">Copy string</button>
-          <button class="sm" id="p2p-copy-link">Copy link (for QR)</button>
-          <span class="muted small" id="p2p-size"></span>
-        </div>
-        <label class="field"><span id="p2p-in-label">Their string</span><textarea id="p2p-in" placeholder="Paste the other player's string."></textarea></label>
-        <button class="primary" id="p2p-apply">Apply their string</button>
-        <div class="status" id="p2p-status" role="status"></div>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="intel-h">
-      <h2 id="intel-h">Corner intel (RAG)</h2>
-      <p class="muted small" style="margin-top:0">Top 3 past tactics that won against opponents shaped like this one, from your fight logs.</p>
-      <ul class="intel" id="intel"><li class="muted">Start a fight to query.</li></ul>
-      <details><summary>LLM context block</summary><pre id="llm-context">—</pre></details>
-    </section>
-
-    <section class="card">
-      <h2>Data</h2>
-      <div class="row">
-        <button class="sm" id="export">Export logs</button>
-        <label class="row small"><button class="sm" id="import-btn">Import</button><input type="file" id="import" accept="application/json" hidden></label>
-      </div>
-    </section>
+<!-- ─── Fighter ─── -->
+<section class="screen" id="s-fighter" hidden>
+  <header class="top"><button class="back" data-go="back" aria-label="Back">‹</button><h2>Your fighter</h2><span class="chip" id="f-record"></span></header>
+  <div class="preview" id="look-preview"><div class="placeholder" id="look-preview-msg">Loading preview…</div></div>
+  <div class="scroll">
+    <label class="namefield"><input type="text" id="fighter-name" maxlength="24" autocomplete="off" aria-label="Fighter name" placeholder="Name"></label>
+    <div class="look" id="look" role="group" aria-label="Fighter look"></div>
+    <button class="link" id="look-reset">Back to the photo outfit</button>
+    <div class="card" style="margin-top:12px">
+      <h3>Stats</h3>
+      <div id="f-stats"></div>
+      <button class="big" id="f-train" data-go="train" style="width:100%;margin-top:8px"></button>
+    </div>
   </div>
-</main>
+  <footer class="bottom"><button class="big primary" data-go="fight" id="f-next">Pick opponent</button></footer>
+</section>
+
+<!-- ─── Upgrade ─── -->
+<section class="screen" id="s-upgrade" hidden>
+  <header class="top"><button class="back" data-go="back" aria-label="Back">‹</button><h2>Training</h2></header>
+  <div class="scroll">
+    <div class="points-big"><b id="points">0</b><span class="muted small">TRAINING POINTS</span></div>
+    <div id="u-rows"></div>
+    <p class="muted small">Each +1 costs 1 point under 60, 2 under 80, then 3. Win a fight for 6 points, draw 4, lose 3.</p>
+  </div>
+  <footer class="bottom">
+    <button class="big" id="camp-reset">Undo</button>
+    <button class="big primary" id="camp-confirm" style="flex:2">Confirm</button>
+  </footer>
+</section>
+
+<!-- ─── Opponent ─── -->
+<section class="screen" id="s-opponent" hidden>
+  <header class="top"><button class="back" data-go="back" aria-label="Back">‹</button><h2>Pick your opponent</h2></header>
+  <div class="scroll">
+    <div id="opps"></div>
+    <div class="rounds"><span class="muted small">ROUNDS</span><div class="seg" id="rounds-seg"></div></div>
+    <button class="link" id="open-p2p">Fight a friend instead (P2P)</button>
+  </div>
+  <footer class="bottom"><button class="big primary" id="o-fight">Fight</button></footer>
+</section>
+
+<!-- ─── Fight ─── -->
+<section class="screen" id="s-fight" hidden>
+  <div id="ring"></div>
+  <div class="flash" id="flash"></div>
+  <div class="hud" aria-label="Fight status">
+    <div class="side red"><div class="nm" id="red-name">Red</div><div class="meter hp" id="red-hpm"><b id="red-hpg"></b><i id="red-hp"></i></div><div class="meter gas"><i id="red-gas"></i></div></div>
+    <div class="mid"><div id="round-lbl">ROUND 1</div><div id="clock">3:00</div></div>
+    <div class="side blue"><div class="nm" id="blue-name">Blue</div><div class="meter hp" id="blue-hpm"><b id="blue-hpg"></b><i id="blue-hp"></i></div><div class="meter gas"><i id="blue-gas"></i></div></div>
+  </div>
+  <div class="hud-btns"><button id="speed-btn" aria-label="Fight speed">4×</button><button id="quit-btn" aria-label="Leave the fight">II</button></div>
+  <div class="strip" id="strip"><span class="chip" id="tactic-chip"></span></div>
+  <div class="sheet" id="corner" hidden>
+    <h3 id="c-title">Corner</h3>
+    <p class="last" id="c-last"></p>
+    <div class="tip" id="c-tip"></div>
+    <div class="tactics" id="tactics" role="group" aria-label="Tactic for the next round"></div>
+    <button class="big primary" id="start-round" style="width:100%">Ring the bell</button>
+    <div class="status" id="corner-status" role="status"></div>
+  </div>
+</section>
+
+<!-- ─── Result ─── -->
+<section class="screen" id="s-result" hidden>
+  <div class="scroll" id="r-body"></div>
+</section>
+
+<!-- ─── Overlays ─── -->
+<div id="toast" role="status"></div>
+<div class="modal" id="modal" hidden><div class="box"><p id="modal-text"></p><div class="row" id="modal-btns"></div></div></div>
+
+<div class="sheetp" id="p2p-sheet" hidden>
+  <h3>Fight a friend</h3>
+  <p class="muted small" style="margin-top:0">Serverless WebRTC. Swap two strings (copy-paste, or a QR of the link). Both browsers run the same seeded physics; only corner calls cross the wire. You are the red corner if you host.</p>
+  <div class="row"><button id="p2p-host">Host: create offer</button><button id="p2p-guest">Guest: answer an offer</button></div>
+  <label class="field" style="margin-top:10px"><span id="p2p-out-label">Your string</span><textarea id="p2p-out" readonly placeholder="Your offer or answer appears here."></textarea></label>
+  <div class="row" style="margin-bottom:10px"><button id="p2p-copy">Copy string</button><button id="p2p-copy-link">Copy link (for QR)</button><span class="muted small" id="p2p-size"></span></div>
+  <label class="field"><span id="p2p-in-label">Their string</span><textarea id="p2p-in" placeholder="Paste the other player's string."></textarea></label>
+  <div class="row"><button class="primary" id="p2p-apply">Apply their string</button><button id="p2p-close">Close</button></div>
+  <div class="status" id="p2p-status" role="status"></div>
+</div>
+
+<button id="dbg-open" hidden>DBG</button>
+<div class="drawer" id="debug" hidden>
+  <div class="row"><b>Debug</b><span class="muted small" id="db-status" style="flex:1">opening database…</span><button id="dbg-close">Close</button></div>
+  <h2>Fight options</h2>
+  <div class="row">
+    <label class="field" style="flex:1"><span>View</span><select id="view"><option value="3d" selected>3D broadcast</option><option value="2d">2D top-down</option><option value="headless">Headless</option></select></label>
+    <label class="field" style="flex:1"><span>Speed override</span><select id="speed-override"><option value="">Use setting</option><option value="0.5">½×</option><option value="16">16×</option><option value="instant">Instant</option></select></label>
+  </div>
+  <h2>Exchanges</h2><ul id="feed"></ul>
+  <h2>Last exchange telemetry (JSON)</h2><pre id="telemetry">No exchanges yet.</pre>
+  <h2>Corner intel (RAG)</h2><ul class="intel" id="intel"><li class="muted">Start a fight to query.</li></ul>
+  <h2>LLM context block</h2><pre id="llm-context">—</pre>
+  <h2>Data</h2>
+  <div class="row"><button id="export">Export logs</button><button id="import-btn">Import</button><input type="file" id="import" accept="application/json" hidden></div>
+</div>
 
 <script type="module">
 import { FighterModel, CombatSimulation, createPhysicsGame, TACTICS, STAT_KEYS, TICK_MS, deriveAttributes, normalizeStats } from './physics-engine.js';
@@ -268,151 +350,268 @@ import { createArena3D } from './arena-babylon.js';
 import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
 import { profileOf, receivedProfile } from './profile.js';
+import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
+import { createSfx } from './sfx.js';
 
-// ─── Small helpers ──────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
+// Player text only ever goes through textContent (el() sets properties, never innerHTML).
 const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
 const setStatus = (node, text, kind = '') => { node.textContent = text; node.className = `status ${kind}`; };
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
-// Same shape as net.js uid(): base-36 time plus randomness.
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const STAT_LABEL = { speed: 'Speed', power: 'Power', stamina: 'Stamina', ringIQ: 'Ring IQ' };
+const DEBUG = new URLSearchParams(location.search).has('debug');
 
 const db = new GameDB();
+const sfx = createSfx();
 const state = {
+  screen: 'title',
+  hasSaved: false,
   fighter: { name: 'Kid Dynamo', stats: { speed: 50, power: 50, stamina: 50, ringIQ: 50 }, points: 20, record: { w: 0, l: 0, d: 0 }, look: { ...PHOTO_OUTFITS.red } },
   pending: null,          // training changes not yet confirmed
-  sim: null, game: null,
-  match: null,            // { mode, seed, matchId, myCorner, fighters: {red, blue} }
+  sim: null, game: null, arena: null,
+  match: null,            // { mode, seed, matchId, myCorner, fighters, names }
   tactic: 'outbox',
-  peer: null,             // P2P session
+  peer: null,
+  opp: 'slugger', rounds: 3,
+  result: null,
+  settings: { sfx: true, music: false, time: 'day', speed: 4 },
+  speed: 4,
+};
+try { state.settings = normalizeSettings(JSON.parse(localStorage.getItem('bm.settings'))); } catch { state.settings = normalizeSettings(null); }
+state.speed = state.settings.speed;
+const saveSettings = () => { try { localStorage.setItem('bm.settings', JSON.stringify(state.settings)); } catch { /* private mode */ } };
+
+let toastTimer = 0;
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2200);
+}
+
+/** An in-page dialog (no native confirm). buttons: [{ label, value, primary }]. Resolves with the pressed value. */
+function ask(text, buttons) {
+  $('modal-text').textContent = text;
+  $('modal-btns').replaceChildren();
+  $('modal').hidden = false;
+  return new Promise((resolve) => {
+    for (const b of buttons) $('modal-btns').append(el('button', { textContent: b.label, className: b.primary ? 'primary' : '', onclick: () => { $('modal').hidden = true; resolve(b.value); } }));
+  });
+}
+
+// ─── Screens ────────────────────────────────────────────────────────────────
+
+const onEnter = {
+  title: renderTitle, settings: renderSettings, fighter: renderFighterScreen, upgrade: renderUpgrade, opponent: renderOpponents,
 };
 
-// ─── Fighter card + training camp ───────────────────────────────────────────
-
-const costOf = (v) => (v < 60 ? 1 : v < 80 ? 2 : 3);
-const fightActive = () => state.sim && state.sim.phase !== 'fight_over';
-
-function renderFighter() {
-  const base = state.fighter.stats, cur = state.pending ?? base;
-  const box = $('stats');
-  box.replaceChildren();
-  for (const k of STAT_KEYS) {
-    const bar = el('div', { className: 'bar' }, el('b'), el('i'));
-    bar.children[0].style.width = `${cur[k]}%`;
-    bar.children[1].style.width = `${base[k]}%`;
-    const minus = el('button', { className: 'sm', textContent: '−', ariaLabel: `Lower ${STAT_LABEL[k]}` });
-    const plus = el('button', { className: 'sm', textContent: '+', ariaLabel: `Train ${STAT_LABEL[k]}` });
-    minus.disabled = fightActive() || cur[k] <= base[k];
-    plus.disabled = fightActive() || cur[k] >= 100 || costOf(cur[k]) > pointsLeft();
-    minus.onclick = () => train(k, -1);
-    plus.onclick = () => train(k, +1);
-    box.append(el('div', { className: 'stat' },
-      el('span', { textContent: STAT_LABEL[k] }), bar, el('span', { className: 'val', textContent: cur[k] }),
-      el('span', { className: 'row' }, minus, plus)));
-  }
-  $('points').textContent = pointsLeft();
-  $('camp-confirm').disabled = !state.pending || fightActive();
-  $('camp-reset').disabled = !state.pending;
-
-  // Derived physics, so stat changes read as physical consequences.
-  const a = deriveAttributes(normalizeStats(cur));
-  const rows = [
-    ['hand speed', `${a.baseHandSpeedMps.toFixed(2)} m/s`],
-    ['striking mass', `${a.effectiveMassKg.toFixed(2)} kg`],
-    ['cross energy (fresh)', `${(0.5 * a.effectiveMassKg * a.baseHandSpeedMps ** 2).toFixed(0)} J`],
-    ['perception', `${a.perceptionMs.toFixed(0)} ms`],
-    ['gas tank', `${a.maxGas.toFixed(0)}`],
-    ['foot speed', `${a.footSpeedMps.toFixed(2)} m/s`],
-    ['record', `${state.fighter.record.w}-${state.fighter.record.l}-${state.fighter.record.d}`],
-  ];
-  $('derived').replaceChildren(...rows.flatMap(([k, v]) => [el('span', { textContent: k }), el('span', { textContent: v })]));
+function show(name) {
+  if (state.screen === 'fight' && name !== 'fight') stopMatch();
+  state.screen = name;
+  for (const s of SCREENS) $(`s-${s}`).hidden = s !== name;
+  onEnter[name]?.();
 }
-
-function pointsLeft() {
-  if (!state.pending) return state.fighter.points;
-  let spent = 0;
-  for (const k of STAT_KEYS) for (let v = state.fighter.stats[k]; v < state.pending[k]; v++) spent += costOf(v);
-  return state.fighter.points - spent;
-}
-
-function train(k, dir) {
-  state.pending ??= { ...state.fighter.stats };
-  const v = state.pending[k];
-  if (dir > 0 && v < 100 && costOf(v) <= pointsLeft()) state.pending[k] = v + 1;
-  if (dir < 0 && v > state.fighter.stats[k]) state.pending[k] = v - 1;
-  if (STAT_KEYS.every((s) => state.pending[s] === state.fighter.stats[s])) state.pending = null;
-  renderFighter();
-}
-
-$('camp-confirm').onclick = async () => {
-  state.fighter.points = pointsLeft();
-  state.fighter.stats = { ...state.pending };
-  state.pending = null;
-  await db.saveFighter(state.fighter);
-  setStatus($('camp-status'), 'Training saved.', 'ok');
-  renderFighter();
+const go = (event) => {
+  const next = navigate(state.screen, event);
+  if (state.screen === 'fighter') db.saveFighter(state.fighter).then(() => { state.hasSaved = true; });
+  if (next === 'fight') return event === 'rematch' ? rematch() : startSingle();
+  show(next);
 };
-$('camp-reset').onclick = () => { state.pending = null; setStatus($('camp-status'), ''); renderFighter(); };
-$('fighter-name').oninput = (e) => { state.fighter.name = e.target.value.trim() || 'Unnamed'; db.saveFighter(state.fighter); };
 
-// ─── Character creation: looks only, the sim never sees them ────────────────
+document.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-go]');
+  if (!b || b.disabled) return;
+  sfx.click();
+  go(b.dataset.go);
+});
 
-let preview = null;
-const saveLook = () => { db.saveFighter(state.fighter); preview?.setLook(state.fighter.look); renderLook(); };
+const recordText = (r) => `${r.w}-${r.l}-${r.d}`;
+
+// ─── Title ──────────────────────────────────────────────────────────────────
+
+function renderTitle() {
+  $('t-continue').hidden = !state.hasSaved;
+  $('t-continue-sub').textContent = `${state.fighter.name} · ${recordText(state.fighter.record)}`;
+  $('t-record').textContent = state.hasSaved ? '' : 'Create a fighter and fight your way up.';
+}
+
+// ─── Settings ───────────────────────────────────────────────────────────────
+
+function segment(host, options, current, onPick) {
+  host.replaceChildren(...Object.entries(options).map(([k, text]) => el('button', {
+    type: 'button', textContent: text, ariaPressed: String(String(current) === String(k)),
+    onclick: () => { sfx.click(); onPick(k); },
+  })));
+}
+function renderSettings() {
+  const s = state.settings;
+  const set = (patch) => { state.settings = normalizeSettings({ ...s, ...patch }); saveSettings(); applySettings(); renderSettings(); };
+  segment($('set-sfx'), { on: 'On', off: 'Off' }, s.sfx ? 'on' : 'off', (k) => set({ sfx: k === 'on' }));
+  segment($('set-music'), { on: 'On', off: 'Off' }, s.music ? 'on' : 'off', (k) => set({ music: k === 'on' }));
+  segment($('set-time'), { day: 'Day', night: 'Night' }, s.time, (k) => set({ time: k }));
+  segment($('set-speed'), SPEEDS, s.speed, (k) => set({ speed: Number(k) }));
+}
+function applySettings() {
+  sfx.setEnabled(state.settings.sfx);
+  if (sfx.available) sfx.setMusic(state.settings.music && !!sfx.unlockedOnce);
+  state.speed = state.settings.speed;
+  state.game?.setTimeScale(speedValue());
+  $('speed-btn').textContent = `${state.speed}×`;
+}
+// Music can only start after a tap, so it waits for the first one.
+document.addEventListener('pointerdown', () => { sfx.unlockedOnce = true; sfx.setMusic(state.settings.music); }, { once: true });
+
+// ─── Fighter screen: name, look, stats ──────────────────────────────────────
+
+const wins = () => state.fighter.record.w;
+let preview = null, previewStarting = false;
+const saveLook = () => { db.saveFighter(state.fighter).then(() => { state.hasSaved = true; }); preview?.setLook(state.fighter.look); renderLook(); };
 const setLook = (patch) => { state.fighter.look = normalizeLook({ ...state.fighter.look, ...patch }); saveLook(); };
+const tryPick = (key, value, apply) => {
+  if (isUnlocked(key, value, wins())) { apply(); return; }
+  const u = unlockFor(key, value);
+  toast(`${u.label}: win ${u.wins} ${u.wins === 1 ? 'fight' : 'fights'} to unlock`);
+};
 
 function swatches(key, colors, label) {
   return el('div', { className: 'swatches', role: 'group', ariaLabel: label }, ...colors.map((c) => el('button', {
-    type: 'button', ariaLabel: `${label} ${c}`, title: c, style: `background:${c}`,
-    ariaPressed: String(state.fighter.look[key] === c), onclick: () => setLook({ [key]: c }),
+    type: 'button', ariaLabel: `${label} ${c}${isUnlocked(key, c, wins()) ? '' : ' (locked)'}`, title: c, style: `background:${c}`,
+    className: isUnlocked(key, c, wins()) ? '' : 'locked', ariaPressed: String(state.fighter.look[key] === c), onclick: () => tryPick(key, c, () => setLook({ [key]: c })),
   })));
 }
-function seg(options, current, onPick, label) {
-  return el('div', { className: 'seg', role: 'group', ariaLabel: label }, ...Object.entries(options).map(([k, text]) =>
-    el('button', { type: 'button', textContent: text, ariaPressed: String(current === k), onclick: () => onPick(k) })));
-}
-function selectOf(options, current, onPick, label) {
-  const s = el('select', { ariaLabel: label, onchange: (e) => onPick(e.target.value) },
-    ...Object.entries(options).map(([k, text]) => el('option', { value: k, textContent: text, selected: k === current })));
-  return s;
+function seg(key, options, current, onPick, label) {
+  return el('div', { className: 'seg', role: 'group', ariaLabel: label }, ...Object.entries(options).map(([k, text]) => el('button', {
+    type: 'button', textContent: text, ariaPressed: String(current === k), className: key && !isUnlocked(key, k, wins()) ? 'locked' : '',
+    onclick: () => (key ? tryPick(key, k, () => onPick(k)) : onPick(k)),
+  })));
 }
 const capMode = (l) => (!l.cap ? 'none' : l.capBackwards ? 'backwards' : 'forward');
 
 function renderLook() {
   const l = state.fighter.look;
   const rows = [
-    ['Skin', seg(LOOK_OPTIONS.skin, l.skin, (k) => setLook({ skin: k }), 'Skin tone')],
-    ['Top', selectOf(LOOK_OPTIONS.topStyle, l.topStyle, (k) => setLook({ topStyle: k }), 'Top style')],
+    ['Skin', seg(null, LOOK_OPTIONS.skin, l.skin, (k) => setLook({ skin: k }), 'Skin tone')],
+    ['Top', seg('topStyle', LOOK_OPTIONS.topStyle, l.topStyle, (k) => setLook({ topStyle: k }), 'Top style')],
     ['', swatches('top', LOOK_OPTIONS.top, 'Top colour')],
     ...(l.topStyle === 'varsity' ? [['Sleeves', swatches('sleeve', LOOK_OPTIONS.sleeve, 'Sleeve colour')]] : []),
-    ['Jeans', selectOf(LOOK_OPTIONS.jeans, l.jeans, (k) => setLook({ jeans: k }), 'Jeans wash')],
-    ['Shoes', selectOf(LOOK_OPTIONS.boots, l.boots, (k) => setLook({ boots: k }), 'Shoes')],
-    ['Cap', seg({ none: 'None', forward: 'Forward', backwards: 'Backwards' }, capMode(l), (k) =>
+    ['Jeans', swatches('jeans', Object.keys(LOOK_OPTIONS.jeans), 'Jeans wash')],
+    ['Shoes', seg(null, LOOK_OPTIONS.boots, l.boots, (k) => setLook({ boots: k }), 'Shoes')],
+    ['Cap', seg(null, { none: 'None', forward: 'Forward', backwards: 'Back' }, capMode(l), (k) =>
       setLook(k === 'none' ? { cap: null } : { cap: l.cap ?? LOOK_OPTIONS.cap[0], capBackwards: k === 'backwards' }), 'Cap')],
     ...(l.cap ? [['', swatches('cap', LOOK_OPTIONS.cap, 'Cap colour')]] : []),
-    ['Chain', el('label', { className: 'row small' }, el('input', { type: 'checkbox', checked: l.chain, onchange: (e) => setLook({ chain: e.target.checked }) }), 'Gold chain')],
+    ['Chain', seg(null, { off: 'None', on: 'Gold chain' }, l.chain ? 'on' : 'off', (k) => setLook({ chain: k === 'on' }), 'Chain')],
     ['Wraps', swatches('wraps', LOOK_OPTIONS.wraps, 'Wrap colour')],
   ];
   $('look').replaceChildren(...rows.flatMap(([k, control]) => [el('span', { textContent: k }), control]));
 }
 $('look-reset').onclick = () => { state.fighter.look = { ...PHOTO_OUTFITS.red }; saveLook(); };
+$('fighter-name').oninput = (e) => { state.fighter.name = e.target.value.trim() || 'Unnamed'; db.saveFighter(state.fighter).then(() => { state.hasSaved = true; }); };
 
-function startPreview() {
-  createLookPreview({ parent: $('look-preview'), look: state.fighter.look })
-    .then((p) => { preview = p; $('look-preview-msg').remove(); })
-    .catch((err) => { $('look-preview-msg').textContent = `Preview unavailable: ${err.message}`; console.warn(err); });
+function renderFighterScreen() {
+  $('fighter-name').value = state.fighter.name;
+  $('f-record').textContent = recordText(state.fighter.record);
+  renderLook();
+  const s = state.fighter.stats;
+  $('f-stats').replaceChildren(...STAT_KEYS.map((k) => {
+    const bar = el('div', { className: 'bar' }, el('i'));
+    bar.firstChild.style.width = `${s[k]}%`;
+    return el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[k] }), bar, el('span', { className: 'val', textContent: s[k] }));
+  }));
+  $('f-train').textContent = state.fighter.points > 0 ? `Train · ${state.fighter.points} points` : 'Train';
+  if (!preview && !previewStarting) {
+    previewStarting = true;
+    createLookPreview({ parent: $('look-preview'), look: state.fighter.look })
+      .then((p) => { preview = p; $('look-preview-msg')?.remove(); })
+      .catch((err) => { previewStarting = false; $('look-preview-msg').textContent = `Preview unavailable: ${err.message}`; console.warn(err); });
+  }
 }
+
+// ─── Upgrade screen ─────────────────────────────────────────────────────────
+
+const fighterFx = (k, stats) => {
+  const a = deriveAttributes(normalizeStats(stats));
+  return { speed: `Hand speed ${a.baseHandSpeedMps.toFixed(1)} m/s`, power: `Punches carry ${a.effectiveMassKg.toFixed(1)} kg`, stamina: `Gas tank ${a.maxGas.toFixed(0)}`, ringIQ: `Reads punches in ${a.perceptionMs.toFixed(0)} ms` }[k];
+};
+function pointsLeft() {
+  if (!state.pending) return state.fighter.points;
+  let spent = 0;
+  for (const k of STAT_KEYS) for (let v = state.fighter.stats[k]; v < state.pending[k]; v++) spent += statCost(v);
+  return state.fighter.points - spent;
+}
+function train(k, dir) {
+  state.pending ??= { ...state.fighter.stats };
+  const v = state.pending[k];
+  if (dir > 0 && v < 100 && statCost(v) <= pointsLeft()) state.pending[k] = v + 1;
+  if (dir < 0 && v > state.fighter.stats[k]) state.pending[k] = v - 1;
+  if (STAT_KEYS.every((s) => state.pending[s] === state.fighter.stats[s])) state.pending = null;
+  sfx.click();
+  renderUpgrade();
+}
+function renderUpgrade() {
+  const base = state.fighter.stats, cur = state.pending ?? base;
+  $('u-rows').replaceChildren(...STAT_KEYS.map((k) => {
+    const bar = el('div', { className: 'bar' }, el('b'), el('i'));
+    bar.children[0].style.width = `${cur[k]}%`; bar.children[1].style.width = `${base[k]}%`;
+    const minus = el('button', { textContent: '−', ariaLabel: `Lower ${STAT_LABEL[k]}`, disabled: cur[k] <= base[k], onclick: () => train(k, -1) });
+    const plus = el('button', { textContent: '+', ariaLabel: `Train ${STAT_LABEL[k]}`, disabled: cur[k] >= 100 || statCost(cur[k]) > pointsLeft(), onclick: () => train(k, +1) });
+    return el('div', { className: 'urow' },
+      el('div', { className: 'nm' }, STAT_LABEL[k], el('span', { textContent: cur[k] })),
+      bar,
+      el('div', { className: 'fx', textContent: `${fighterFx(k, cur)} · next +1 costs ${statCost(cur[k])}` }),
+      el('div', { className: 'btns' }, minus, plus));
+  }));
+  $('points').textContent = pointsLeft();
+  $('camp-confirm').disabled = !state.pending;
+  $('camp-reset').disabled = !state.pending;
+}
+$('camp-confirm').onclick = async () => {
+  state.fighter.points = pointsLeft();
+  state.fighter.stats = { ...state.pending };
+  state.pending = null;
+  await db.saveFighter(state.fighter);
+  state.hasSaved = true;
+  toast('Training saved');
+  renderUpgrade();
+};
+$('camp-reset').onclick = () => { state.pending = null; renderUpgrade(); };
 
 // ─── Opponents ──────────────────────────────────────────────────────────────
 
 const ARCHETYPES = {
-  slugger:    { name: 'Iron Mauler',   stats: { speed: 38, power: 82, stamina: 55, ringIQ: 42 } },
-  speedster:  { name: 'Quicksilver',   stats: { speed: 84, power: 40, stamina: 60, ringIQ: 55 } },
-  technician: { name: 'The Professor', stats: { speed: 58, power: 50, stamina: 52, ringIQ: 82 } },
-  grinder:    { name: 'Diesel Dean',   stats: { speed: 48, power: 55, stamina: 85, ringIQ: 45 } },
+  slugger:    { name: 'Iron Mauler',   style: 'Heavy hands, slow feet. One shot changes the night.', stats: { speed: 38, power: 82, stamina: 55, ringIQ: 42 }, tint: '#6b1d22',
+    look: { topStyle: 'tank', top: '#16171a', jeans: '#1d1e22', boots: 'timbs', cap: null, chain: true, wraps: '#16171a', skin: 'deep' } },
+  speedster:  { name: 'Quicksilver',   style: 'Flurries from every angle. Hard to catch.', stats: { speed: 84, power: 40, stamina: 60, ringIQ: 55 }, tint: '#6b5a1d',
+    look: { topStyle: 'tee', top: '#c9a227', jeans: '#2f3b52', boots: 'sneakers', cap: '#16171a', capBackwards: false, chain: false, wraps: '#ecebe6', skin: 'medium' } },
+  technician: { name: 'The Professor', style: 'Reads you like a book and counters everything.', stats: { speed: 58, power: 50, stamina: 52, ringIQ: 82 }, tint: '#1d3a6b',
+    look: { topStyle: 'hoodie', top: '#8a8f96', jeans: '#4f6b8f', boots: 'sneakers', cap: null, chain: false, wraps: '#2f6fd0', skin: 'light' } },
+  grinder:    { name: 'Diesel Dean',   style: 'Never tires. Wears you down in the late rounds.', stats: { speed: 48, power: 55, stamina: 85, ringIQ: 45 }, tint: '#1d5a3a',
+    look: { topStyle: 'varsity', top: '#3d5a3a', sleeve: '#c9c6bf', jeans: '#2f3b52', boots: 'timbs', cap: '#3d5a3a', capBackwards: true, chain: true, wraps: '#d9a12b', skin: 'medium' } },
 };
+const opponentOf = (key) => (key === 'mirror'
+  ? { name: 'Mirror Match', style: 'Your own stats. Beat yourself.', stats: { ...state.fighter.stats }, tint: '#4a4a55' }
+  : ARCHETYPES[key]);
+
+function renderOpponents() {
+  const keys = [...Object.keys(ARCHETYPES), 'mirror'];
+  $('opps').replaceChildren(...keys.map((k) => {
+    const o = opponentOf(k);
+    const mini = STAT_KEYS.map((s) => {
+      const bar = el('div', { className: 'bar' }, el('i'));
+      bar.firstChild.style.width = `${o.stats[s]}%`;
+      return el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[s] }), bar);
+    });
+    const avatar = el('div', { className: 'avatar', style: `background:linear-gradient(160deg, ${o.tint}, #0b0d12)` }, o.name[0]);
+    return el('button', { className: 'opp', type: 'button', ariaPressed: String(state.opp === k), onclick: () => { state.opp = k; sfx.click(); renderOpponents(); } },
+      avatar,
+      el('div', {}, el('div', { className: 'nm', textContent: o.name }), el('div', { className: 'style', textContent: o.style }), ...mini));
+  }));
+  segment($('rounds-seg'), { 3: '3 rounds', 6: '6 rounds' }, state.rounds, (k) => { state.rounds = Number(k); renderOpponents(); });
+  $('o-fight').textContent = `Fight ${opponentOf(state.opp).name}`;
+}
+$('o-fight').onclick = () => { sfx.click(); startSingle(); };
 
 /** The automated corner: reads gas, health and the score, and picks a tactic. */
 function aiCorner(sim, corner) {
@@ -427,10 +626,23 @@ function aiCorner(sim, corner) {
 
 // ─── Fight lifecycle ────────────────────────────────────────────────────────
 
+const speedValue = () => { const o = $('speed-override').value; return o === 'instant' ? 1 : o ? Number(o) : state.speed; };
+
+function startSingle() {
+  if (state.pending) toast('Unconfirmed training is not used in this fight');
+  const o = opponentOf(state.opp);
+  startMatch({
+    mode: 'single', seed: randomSeed(), matchId: `m_${uid()}`, rounds: state.rounds,
+    red: profileOf(state.fighter), blue: profileOf({ name: o.name, stats: o.stats, look: o.look }), myCorner: 'red',
+  });
+}
+const rematch = () => startSingle();
+
 function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner }) {
   red = receivedProfile(red, 'red'); blue = receivedProfile(blue, 'blue');   // the other player's look is untrusted
-  state.game?.destroy();
-  state.arena?.destroy(); state.arena = null;
+  stopMatch();
+  $('p2p-sheet').hidden = true;
+  show('fight');
   const sim = new CombatSimulation({
     seed, matchId, rounds,
     red: new FighterModel({ corner: 'red', name: red.name, stats: red.stats }),
@@ -439,43 +651,70 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner }) {
   state.sim = sim;
   state.match = { mode, seed, matchId, myCorner, fighters: { red: red.stats, blue: blue.stats }, names: { red: red.name, blue: blue.name } };
   state.corners = {};           // corner calls received for the next round (P2P)
+  state.result = null;
 
   sim.on('exchange', onExchange);
   sim.on('round_end', onRoundEnd);
   sim.on('fight_end', onFightEnd);
+  sim.on('impact', onImpact);
 
   // Phaser always steps the sim. In the 3D view it runs headless and Babylon only reads the sim.
   const view = $('view').value;
   const headless = view !== '2d';
-  $('ring-wrap').classList.toggle('headless', view === 'headless');
-  $('ring-wrap').classList.toggle('wide', view === '3d');
-  $('ring-placeholder').hidden = view !== 'headless';
-  $('ring-placeholder').textContent = view === 'headless' ? 'Headless: the simulation runs without drawing.' : '';
-  // Phaser's headless mode still makes a canvas, so outside the 2D view it gets a parent that is never shown.
   state.game = createPhysicsGame({ parent: headless ? document.createElement('div') : $('ring'), sim, headless, timeScale: speedValue() });
   if (view === '3d') {
-    createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name }, looks: { red: red.look, blue: blue.look }, timeOfDay: $('time').value })
+    createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name }, looks: { red: red.look, blue: blue.look }, timeOfDay: state.settings.time })
       .then((arena) => { if (state.sim === sim) state.arena = arena; else arena.destroy(); })
-      .catch((err) => { $('ring-placeholder').hidden = false; $('ring-placeholder').textContent = `3D view failed to load: ${err.message}`; });
+      .catch((err) => { toast(`3D view failed to load: ${err.message}`); console.warn(err); });
   }
 
   $('red-name').textContent = red.name;
   $('blue-name').textContent = blue.name;
   $('feed').replaceChildren();
   $('telemetry').textContent = 'No exchanges yet.';
-  renderFighter();
+  $('round-lbl').textContent = `ROUND 1 / ${rounds}`;
+  $('tactic-chip').textContent = '';
+  $('speed-btn').textContent = `${speedValue() === 1 && $('speed-override').value === 'instant' ? '∞' : speedValue()}×`;
   awaitCorner();
 }
 
-function speedValue() { const v = $('speed').value; return v === 'instant' ? 1 : Number(v); }
+function stopMatch() {
+  state.game?.destroy(); state.game = null;
+  state.arena?.destroy(); state.arena = null;
+  state.sim = null;
+  $('corner').hidden = true;
+}
 
-/** Between rounds: let the manager pick, and refresh intel. */
-function awaitCorner() {
-  const sim = state.sim;
-  $('corner-phase').textContent = `before round ${sim.roundIndex + 1} of ${sim.totalRounds}`;
+/** Between rounds: the corner. One line from the coach, five tactics, the bell. */
+async function awaitCorner() {
+  const sim = state.sim, m = state.match;
+  const mine = m.myCorner, theirs = mine === 'red' ? 'blue' : 'red';
+  const picks = await refreshIntel().catch(() => []);
+  if (state.sim !== sim) return;
+  const top = picks[0];
+  const { tip, tactic } = cornerTip(
+    { health: sim.fighters[mine].health, gasRatio: sim.fighters[mine].gasRatio, stats: sim.fighters[mine].stats },
+    { health: sim.fighters[theirs].health, gasRatio: sim.fighters[theirs].gasRatio, stats: sim.fighters[theirs].stats },
+    top ? { tactic: top.tactic, label: TACTICS[top.tactic]?.label ?? top.tactic } : null);
+  state.tactic = tactic;
+  const last = sim.rounds.at(-1);
+  $('c-title').textContent = `Round ${sim.roundIndex + 1} of ${sim.totalRounds}`;
+  $('c-last').textContent = last ? `Round ${last.round_index}: you ${last.cards[mine]}, ${m.names[theirs]} ${last.cards[theirs]}` : 'Pick a plan and ring the bell.';
+  $('c-tip').textContent = `Coach: ${tip}`;
   $('start-round').disabled = false;
-  setStatus($('corner-status'), state.match.mode === 'p2p' ? 'Pick your tactic and lock it in. The round starts when both corners have called.' : '');
-  refreshIntel();
+  $('start-round').textContent = sim.roundIndex === 0 ? 'Ring the bell' : 'Next round';
+  setStatus($('corner-status'), m.mode === 'p2p' ? 'The round starts when both corners have called.' : '');
+  renderTactics(tactic);
+  $('corner').hidden = false;
+}
+
+function renderTactics(coach) {
+  $('tactics').replaceChildren(...Object.entries(TACTICS).map(([key, t]) => {
+    const b = el('button', { type: 'button', ariaPressed: String(key === state.tactic), onclick: () => { state.tactic = key; sfx.click(); renderTactics(coach); } },
+      el('b', { textContent: t.label }), el('span', { textContent: TACTIC_BLURB[key] }));
+    if (key === coach) b.append(el('i', { className: 'coach', textContent: 'COACH' }));
+    return b;
+  }));
 }
 
 function lockCorner() {
@@ -484,6 +723,7 @@ function lockCorner() {
   const mine = state.match.myCorner, theirs = mine === 'red' ? 'blue' : 'red';
   $('start-round').disabled = true;
   if (state.match.mode === 'single') {
+    $('corner').hidden = true;
     beginRound({ [mine]: state.tactic, [theirs]: aiCorner(sim, theirs) });
   } else {
     state.corners[mine] = state.tactic;
@@ -492,95 +732,176 @@ function lockCorner() {
     maybeBeginP2PRound();
   }
 }
+$('start-round').onclick = () => { sfx.click(); lockCorner(); };
 
 function beginRound(actions) {
   const sim = state.sim;
+  $('corner').hidden = true;
   sim.startRound(actions);
-  $('corner-phase').textContent = `round ${sim.roundIndex}: ${TACTICS[actions.red].label} vs ${TACTICS[actions.blue].label}`;
-  setStatus($('corner-status'), '');
+  sfx.bell(1);
+  const mine = state.match.myCorner;
+  $('round-lbl').textContent = `ROUND ${sim.roundIndex} / ${sim.totalRounds}`;
+  $('tactic-chip').textContent = TACTICS[actions[mine]].label;
   addFeed(el('li', { className: 'round', textContent: `── Round ${sim.roundIndex} · red ${actions.red} · blue ${actions.blue}` }));
-  if ($('speed').value === 'instant') sim.runRoundToEnd();
+  if ($('speed-override').value === 'instant') sim.runRoundToEnd();
 }
 
+let dbgOn = DEBUG;
 function onExchange(ex) {
+  if (!dbgOn) return;
   $('telemetry').textContent = JSON.stringify(ex, null, 2);
   for (const p of ex.punches) {
     const t = p.t_ms / 1000;
-    const li = el('li', {},
+    addFeed(el('li', {},
       el('span', { className: p.attacker, textContent: `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')} ${p.attacker} ${p.punch}` }),
       ` ${p.punch_velocity_mps.toFixed(1)} m/s · ${p.distance_vector.magnitude_m.toFixed(2)} m · travel ${p.travel_time_ms.toFixed(0)} vs react ${p.reaction_window_ms.toFixed(0)} ms → `,
-      el('span', { className: p.outcome, textContent: `${p.outcome}${p.transferred_energy_j ? ` ${p.transferred_energy_j.toFixed(0)} J` : ''}` }));
-    addFeed(li);
+      el('span', { className: p.outcome, textContent: `${p.outcome}${p.transferred_energy_j ? ` ${p.transferred_energy_j.toFixed(0)} J` : ''}` })));
   }
 }
-
 function addFeed(li) {
   const feed = $('feed');
   feed.prepend(li);
   while (feed.children.length > 200) feed.lastChild.remove();
 }
 
+// ─── Juice: flashes, shake, sounds. Reads the sim's events; never writes to it. ─────
+
+function flash(kind, strength) {
+  const f = $('flash');
+  f.style.background = kind === 'hurt' ? 'radial-gradient(ellipse at center, transparent 35%, rgba(229,72,77,.9))' : kind === 'ko' ? '#fff' : 'radial-gradient(ellipse at center, rgba(255,255,255,.8), rgba(255,255,255,0) 70%)';
+  f.getAnimations().forEach((a) => a.cancel());
+  f.animate([{ opacity: strength }, { opacity: 0 }], { duration: kind === 'ko' ? 700 : 260, easing: 'ease-out' });
+}
+function onImpact(p) {
+  const mine = state.match?.myCorner;
+  if (p.outcome === 'landed') {
+    sfx.hit(p.transferredJoules);
+    const big = p.transferredJoules > 140 || (p.target !== 'body' && p.type !== 'jab' && p.transferredJoules > 100);
+    if (p.defender === mine) flash('hurt', Math.min(0.25 + p.transferredJoules / 300, 0.9));
+    else if (big) flash('hit', 0.55);
+    if (big) { state.arena?.shake(0.2); sfx.crowd(0.6); } else if (p.transferredJoules > 60) state.arena?.shake(0.07);
+  } else if (p.outcome === 'blocked') sfx.block();
+  else sfx.whoosh();
+}
+
 async function onRoundEnd(round) {
-  const m = state.match;
-  await db.logRound(round, {
-    mode: m.mode, seed: m.seed, managerCorner: m.myCorner,
-    fighters: m.fighters,
-  });
+  const m = state.match, sim = state.sim;
+  await db.logRound(round, { mode: m.mode, seed: m.seed, managerCorner: m.myCorner, fighters: m.fighters });
   const t = round.totals;
   addFeed(el('li', { className: 'round', textContent:
     `── End R${round.round_index} (${round.reason}): ${round.winner} · landed ${t.red.landed}/${t.red.thrown} vs ${t.blue.landed}/${t.blue.thrown} · ${t.red.joules_landed.toFixed(0)} J vs ${t.blue.joules_landed.toFixed(0)} J` }));
   updateDbStatus();
-  if (state.sim.phase === 'round_over') awaitCorner();
+  if (sim.phase === 'round_over') {
+    sfx.bell(3); sfx.crowd(0.5);
+    await wait(2800);                                 // the arena shows "End of round" meanwhile
+    if (state.sim === sim) awaitCorner();
+  }
 }
 
 async function onFightEnd(result) {
-  const m = state.match;
+  const m = state.match, sim = state.sim;
+  const ko = /KO/.test(result.method);
+  if (ko) { sfx.ko(); flash('ko', 0.85); state.arena?.slowmo(0.28, 2600); } else { sfx.bell(3); sfx.crowd(0.8); }
+  const before = { ...state.fighter.record }, pointsBefore = state.fighter.points;
   await db.logMatch(result, { mode: m.mode, seed: m.seed, fighters: m.fighters });
-  const mine = m.myCorner;
-  const outcome = result.winner === 'draw' ? 'd' : result.winner === mine ? 'w' : 'l';
+  const outcome = outcomeOf(result.winner, m.myCorner);
   state.fighter.record[outcome] += 1;
-  state.fighter.points += { w: 6, d: 4, l: 3 }[outcome];
+  state.fighter.points += REWARDS[outcome];
   await db.saveFighter(state.fighter);
-  $('corner-phase').textContent = 'fight over';
-  $('start-round').disabled = true;
-  const name = result.winner === 'draw' ? 'Draw' : `${m.names[result.winner]} wins`;
-  setStatus($('corner-status'), `${name}: ${result.method} (${result.cards.red}–${result.cards.blue}). Training points awarded.`, outcome === 'w' ? 'ok' : '');
-  addFeed(el('li', { className: 'round', textContent: `══ ${name} by ${result.method}` }));
-  renderFighter();
+  state.hasSaved = true;
+  state.result = {
+    outcome, method: result.method, ko, names: m.names, myCorner: m.myCorner, mode: m.mode,
+    card: scorecard(sim.rounds), stats: fightStats(sim.rounds), cards: result.cards,
+    before, after: { ...state.fighter.record }, gained: REWARDS[outcome], pointsAfter: state.fighter.points, pointsBefore,
+    unlocked: newUnlocks(before.w, state.fighter.record.w),
+  };
+  addFeed(el('li', { className: 'round', textContent: `══ ${result.winner} by ${result.method}` }));
   updateDbStatus();
+  await wait(ko ? 4200 : 3000);                       // let the KO or the final bell play
+  if (state.sim === sim && state.screen === 'fight') { renderResult(); show('result'); }
+}
+
+// ─── Result ─────────────────────────────────────────────────────────────────
+
+function renderResult() {
+  const r = state.result, mine = r.myCorner, theirs = mine === 'red' ? 'blue' : 'red';
+  const word = { w: 'Victory', l: 'Defeat', d: 'Draw' }[r.outcome];
+  const rows = r.card.rows.length;
+  const verdictAt = r.ko ? 0.1 : rows * 0.55 + 1.1;           // a decision builds up through the scorecard first
+  const body = $('r-body');
+  body.style.setProperty('--vd', `${verdictAt}s`);
+  body.style.setProperty('--bd', `${verdictAt + 0.8}s`);
+
+  const tbl = el('table', { className: 'cardtbl' },
+    el('tr', {}, el('th', { textContent: 'Round' }), el('th', { className: mine === 'red' ? 'r' : 'b', textContent: r.names[mine] }), el('th', { className: theirs === 'red' ? 'r' : 'b', textContent: r.names[theirs] })));
+  r.card.rows.forEach((row, i) => {
+    const cell = (v) => el('td', { textContent: row.ko && v === 10 ? 'KO' : v });
+    tbl.append(el('tr', { style: `--i:${i}` }, el('td', { textContent: row.round }), cell(row[mine]), cell(row[theirs])));
+  });
+  tbl.append(el('tr', { className: 'tot', style: `--i:${rows}` }, el('td', { textContent: 'Total' }), el('td', { textContent: r.card.total[mine] }), el('td', { textContent: r.card.total[theirs] })));
+
+  const s = r.stats;
+  const acc = (c) => (s[c].thrown ? Math.round((100 * s[c].landed) / s[c].thrown) : 0);
+  const pair = (label, a, b) => [el('span', {}, el('b', { textContent: a })), el('span', { textContent: label }), el('span', {}, el('b', { textContent: b }))];
+  const recChanged = r.outcome;
+  const rec = (k) => r.after[k];
+
+  body.replaceChildren(
+    el('h1', { className: `verdict ${r.outcome}`, textContent: word }),
+    el('div', { className: 'method', textContent: r.outcome === 'd' ? 'Draw' : `${r.names[r.outcome === 'w' ? mine : theirs]} by ${r.method}` }),
+    el('div', { className: 'card' }, el('h3', { textContent: 'Scorecard' }), tbl),
+    el('div', { className: 'card' }, el('h3', { textContent: 'Fight stats' }), el('div', { className: 'stat2' },
+      ...pair('landed', `${s[mine].landed}/${s[mine].thrown}`, `${s[theirs].landed}/${s[theirs].thrown}`),
+      ...pair('accuracy', `${acc(mine)}%`, `${acc(theirs)}%`),
+      ...pair('power', `${s[mine].joules.toFixed(0)} J`, `${s[theirs].joules.toFixed(0)} J`))),
+    el('div', { className: 'card reward' },
+      el('div', {}, el('b', { textContent: `+${r.gained}` }), el('span', { textContent: 'XP · training points' })),
+      el('div', {}, el('b', { textContent: `${rec('w')}-${rec('l')}-${rec('d')}` }), el('span', { textContent: `record (${recChanged === 'w' ? 'win' : recChanged === 'l' ? 'loss' : 'draw'} added)` })),
+      el('div', {}, el('b', { textContent: r.pointsAfter }), el('span', { textContent: 'to spend' }))),
+    ...r.unlocked.map((u) => el('div', { className: 'unlock' }, el('b', { textContent: 'Unlocked' }), `${u.label}. Find it on the Fighter screen.`)),
+    el('div', { id: 'r-actions' },
+      ...(r.mode === 'single' ? [el('button', { className: 'big primary', textContent: 'Rematch', onclick: () => { sfx.click(); go('rematch'); } })] : []),
+      el('button', { className: 'big', textContent: 'New opponent', onclick: () => { sfx.click(); go('opponent'); } }),
+      el('button', { className: 'big', textContent: `Train · ${r.pointsAfter} points`, onclick: () => { sfx.click(); go('train'); } }),
+      el('button', { className: 'big ghost', textContent: 'Title', onclick: () => { sfx.click(); go('title'); } })));
+  body.scrollTop = 0;
+  setTimeout(() => { if (state.screen === 'result') (r.outcome === 'w' ? sfx.win() : r.outcome === 'l' ? sfx.lose() : sfx.click()); }, verdictAt * 1000);
 }
 
 // ─── Live HUD (reads the simulation; never writes it) ───────────────────────
 
+const lastHp = { red: 100, blue: 100 };
 function hud() {
   const sim = state.sim;
-  if (sim) {
+  if (sim && state.screen === 'fight') {
     for (const c of ['red', 'blue']) {
       const f = sim.fighters[c];
       $(`${c}-hp`).style.width = `${f.health}%`;
+      $(`${c}-hpg`).style.width = `${f.health}%`;
+      $(`${c}-hpm`).classList.toggle('low', f.health < 35);
       $(`${c}-gas`).style.width = `${f.gasRatio * 100}%`;
     }
-    const s = (sim.tick * TICK_MS) / 1000;
-    $('clock').textContent = `R${sim.roundIndex} ${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    const left = Math.max(0, sim.roundTicks - sim.tick) * TICK_MS / 1000;
+    $('clock').textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
   }
   requestAnimationFrame(hud);
 }
 requestAnimationFrame(hud);
 
-// ─── Corner UI ──────────────────────────────────────────────────────────────
+$('speed-btn').onclick = () => {
+  const order = [1, 2, 4];
+  state.speed = order[(order.indexOf(state.speed) + 1) % order.length];
+  state.settings.speed = state.speed; saveSettings();
+  $('speed-btn').textContent = `${state.speed}×`;
+  state.game?.setTimeScale(speedValue());
+  sfx.click();
+};
+$('quit-btn').onclick = async () => {
+  const v = await ask('Leave the fight? It will not count.', [{ label: 'Stay', value: false }, { label: 'Leave', value: true, primary: true }]);
+  if (v && state.screen === 'fight') go('quit');
+};
 
-function renderTactics() {
-  $('tactics').replaceChildren(...Object.entries(TACTICS).map(([key, t]) => {
-    const b = el('button', { textContent: t.label });
-    b.setAttribute('aria-pressed', String(key === state.tactic));
-    b.onclick = () => { state.tactic = key; renderTactics(); };
-    return b;
-  }));
-}
-$('start-round').onclick = lockCorner;
-$('speed').onchange = () => state.game?.setTimeScale(speedValue());
-
-// ─── RAG intel ──────────────────────────────────────────────────────────────
+// ─── RAG intel (debug drawer, and the coach's precedent) ────────────────────
 
 async function refreshIntel() {
   const m = state.match;
@@ -589,33 +910,17 @@ async function refreshIntel() {
   const picks = await db.retrieveTacticalPrecedents(opponent);
   const list = $('intel');
   list.replaceChildren();
-  if (picks.length === 0) list.append(el('li', { className: 'muted', textContent: 'No winning precedents against a similar opponent yet. Fight more to build the log.' }));
+  if (picks.length === 0) list.append(el('li', { className: 'muted', textContent: 'No winning precedents against a similar opponent yet.' }));
   for (const p of picks) {
     const e = p.evidence;
-    const li = el('li', {},
+    list.append(el('li', { title: `match ${p.matchId}, round ${p.roundIndex}` },
       el('div', { className: 't', textContent: `${TACTICS[p.tactic]?.label ?? p.tactic} vs ${TACTICS[p.opponentTactic]?.label ?? p.opponentTactic}` }),
       el('div', { className: 'small', textContent: `landed ${Math.round(e.landRate * 100)}% · margin ${e.avgMarginMs.toFixed(0)} ms · ${e.joulesFor.toFixed(0)} J for / ${e.joulesAgainst.toFixed(0)} J against` }),
-      el('div', { className: 'why', textContent: `relevance ${p.relevance} = similarity ${p.similarity} × success ${p.successScore}` }));
-    li.title = `match ${p.matchId}, round ${p.roundIndex}`;
-    const use = el('button', { className: 'sm', textContent: 'Use' });
-    use.onclick = () => { state.tactic = p.tactic; renderTactics(); };
-    li.append(use);
-    list.append(li);
+      el('div', { className: 'why', textContent: `relevance ${p.relevance} = similarity ${p.similarity} × success ${p.successScore}` })));
   }
   $('llm-context').textContent = toLLMContext(picks, opponent, { tactics: TACTICS });
+  return picks;
 }
-
-// ─── Single-player ──────────────────────────────────────────────────────────
-
-$('new-fight').onclick = () => {
-  if (state.pending) setStatus($('camp-status'), 'Unconfirmed training is not used in this fight.');
-  const a = $('archetype').value;
-  const opp = a === 'mirror' ? { name: 'Mirror Match', stats: { ...state.fighter.stats } } : ARCHETYPES[a];
-  startMatch({
-    mode: 'single', seed: randomSeed(), matchId: `m_${uid()}`, rounds: Number($('rounds').value),
-    red: profileOf(state.fighter), blue: profileOf(opp), myCorner: 'red',
-  });
-};
 
 // ─── P2P (WebRTC, manual signalling) ────────────────────────────────────────
 //
@@ -653,7 +958,7 @@ function wireChannel(peer, channel) {
   channel.onopen = () => {
     setStatus($('p2p-status'), 'Connected. Data channel open.', 'ok');
     if (peer.role === 'host') {
-      const start = { type: 'start', seed: randomSeed(), matchId: `p_${uid()}`, rounds: Number($('rounds').value), red: profileOf(state.fighter), blue: peer.them };
+      const start = { type: 'start', seed: randomSeed(), matchId: `p_${uid()}`, rounds: state.rounds, red: profileOf(state.fighter), blue: peer.them };
       peer.send(start);
       onPeerMessage(start);
     }
@@ -729,24 +1034,28 @@ $('p2p-apply').onclick = async () => {
   }
 };
 
-$('p2p-copy').onclick = () => navigator.clipboard.writeText($('p2p-out').value);
+$('p2p-copy').onclick = () => navigator.clipboard.writeText($('p2p-out').value).then(() => toast('Copied'));
 // The string travels in the fragment, which browsers never send to a server (same idea as #link= in link.js).
-$('p2p-copy-link').onclick = () => navigator.clipboard.writeText(`${location.origin}${location.pathname}#offer=${$('p2p-out').value}`);
+$('p2p-copy-link').onclick = () => navigator.clipboard.writeText(`${location.origin}${location.pathname}#offer=${$('p2p-out').value}`).then(() => toast('Link copied'));
+$('open-p2p').onclick = () => { $('p2p-sheet').hidden = false; };
+$('p2p-close').onclick = () => { $('p2p-sheet').hidden = true; };
 
-function selectTab(which) {
-  for (const t of ['single', 'p2p']) {
-    $(`tab-${t}`).setAttribute('aria-selected', String(t === which));
-    $(`pane-${t}`).hidden = t !== which;
-  }
+// ─── Debug drawer: ?debug, or a long-press on the logo ──────────────────────
+
+function openDebug() { dbgOn = true; $('debug').hidden = false; updateDbStatus(); }
+$('dbg-open').onclick = openDebug;
+$('dbg-close').onclick = () => { $('debug').hidden = true; };
+if (DEBUG) $('dbg-open').hidden = false;
+{
+  let t = 0;
+  const logo = $('logo');
+  logo.addEventListener('pointerdown', () => { t = setTimeout(() => { openDebug(); }, 700); });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) logo.addEventListener(ev, () => clearTimeout(t));
 }
-$('tab-single').onclick = () => selectTab('single');
-$('tab-p2p').onclick = () => selectTab('p2p');
-
-// ─── Data export/import ─────────────────────────────────────────────────────
 
 $('export').onclick = async () => {
   const blob = new Blob([JSON.stringify(await db.exportAll())], { type: 'application/json' });
-  const a = el('a', { href: URL.createObjectURL(blob), download: `boxing-manager-${new Date().toISOString().slice(0, 10)}.json` });
+  const a = el('a', { href: URL.createObjectURL(blob), download: `bring-the-ruckus-${new Date().toISOString().slice(0, 10)}.json` });
   a.click();
   URL.revokeObjectURL(a.href);
 };
@@ -754,41 +1063,44 @@ $('import-btn').onclick = () => $('import').click();
 $('import').onchange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  try { await db.importAll(JSON.parse(await file.text())); await boot(); }
+  try { await db.importAll(JSON.parse(await file.text())); await boot(); toast('Imported'); }
   catch (err) { $('db-status').textContent = `import failed: ${err.message}`; }
 };
 
 // ─── Boot ───────────────────────────────────────────────────────────────────
 
 async function updateDbStatus() {
+  if (!dbgOn) return;
   const { rounds, matches } = await db.counts();
   $('db-status').textContent = `IndexedDB: ${matches} fights · ${rounds} rounds logged`;
 }
 
 async function boot() {
   const saved = await db.loadFighter();
-  if (saved) state.fighter = { ...state.fighter, ...saved, stats: normalizeStats(saved.stats), look: normalizeLook(saved.look) };
-  $('fighter-name').value = state.fighter.name;
-  renderLook();
-  if (preview) preview.setLook(state.fighter.look); else startPreview();
-  renderFighter();
-  renderTactics();
-  await updateDbStatus();
+  if (saved) {
+    const stats = normalizeStats(saved.stats);
+    state.fighter = { ...state.fighter, ...saved, stats, look: lockedLook(normalizeLook(saved.look), saved.record?.w ?? 0, PHOTO_OUTFITS.red) };
+    state.hasSaved = true;
+  }
+  applySettings();
+  renderTitle();
   // A QR code of the "Copy link" URL lands here with the offer in the fragment.
   const m = /#offer=([\w-]+)/.exec(location.hash);
   if (m) {
-    selectTab('p2p');
+    show('opponent');
+    $('p2p-sheet').hidden = false;
     newPeer('guest');
     $('p2p-in').value = m[1];
-    history.replaceState(null, '', location.pathname);
+    history.replaceState(null, '', location.pathname + location.search);
     $('p2p-apply').click();
   }
 }
 
-boot().catch((err) => { $('db-status').textContent = `storage unavailable: ${err.message}`; console.error(err); });
+show('title');
+boot().catch((err) => { toast(`Storage unavailable: ${err.message}`); console.error(err); });
 
 // Exposed for console debugging and for orchestrating background runs.
-window.bm = { db, state, CombatSimulation, FighterModel };
+window.bm = { db, state, go, show, CombatSimulation, FighterModel };
 </script>
 </body>
 </html>

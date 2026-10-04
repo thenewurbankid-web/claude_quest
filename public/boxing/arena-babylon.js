@@ -1490,6 +1490,7 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
   cam.fov = 0.62; cam.minZ = 0.05; cam.maxZ = 120;
   scene.activeCamera = cam;
   const shot = { mode: 'hard', until: 0, pos: cam.position.clone(), look: new B.Vector3(0, 1.2, 0), shake: 0, side: 1 };
+  const slow = { k: 1, until: 0 };    // KO slow motion: scales the view's own clock, never the sim
 
   // Post: broadcast grade and a vignette; no bloom or lens effects (matte look).
   const pipe = new B.DefaultRenderingPipeline('broadcast', true, scene, [cam]);
@@ -1558,8 +1559,13 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
 
   let lastPhase = null, lastRound = 0, time = 0;
   const step = () => {
-    const dt = Math.min(0.05, engine.getDeltaTime() / 1000);
+    if (slow.k !== 1 && performance.now() > slow.until) slow.k = 1;
+    const dt = Math.min(0.05, engine.getDeltaTime() / 1000) * slow.k;
     time += dt;
+    // A phone held upright is about half as wide as tall: fix the horizontal field of view and come in closer.
+    const portrait = engine.getRenderWidth() < engine.getRenderHeight();
+    cam.fovMode = portrait ? B.Camera.FOVMODE_HORIZONTAL_FIXED : B.Camera.FOVMODE_VERTICAL_FIXED;
+    cam.fov = portrait ? 0.92 : 0.62;
     const s = sim.snapshot();
     const now = roundBase + s.tick;
     if (s.phase !== lastPhase || s.round !== lastRound) {
@@ -1607,8 +1613,8 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
         want = add(add(mid, mul(perp, 2.6)), v(0, -0.15, 0)); look = lerp(mid, fp, 0.5);
       }
     } else {
-      const dist = 5.6 + gap * 0.9;
-      want = v(mid.x * 0.55, 2.3 + gap * 0.25, mid.z * 0.35 - dist); look = mid;
+      const dist = (5.6 + gap * 0.9) * (portrait ? 0.9 : 1);
+      want = v(mid.x * 0.55, (2.3 + gap * 0.25) * (portrait ? 0.8 : 1), mid.z * 0.35 - dist); look = mid;
     }
     const k = shot.snap ? 1 : 1 - Math.exp(-dt * (shot.mode === 'wide' ? 1.5 : 4));
     shot.snap = false;
@@ -1633,6 +1639,8 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
 
   const api = {
     scene, engine, boxers, cut,
+    shake(amount) { shot.shake = Math.max(shot.shake, amount); },
+    slowmo(k, ms) { slow.k = k; slow.until = performance.now() + ms; },
     destroy() {
       for (const off of offs) off();
       ro.disconnect();

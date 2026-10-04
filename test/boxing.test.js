@@ -252,3 +252,67 @@ test('pressure crowds a defender, but not one who is also on pressure', () => {
   };
   assert.equal(run('outbox') - run('pressure'), TACTICS.pressure.crowdMs);
 });
+
+// ─── Game flow (flow.js): screens, progression, unlocks, scorecards, corner tips, settings ───
+import { SCREENS, navigate, eventsFrom, statCost, REWARDS, outcomeOf, UNLOCKS, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, cornerTip, normalizeSettings, DEFAULT_SETTINGS } from '../public/boxing/flow.js';
+
+test('screen flow: Title to Fighter to Opponent to Fight to Result and back', () => {
+  let s = 'title';
+  for (const [ev, to] of [['play', 'fighter'], ['fight', 'opponent'], ['start', 'fight'], ['finished', 'result'], ['rematch', 'fight'], ['finished', 'result'], ['train', 'upgrade'], ['back', 'fighter'], ['back', 'title']]) {
+    s = navigate(s, ev); assert.equal(s, to);
+  }
+  assert.equal(navigate('title', 'continue'), 'opponent');
+  assert.equal(navigate('fight', 'quit'), 'title');
+});
+
+test('screen flow: every edge lands on a real screen, and a wrong button throws', () => {
+  for (const s of SCREENS) for (const ev of eventsFrom(s)) assert.ok(SCREENS.includes(navigate(s, ev)));
+  assert.throws(() => navigate('title', 'finished'), /No "finished"/);
+  assert.throws(() => navigate('nowhere', 'play'));
+});
+
+test('training costs step up at 60 and 80; rewards favour winning', () => {
+  assert.deepEqual([59, 60, 79, 80, 99].map(statCost), [1, 2, 2, 3, 3]);
+  assert.ok(REWARDS.w > REWARDS.d && REWARDS.d > REWARDS.l && REWARDS.l > 0);
+  assert.deepEqual([outcomeOf('red', 'red'), outcomeOf('blue', 'red'), outcomeOf('draw', 'blue')], ['w', 'l', 'd']);
+});
+
+test('unlocks follow wins; a locked look is put back to the base outfit', () => {
+  assert.ok(isUnlocked('topStyle', 'tee', 0));            // free choices are always open
+  assert.ok(!isUnlocked('topStyle', 'varsity', 0) && isUnlocked('topStyle', 'varsity', 1));
+  const base = { topStyle: 'tee', jeans: '#2f3b52', wraps: '#ecebe6', top: '#c0392b' };
+  const worn = { ...base, topStyle: 'varsity', wraps: '#d9a12b', jeans: '#1d1e22' };
+  assert.deepEqual(lockedLook(worn, 0, base), base);
+  assert.deepEqual(lockedLook(worn, 5, base), worn);
+  assert.deepEqual(newUnlocks(0, 2).map((u) => u.wins), [1, 2]);
+  assert.deepEqual(newUnlocks(2, 2), []);
+  assert.equal(UNLOCKS.length, new Set(UNLOCKS.map((u) => u.key + u.value)).size);
+});
+
+test('scorecard and fight stats add up the sim rounds', () => {
+  const sim = fight(11);
+  const card = scorecard(sim.rounds), st = fightStats(sim.rounds);
+  assert.equal(card.rows.length, sim.rounds.length);
+  assert.equal(card.total.red, sim.result.cards.red);
+  assert.equal(card.total.blue, sim.result.cards.blue);
+  assert.equal(st.red.landed, sim.rounds.reduce((s, r) => s + r.totals.red.landed, 0));
+  assert.ok(st.red.thrown >= st.red.landed);
+});
+
+test('corner tips: gassed fighters recover, hurt ones survive, a tiring foe is pressed', () => {
+  const me = { health: 90, gasRatio: 0.9, stats: AVG }, opp = { health: 90, gasRatio: 0.9, stats: AVG };
+  assert.equal(cornerTip({ ...me, gasRatio: 0.2 }, opp).tactic, 'recover');
+  assert.equal(cornerTip({ ...me, health: 20 }, opp).tactic, 'outbox');
+  assert.equal(cornerTip(me, { ...opp, health: 20 }).tactic, 'pressure');
+  assert.equal(cornerTip(me, { ...opp, gasRatio: 0.3 }).tactic, 'pressure');
+  assert.equal(cornerTip(me, opp, { tactic: 'counter', label: 'Counter' }).tactic, 'counter');
+  assert.equal(cornerTip(me, { ...opp, stats: { ...AVG, power: 80 } }).tactic, 'counter');
+  for (const t of Object.keys(TACTICS)) assert.ok(TACTICS[t]);
+});
+
+test('settings: junk falls back to the defaults', () => {
+  assert.deepEqual(normalizeSettings(null), DEFAULT_SETTINGS);
+  assert.deepEqual(normalizeSettings({ sfx: 'yes', music: true, time: 'dusk', speed: 3, extra: 1 }), { ...DEFAULT_SETTINGS, music: true });
+  assert.equal(normalizeSettings({ speed: '2', time: 'night' }).speed, 2);
+  assert.equal(normalizeSettings({ time: 'night' }).time, 'night');
+});
