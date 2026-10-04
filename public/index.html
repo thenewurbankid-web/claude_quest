@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Quest</title>
+<title>A Vibe Called Quest</title>
 <script>
   // Pairing links (#link=…) and the full game's features still live in the 2D page; send them there.
   if (/[#&]link=/.test(location.hash)) location.replace('2d.html' + location.hash);
@@ -18,7 +18,7 @@
     font: 600 15px 'Nunito', system-ui, sans-serif; color: #fff; letter-spacing: .02em;
     text-shadow: 0 1px 2px rgba(0,0,0,.5); display: grid; gap: 2px; pointer-events: none; }
   .hud small { font: 400 12px system-ui, sans-serif; opacity: .75; }
-  .hint { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom));
+  .hint { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(68px, env(safe-area-inset-bottom)); /* above the Ember dock */
     font: 400 13px system-ui, sans-serif; color: #fff; background: rgba(16,19,31,.45); padding: 6px 12px;
     border-radius: 999px; backdrop-filter: blur(6px); pointer-events: none; white-space: nowrap; }
   .pad { position: fixed; right: 20px; bottom: 56px; display: none; grid-template: repeat(3, 52px) / repeat(3, 52px); gap: 4px; }
@@ -62,6 +62,7 @@
   <span></span><button data-dir="down" aria-label="Down">▼</button><span></span>
 </div>
 <div class="veil"></div>
+<script src="mqtt.min.js"></script>
 <script type="module" src="3d/scene.js"></script>
 <script type="module" src="quest/boot.js"></script>
 </body>

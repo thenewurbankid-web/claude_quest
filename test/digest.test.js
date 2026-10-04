@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { emptyLedger, memoryStore } from '../public/quest/contract.js';
-import { lastSessionEnd, digest, digestLines, answerTimes, trackSession, resolveSince } from '../public/quest/digest.js';
+import { lastSessionEnd, digest, digestLines, answerTimes, trackSession, resolveSince, realmStats, duration } from '../public/quest/digest.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
 const withEvents = events => ({ ...emptyLedger(), events });
@@ -76,7 +76,7 @@ test('answerTimes: first raised to last answered; a recall then re-answer counts
   ]);
   const t = answerTimes(l);
   assert.equal(t.count, 2);
-  assert.deepEqual(t.items, [{ ref: 'a', minutes: 60 }, { ref: 'b', minutes: 10 }]);
+  assert.deepEqual(t.items.map(({ ref, minutes }) => ({ ref, minutes })), [{ ref: 'a', minutes: 60 }, { ref: 'b', minutes: 10 }]);
   assert.equal(t.medianMinutes, 35);
 });
 
@@ -88,7 +88,7 @@ test('answerTimes: odd count median, empty log, and the sample Realm', () => {
   ]);
   assert.equal(answerTimes(l).medianMinutes, 20);
   assert.deepEqual(answerTimes(withEvents([])), { count: 0, medianMinutes: null, items: [] });
-  assert.deepEqual(answerTimes(sample()), { count: 1, medianMinutes: 17 * 60, items: [{ ref: 'r3', minutes: 17 * 60 }] });
+  assert.deepEqual(answerTimes(sample()).items, [{ ref: 'r3', minutes: 17 * 60, at: '2026-09-29T10:00:00.000Z' }]);
 });
 
 test('trackSession: start now, one end per hide, a new start on return, and stop() detaches', async () => {
@@ -142,4 +142,34 @@ test('resolveSince: the given since wins (null included); otherwise the last ses
   assert.equal(resolveSince(null, atMount), null);
   assert.equal(resolveSince('2026-09-01T00:00:00Z', atMount), '2026-09-01T00:00:00Z');
   assert.equal(resolveSince(undefined, []), null);
+});
+
+test('realmStats: recent and all-time counts, answer time, play time, and who waits on you', () => {
+  const NOW = new Date('2026-10-10T12:00:00Z');
+  const l = sample();
+  l.keepers = [{ id: 'k1', name: 'Bramble', role: 'x', skills: [], status: 'busy' }];
+  l.works.find(w => w.id === 'w2').keeperId = 'k1';      // r3 (answered in the sample) is on w2
+  l.events.push(
+    ev('2026-10-09T10:00:00Z', 'session.start'), ev('2026-10-09T10:30:00Z', 'session.end'),
+    ev('2026-10-10T11:50:00Z', 'session.start'),          // still playing: 10 min so far
+    ev('2026-10-09T10:05:00Z', 'riddle.raised', 'n1'), ev('2026-10-09T10:25:00Z', 'riddle.answered', 'n1'),
+    ev('2026-10-09T10:26:00Z', 'boss.defeated', 'b1'));
+  const s = realmStats(l, NOW);
+  assert.equal(s.days, 7);
+  assert.equal(s.recent.sessions, 2);
+  assert.equal(s.recent.playMinutes, 40);
+  assert.deepEqual([s.recent.raised, s.recent.answered, s.recent.won, s.recent.medianMinutes], [1, 1, 1, 20]);
+  assert.ok(s.all.raised > s.recent.raised);              // the sample's own history is older than a week
+  assert.equal(s.all.medianMinutes, (20 + 17 * 60) / 2);
+  const bramble = s.keepers.find(k => k.name === 'Bramble');
+  assert.deepEqual([bramble.answered, bramble.medianMinutes], [1, 17 * 60]);
+  const none = s.keepers.find(k => k.keeper === null);
+  assert.equal(none.answered, 1);                         // n1 has no Riddle record, so no Keeper
+  assert.ok(s.keepers.reduce((n, k) => n + k.waiting, 0) >= 1);
+});
+
+test('realmStats on an empty log, and duration', () => {
+  const s = realmStats(withEvents([]), new Date('2026-10-10T12:00:00Z'));
+  assert.deepEqual([s.all.raised, s.all.playMinutes, s.all.medianMinutes, s.keepers.length], [0, 0, null, 0]);
+  assert.deepEqual([null, 4.4, 150, 4320].map(duration), ['—', '4 min', '2.5 h', '3 days']);
 });

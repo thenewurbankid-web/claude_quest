@@ -18,6 +18,7 @@ http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   let p = decodeURIComponent(url.pathname);
   let base = ROOT;
+  if (p === '/mqtt.min.js') { base = path.join(__dirname, '..', 'node_modules', 'mqtt', 'dist'); }
   const vendor = /^\/vendor\/([^/]+)\//.exec(p);
   if (vendor && VENDOR[vendor[1]]) { base = VENDOR[vendor[1]]; p = p.slice(vendor[0].length - 1); }
   if (p.endsWith('/')) p += 'index.html';

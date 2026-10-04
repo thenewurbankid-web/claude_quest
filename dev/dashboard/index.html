@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quest Pulse</title>
+<style>
+/* One reading column: the pulse on top, releases as a track, then the issue feed, runs and commits. Read-only. */
+:root {
+  --bg: #f3f1ea; --surface: #fffdf8; --ink: #22201b; --muted: #6b665c; --line: #ddd8cc;
+  --ember: #b5560f; --run: #1f6f8b; --ok: #2f7a4b; --warn: #a3381f; --plan: #8a6d1c;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #15171c; --surface: #1d2027; --ink: #e8e5dd; --muted: #9a968c; --line: #2f333c;
+  --ember: #f0954a; --run: #6cc0de; --ok: #6cc48d; --warn: #f07a5e; --plan: #e2c36a; color-scheme: dark } }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, sans-serif; padding: 0 16px 48px }
+.wrap { max-width: 860px; margin: 0 auto }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; padding-block: 24px 8px }
+h1 { margin: 0; font-size: 1.5rem; margin-right: auto }
+h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 28px 0 8px }
+.fresh { font: .8rem var(--mono); color: var(--muted) }
+.fresh.bad { color: var(--warn) }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px }
+.pulse { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: center }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: var(--muted); grid-row: span 2 }
+.dot.running { background: var(--run); animation: beat 1.2s ease-in-out infinite }
+.dot.idle { background: var(--ok) } .dot.error, .dot.blocked, .dot.paused { background: var(--warn) }
+@keyframes beat { 50% { transform: scale(1.35); opacity: .6 } }
+@media (prefers-reduced-motion: reduce) { .dot.running { animation: none } }
+.pulse b { font-size: 1.1rem }
+.sub { color: var(--muted); font-size: .9rem }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 12px }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px }
+.stat .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted) }
+.stat .v { font: 600 1.15rem var(--mono); font-variant-numeric: tabular-nums }
+.rels { display: grid; gap: 6px }
+.rel { display: grid; grid-template-columns: 4.2em 1fr auto; gap: 10px; align-items: center; padding: 8px 12px }
+.rel .id { font: 600 .9rem var(--mono) }
+.rel .bar { grid-column: 2; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 4px }
+.rel .bar i { display: block; height: 100% ; background: var(--ok) }
+.chip { font: 600 .72rem var(--mono); text-transform: uppercase; letter-spacing: .05em; border: 1.5px solid currentColor; border-radius: 999px; padding: 1px 8px; white-space: nowrap }
+.c-done { color: var(--ok) } .c-in_progress, .c-running { color: var(--run) } .c-blocked, .c-failed, .c-error { color: var(--warn) }
+.c-todo, .c-next, .c-backlog { color: var(--plan) } .c-later, .c-succeeded { color: var(--muted) }
+.feed { display: grid; gap: 8px }
+.item .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline }
+.item .top b { margin-right: auto; min-width: 0 }
+.item p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem }
+.item .when { font: .78rem var(--mono); color: var(--muted) }
+table { width: 100%; border-collapse: collapse; font-size: .9rem }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+tr:last-child td { border-bottom: 0 }
+td.m { font-family: var(--mono); white-space: nowrap; color: var(--muted) }
+.scroll { overflow-x: auto }
+.links { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: .9rem }
+a { color: var(--run) }
+.empty { color: var(--muted); font-style: italic }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Quest Pulse</h1>
+    <span class="fresh" id="fresh">Connecting…</span>
+  </header>
+
+  <section class="card" aria-labelledby="pulse-h">
+    <h2 id="pulse-h" style="margin-top:0">Quest Dev</h2>
+    <div class="pulse">
+      <span class="dot" id="dot"></span>
+      <b id="state">…</b>
+      <span class="sub" id="detail"></span>
+    </div>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <h2>Releases</h2>
+  <div class="rels" id="rels"></div>
+
+  <h2>Issues and outcomes</h2>
+  <div class="feed" id="issues"></div>
+
+  <h2>Runs</h2>
+  <div class="card scroll"><table id="runs"></table></div>
+
+  <h2>Latest commits on 3d-world</h2>
+  <div class="card scroll"><table id="commits"></table></div>
+
+  <h2>Also here</h2>
+  <div class="links">
+    <a href="http://127.0.0.1:3100" target="_blank" rel="noopener">Paperclip</a>
+    <a href="/sprite-lab.html" target="_blank" rel="noopener">Sprite Lab (local only)</a>
+    <span class="sub">The public site is <code>site/index.html</code>; the decisions live in <code>PLAN-engine.md</code>.</span>
+  </div>
+</div>
+
+<script>
+// Read-only view of Paperclip through dev/dashboard.js. Everything Paperclip or git returns is shown with textContent.
+const COMPANY = 'f0f96626-f3d4-4633-af8d-ee563d0cc481';
+const AGENT = '2a7aa32d-e6cb-40a2-98bf-0d7be5337f4a';
+const REFRESH_MS = 5000;
+// Release order from PLAN-engine.md ("Releases"). R0–R4 were built in sessions before Paperclip; later ones are
+// tracked as Paperclip issues whose titles start with the release id.
+const RELEASES = [
+  ['R0', 'The Beacon lights up', 'built'], ['R1', 'Riddles', 'built'], ['R2', 'The Gloamwyrm', 'built'],
+  ['R3', 'Lore quests', 'built'], ['R4', 'Bring your Keeper', 'built'], ['R5', 'Missions and the first Sealed Hall'],
+  ['R4.5', 'The Bridge'], ['R6', 'Drama'], ['R7', 'Your own Realm'], ['R8', 'The Source'], ['R9+', 'Shared core and beyond'],
+];
+
+const $ = s => document.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const chip = (state, label) => el('span', 'chip c-' + state, label || state.replace('_', ' '));
+const ago = iso => {
+  if (!iso) return 'never';
+  const s = Math.round((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return s + 's ago'; if (s < 3600) return Math.round(s / 60) + 'm ago';
+  if (s < 86400) return Math.round(s / 3600) + 'h ago'; return Math.round(s / 86400) + 'd ago';
+};
+const dur = (a, b) => { if (!a) return ''; const s = Math.round(((b ? new Date(b) : Date.now()) - new Date(a)) / 1000); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; };
+const get = async p => { const r = await fetch(p); if (!r.ok) throw new Error(p + ' ' + r.status); return r.json(); };
+const releaseOf = title => (title.match(/^(R\d+(?:\.\d+)?)\b/) || [])[1];
+const comments = new Map(); // issue id -> {updatedAt, list}
+
+async function tick() {
+  try {
+    const [agent, issues, runs, commits] = await Promise.all([
+      get(`/pc/agents/${AGENT}`), get(`/pc/companies/${COMPANY}/issues`),
+      get(`/pc/companies/${COMPANY}/heartbeat-runs`), get('/git').catch(() => []),
+    ]);
+    // Comments only for issues that changed since we last fetched them.
+    await Promise.all(issues.map(async i => {
+      const c = comments.get(i.id);
+      if (c && c.updatedAt === i.updatedAt) return;
+      comments.set(i.id, { updatedAt: i.updatedAt, list: await get(`/pc/issues/${i.id}/comments`).catch(() => []) });
+    }));
+    renderPulse(agent, issues, runs);
+    renderReleases(issues);
+    renderIssues(issues);
+    renderRuns(runs, issues);
+    renderCommits(commits);
+    $('#fresh').textContent = 'Live · updated ' + new Date().toLocaleTimeString();
+    $('#fresh').classList.remove('bad');
+  } catch (e) {
+    $('#fresh').textContent = 'Paperclip not answering (' + e.message + '). Retrying…';
+    $('#fresh').classList.add('bad');
+  }
+}
+
+function renderPulse(agent, issues, runs) {
+  const live = runs.find(r => r.status === 'running' || r.status === 'queued');
+  const state = live ? 'running' : agent.status;
+  $('#dot').className = 'dot ' + state;
+  const byId = Object.fromEntries(issues.map(i => [i.id, i]));
+  const on = live && byId[live.contextSnapshot?.issueId];
+  $('#state').textContent = live ? `Working${on ? ' on ' + on.identifier : ''}` : state[0].toUpperCase() + state.slice(1);
+  const hb = agent.runtimeConfig?.heartbeat;
+  $('#detail').textContent = live
+    ? `${on ? on.title + ' · ' : ''}running ${dur(live.startedAt)} · last output ${ago(live.lastOutputAt)}`
+    : `Last seen ${ago(agent.lastHeartbeatAt)}` + (hb?.enabled ? ` · heartbeat every ${Math.round(hb.intervalSec / 60)} min` : ' · heartbeat off')
+      + (agent.pauseReason ? ` · paused: ${agent.pauseReason}` : '');
+  const count = s => issues.filter(i => i.status === s).length;
+  const today = new Date().toISOString().slice(0, 10);
+  const cost = runs.reduce((n, r) => n + (r.usageJson?.costUsd || 0), 0);
+  const stats = [
+    ['Open', count('todo') + count('backlog')], ['In progress', count('in_progress')], ['Blocked', count('blocked')],
+    ['Done', count('done')], ['Runs today', runs.filter(r => (r.startedAt || '').startsWith(today)).length],
+    ['Run cost (est.)', '$' + cost.toFixed(2)],
+  ];
+  $('#stats').replaceChildren(...stats.map(([k, v]) => { const d = el('div', 'stat'); d.append(el('div', 'k', k), el('div', 'v', String(v))); return d; }));
+}
+
+function renderReleases(issues) {
+  let nextMarked = false;
+  $('#rels').replaceChildren(...RELEASES.map(([id, name, built]) => {
+    const mine = issues.filter(i => releaseOf(i.title) === id.replace('+', '') && i.parentId); // children are the work
+    const done = mine.filter(i => i.status === 'done').length;
+    let state, label;
+    if (built) { state = 'done'; label = 'built'; }
+    else if (mine.length && done === mine.length) { state = 'done'; label = 'built'; }
+    else if (mine.some(i => i.status === 'blocked')) state = 'blocked';
+    else if (mine.length) state = 'in_progress';
+    else if (!nextMarked) { state = 'next'; nextMarked = true; }
+    else state = 'later';
+    const row = el('div', 'card rel');
+    const mid = el('div');
+    mid.append(el('div', null, name));
+    if (mine.length) {
+      const bar = el('div', 'bar'); const fill = el('i'); fill.style.width = (100 * done / mine.length) + '%'; bar.append(fill);
+      mid.append(el('div', 'sub', `${done} of ${mine.length} issues done`), bar);
+    } else if (!built) mid.append(el('div', 'sub', 'No issues yet'));
+    row.append(el('span', 'id', id), mid, chip(state, label));
+    return row;
+  }));
+}
+
+function renderIssues(issues) {
+  const sorted = [...issues].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  if (!sorted.length) return $('#issues').replaceChildren(el('p', 'empty', 'No issues yet.'));
+  $('#issues').replaceChildren(...sorted.map(i => {
+    const card = el('article', 'card item');
+    const top = el('div', 'top');
+    top.append(el('b', null, `${i.identifier} · ${i.title}`), chip(i.status), el('span', 'when', ago(i.updatedAt)));
+    card.append(top);
+    const last = (comments.get(i.id)?.list || []).filter(c => !c.deletedAt).at(-1);
+    if (last) {
+      const who = last.authorType === 'agent' ? 'Quest Dev' : 'You';
+      card.append(el('p', null, last.body), el('div', 'when', `${who} · ${ago(last.createdAt)}`));
+    }
+    return card;
+  }));
+}
+
+function renderRuns(runs, issues) {
+  const byId = Object.fromEntries(issues.map(i => [i.id, i]));
+  const rows = runs.slice(0, 10).map(r => {
+    const tr = el('tr');
+    const on = byId[r.contextSnapshot?.issueId];
+    const tdState = el('td'); tdState.append(chip(r.status));
+    tr.append(tdState, el('td', null, on ? on.identifier : r.invocationSource), el('td', 'm', ago(r.startedAt)),
+      el('td', 'm', dur(r.startedAt, r.finishedAt)), el('td', 'm', r.usageJson?.costUsd != null ? '$' + r.usageJson.costUsd.toFixed(2) : ''));
+    if (r.error) tr.append(el('td', null, r.error));
+    return tr;
+  });
+  $('#runs').replaceChildren(...(rows.length ? rows : [el('tr', 'empty', 'No runs yet.')]));
+}
+
+function renderCommits(commits) {
+  $('#commits').replaceChildren(...commits.map(c => {
+    const tr = el('tr');
+    tr.append(el('td', 'm', c.hash), el('td', null, c.subject), el('td', 'm', ago(c.at)));
+    return tr;
+  }));
+}
+
+tick();
+setInterval(tick, REFRESH_MS);
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 // The Gloamwyrm's placeholder art (R2; CC0 art comes later, PLAN-engine.md "Missing art"): a serpent of Haze in its own
 // small Three.js stage, drawn into a host element by the battle box. Plain shapes only: a tube body that sways, a head
 // with horns and two lamp eyes, and a cloud of Haze motes. Its size follows the weighted score (boss.js, bossSize).
+// One head per stuck task (PLAN-fight.md): the extra ones sit on short necks beside the first, and a cut one drops away.
 import * as THREE from 'three';
 
 const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -8,11 +9,11 @@ const SEGMENTS = 14;
 
 /**
  * @param {HTMLElement} host  the stage fills it and follows its size
- * @param {{ size?: number }} opts
- * @returns {{ setSize: (s: number) => void, hit: (power?: number) => void, windup: () => void, fall: () => void,
- *   dispose: () => void }}
+ * @param {{ size?: number, heads?: number }} opts
+ * @returns {{ setSize: (s: number) => void, setHeads: (n: number) => void, hit: (power?: number) => void,
+ *   windup: () => void, fall: () => void, dispose: () => void }}
  */
-export function mountGloamwyrm(host, { size = 1 } = {}) {
+export function mountGloamwyrm(host, { size = 1, heads: headCount = 1 } = {}) {
   const calm = reducedMotion();
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
@@ -99,6 +100,45 @@ export function mountGloamwyrm(host, { size = 1 } = {}) {
   eyeLight.position.set(0, 0.1, 0.9);
   head.add(eyeLight);
 
+  // Extra heads on short necks, alternating left and right of the first. A cut one drops (drop > 0) and fades out.
+  const MAX_EXTRA = 5;
+  const neckMat = skin;
+  const extras = Array.from({ length: MAX_EXTRA }, (_, i) => {
+    const g = new THREE.Group();
+    const sk = new THREE.Mesh(new THREE.DodecahedronGeometry(0.45, 0), skin);
+    sk.scale.set(1, 0.8, 1.25);
+    const jw = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.65, 6), belly);
+    jw.rotation.x = Math.PI / 2;
+    jw.position.set(0, -0.16, 0.4);
+    g.add(sk, jw);
+    for (const s of [-1, 1]) {
+      const e = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), eyeMat);
+      e.position.set(0.19 * s, 0.09, 0.42);
+      g.add(e);
+    }
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, 1, 7), neckMat);
+    wyrm.add(g, neck);
+    const side = i % 2 ? 1 : -1, rank = 1 + Math.floor(i / 2);
+    return { g, neck, side, rank, shown: i < headCount - 1, drop: 0 };
+  });
+  const placeExtras = (tip, base) => {
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const x of extras) {
+      if (!x.shown && !x.drop) { x.g.visible = x.neck.visible = false; continue; }
+      x.g.visible = x.neck.visible = x.drop < 1.2;
+      const sway = calm ? 0 : Math.sin(t * 1.6 + x.rank * 1.3 + x.side) * 0.12;
+      x.g.position.set(tip.x + x.side * (0.9 * x.rank) + sway, tip.y - 0.35 * x.rank - x.drop * 2.5, tip.z - 0.2 * x.rank);
+      x.g.lookAt(new THREE.Vector3(x.g.position.x * 0.4, x.g.position.y - 0.4, 9));
+      x.g.scale.setScalar(Math.max(0.01, 1 - x.drop * 0.6));
+      // the neck runs from the body to just behind the head
+      const from = base, to = x.g.position, mid = from.clone().add(to).multiplyScalar(0.5);
+      x.neck.position.copy(mid);
+      x.neck.scale.set(1, from.distanceTo(to), 1);
+      x.neck.quaternion.setFromUnitVectors(up, to.clone().sub(from).normalize());
+      if (x.drop) x.drop = Math.min(1.2, x.drop + 1 / 60);
+    }
+  };
+
   // Haze motes drifting around it.
   const MOTES = 220;
   const motePos = new Float32Array(MOTES * 3), seeds = new Float32Array(MOTES);
@@ -143,6 +183,7 @@ export function mountGloamwyrm(host, { size = 1 } = {}) {
     head.position.addScaledVector(tip.clone().sub(before).normalize(), 0.3);
     head.position.z -= recoil * 0.8;
     head.position.y += coil * 0.5;
+    placeExtras(head.position, spine[SEGMENTS - 4]);
     jaw.rotation.x = Math.PI / 2 + (calm ? 0 : Math.max(0, Math.sin(t * 2)) * 0.15) + coil * 0.4;
     const s = shown * (1 - Math.min(1, falling) * 0.15);
     wyrm.scale.setScalar(s);
@@ -172,6 +213,14 @@ export function mountGloamwyrm(host, { size = 1 } = {}) {
 
   return {
     setSize(v) { target = v; },
+    /** How many heads are still on it (at least the first); cut ones drop away. */
+    setHeads(n) {
+      const want = Math.max(0, Math.min(MAX_EXTRA, n - 1));
+      extras.forEach((x, i) => {
+        if (i < want) { x.shown = true; x.drop = 0; }
+        else if (x.shown) { x.shown = false; x.drop = calm ? 1.2 : 0.01; }
+      });
+    },
     hit(power = 1) { flash = Math.min(1, 0.6 + power * 0.4); recoil = calm ? 0 : 1; },
     windup() { coil = 1; },
     fall() { falling = falling || 0.01; },

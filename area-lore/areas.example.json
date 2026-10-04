@@ -1,0 +1,12 @@
+{
+  "areas": [
+    {
+      "cell": "gcpv",
+      "name": "Central London (example)",
+      "feeds": [
+        { "name": "Town events", "type": "ical", "url": "https://example.org/events.ics" },
+        { "name": "Gig listings", "type": "rss", "url": "https://example.org/gigs.rss" }
+      ]
+    }
+  ]
+}

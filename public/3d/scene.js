@@ -11,7 +11,8 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { SquareGrid } from './grid.js';
-import { HUB, SOLID } from './hub.js';
+import { HUB, SOLID, START, KEEPER_SPOTS, TOWN } from './hub.js';
+import { regionMap, hubGates } from './region-map.js';
 import { dayPhase, clockLabel } from './clock.js';
 import { createAtmosphere } from './atmosphere.js';
 import { LOOK } from './look.js';
@@ -19,9 +20,35 @@ import { load as loadSunnyside } from './sunnyside.js';
 
 const A = 'assets/';
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const rows = HUB.map(r => r.padEnd(24, '.').slice(0, 24));
-const grid = new SquareGrid(24, rows.length, 1);
+const COLS = Math.max(...HUB.map(r => r.length));
+let rows = HUB.map(r => r.padEnd(COLS, '.').slice(0, COLS));
+let grid = new SquareGrid(COLS, rows.length, 1); // grid, rows and treeCells follow the world the player is in (hub or a March)
 const at = (c, r) => (grid.inside(c, r) ? rows[r][c] : 'T');
+// What the painted ground sees: the well and stalls stand on paving, so their cells don't paint as grass.
+const groundAt = (c, r) => {
+  const ch = at(c, r);
+  if (ch === 'W') return '=';
+  if (ch === 'K' || ch === 'L') return [[0, -1], [1, 0], [0, 1], [-1, 0]].some(([dc, dr]) => at(c + dc, r + dr) === '=') ? '=' : '.';
+  return ch;
+};
+// Static things (trees, houses, props, water) live in 8x8-cell chunks, shown only near the player: the hub is big and
+// a phone shouldn't submit what the fog already hides.
+const CHUNK = 8, chunks = new Map();
+function chunkGroup(c, r) {
+  const key = Math.floor(c / CHUNK) + ',' + Math.floor(r / CHUNK);
+  let g = chunks.get(key);
+  if (!g) {
+    const x0 = Math.floor(c / CHUNK) * CHUNK, y0 = Math.floor(r / CHUNK) * CHUNK;
+    const a = grid.toWorld(x0, y0), b = grid.toWorld(x0 + CHUNK - 1, y0 + CHUNK - 1);
+    g = new THREE.Group(); g.userData.mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    scene.add(g); chunks.set(key, g);
+  }
+  return g;
+}
+const SHOW_RADIUS = 46;
+function cullChunks(x, z) {
+  for (const g of chunks.values()) g.visible = Math.hypot(g.userData.mid.x - x, g.userData.mid.z - z) < SHOW_RADIUS + CHUNK;
+}
 
 // ---------- renderer, scene, camera ----------
 const canvas = document.getElementById('view');
@@ -66,28 +93,30 @@ const COLORS = {
 function tileColor(ch, c, r) {
   const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
   const pick = a => a[h % a.length];
-  if (ch === '=') return pick(COLORS.road);
+  if (ch === '=' || ch === 'P' || ch === 'W') return pick(COLORS.road);
   if (ch === '~') return pick(COLORS.water);
   if (ch === ',') return pick(COLORS.tall);
   return pick(COLORS.grass);
 }
-{
+function makeTiles(g, atFn) {
   const geo = new THREE.BoxGeometry(1, 0.4, 1);
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
-  tiles = new THREE.InstancedMesh(geo, mat, grid.cols * grid.rows);
-  tiles.receiveShadow = true;
+  const mesh = new THREE.InstancedMesh(geo, mat, g.cols * g.rows);
+  mesh.receiveShadow = true;
   const m = new THREE.Matrix4(), col = new THREE.Color();
   let i = 0;
-  for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
-    const ch = at(c, r), { x, z } = grid.toWorld(c, r);
+  for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
+    const ch = atFn(c, r), { x, z } = g.toWorld(c, r);
     const y = ch === '=' ? -0.24 : ch === '~' ? -0.5 : -0.2;
     m.makeTranslation(x, y, z);
-    tiles.setMatrixAt(i, m);
-    tiles.setColorAt(i, col.setHex(tileColor(ch, c, r)));
+    mesh.setMatrixAt(i, m);
+    mesh.setColorAt(i, col.setHex(tileColor(ch, c, r)));
     i++;
   }
-  scene.add(tiles);
+  return mesh;
 }
+tiles = makeTiles(grid, at);
+scene.add(tiles);
 // The world goes on past the map: a wide meadow fading into the fog, with a ring of forest just outside the edge.
 {
   meadow = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshStandardMaterial({ color: 0x6aa84c, roughness: 1 }));
@@ -95,20 +124,19 @@ function tileColor(ch, c, r) {
   scene.add(meadow);
 }
 // water surface that shimmers
-const water = (() => {
-  const mat = new THREE.MeshStandardMaterial({ color: 0x5fb3e3, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.85 });
-  const group = new THREE.Group();
-  for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) if (at(c, r) === '~') {
-    const { x, z } = grid.toWorld(c, r);
+const water = new THREE.MeshStandardMaterial({ color: 0x5fb3e3, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.85 });
+// `into(c, r)` says which group a water cell's quad joins (the hub's chunks, or one region's group).
+function makeWater(g, atFn, into) {
+  for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) if (atFn(c, r) === '~') {
+    const { x, z } = g.toWorld(c, r);
     // UVs in cells (world space), so a tiling texture runs across neighbouring water cells without seams.
     const geo = new THREE.PlaneGeometry(1, 1), uv = geo.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, c + uv.getX(i), grid.rows - 1 - r + uv.getY(i));
-    const q = new THREE.Mesh(geo, mat);
-    q.rotation.x = -Math.PI / 2; q.position.set(x, -0.28, z); group.add(q); // just above the water tile tops (-0.3)
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, c + uv.getX(i), g.rows - 1 - r + uv.getY(i));
+    const q = new THREE.Mesh(geo, water);
+    q.rotation.x = -Math.PI / 2; q.position.set(x, -0.28, z); into(c, r).add(q); // just above the water tile tops (-0.3)
   }
-  scene.add(group);
-  return mat;
-})();
+}
+makeWater(grid, at, chunkGroup);
 
 // ---------- grass blades, instanced, swaying in the wind ----------
 const wind = { value: 0 };
@@ -190,21 +218,30 @@ function placeholder(kind, color = 0xd97757) {
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.3, 4, 10), mat(color)); body.position.y = 0.38;
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), mat(0xf6d2b0)); head.position.y = 0.82;
     g.add(body, head);
+  } else if (kind === 'stall') {
+    const table = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.6), mat(0x8a6440)); table.position.y = 0.25;
+    const awning = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.08, 0.8), mat(color)); awning.position.set(0, 1.1, 0.05); awning.rotation.x = 0.18;
+    for (const x of [-0.45, 0.45]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.1, 0.06), mat(0x6a4a30)); post.position.set(x, 0.55, -0.25); g.add(post); }
+    g.add(table, awning);
+  } else if (kind === 'lamp') {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.3, 6), mat(0x3a3a44)); pole.position.y = 0.65;
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshStandardMaterial({ color: 0xffe2a0, emissive: 0xffb84a, emissiveIntensity: 1.6 })); bulb.position.y = 1.35;
+    g.add(pole, bulb);
   } else if (kind === 'prop') {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.12), mat(color)); post.position.y = 0.3; g.add(post);
   }
   return shadowed(g);
 }
-async function place(role, fallbackKind, c, r, { color, rot = 0, scale = 1, offset = [0, 0], variant = 0 } = {}) {
+async function place(role, fallbackKind, c, r, { color, rot = 0, scale = 1, offset = [0, 0], variant = 0, still = false, parent = null, g = grid } = {}) {
   const m = await model(role, variant);
   const obj = m ? m.obj : placeholder(fallbackKind, color);
-  const { x, z } = grid.toWorld(c, r);
+  const { x, z } = g.toWorld(c, r);
   obj.position.set(x + offset[0], 0, z + offset[1]);
   obj.rotation.y = rot;
   // manifest.height sizes a model to a height in tiles, whatever units the file uses.
   const fit = m && manifest.height?.[role] ? manifest.height[role] / Math.max(0.01, new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).y) : 1;
   obj.scale.setScalar(m ? fit * (manifest.scale?.[role] ?? 1) * scale : scale);
-  scene.add(obj);
+  (parent || (still ? chunkGroup(c, r) : scene)).add(obj);
   return { obj, clips: m?.clips || [] };
 }
 
@@ -314,13 +351,19 @@ function play(a, name) {
   a.current = want;
 }
 // Ducks keep to the water; everyone else keeps off water, solid cells and the trees standing inside the map.
-const treeCells = new Set();
+let treeCells = new Set();
 const free = (c, r, a) => (a?.swims ? at(c, r) === '~' : !SOLID.has(at(c, r)) && !treeCells.has(c + ',' + r)) && !actors.some(o => (o.c === c && o.r === r))
-  && !(villager.visible && villagerCell && villagerCell[0] === c && villagerCell[1] === r);
+  && !(world === hubWorld && villager.visible && villagerCell && villagerCell[0] === c && villagerCell[1] === r);
+// R5: under pressure ('quest:explore' { locked }) the player keeps to the old town in the middle of the map; a player
+// already outside may walk back in or along, never further out. Nothing else is locked.
+let exploreLocked = !!window.__questExploreLocked;
+addEventListener('quest:explore', e => { exploreLocked = !!e.detail?.locked; });
+const inTown = (c, r) => c >= TOWN[0] && c < TOWN[0] + 24 && r >= TOWN[1] && r < TOWN[1] + 16;
 function tryMove(a, dir) {
   a.dir = dir;
   const [c, r] = grid.step(a.c, a.r, dir);
   if (!free(c, r, a)) return false;
+  if (exploreLocked && a === player && world === hubWorld && inTown(a.c, a.r) && !inTown(c, r)) return false;
   a.from = grid.toWorld(a.c, a.r); a.to = grid.toWorld(c, r); a.c = c; a.r = r; a.k = 0;
   return true;
 }
@@ -358,9 +401,13 @@ function updateActor(a, dt) {
 // boot.js sends 'quest:riddlers' ([{ riddleId, slot }], slot = the ledger Keeper's index, or null for no Keeper). A
 // Keeper carrying a Riddle stops wandering and shows a '!'; Riddles with no Keeper wait with a placeholder villager by
 // the Lodge. Standing next to one sends 'quest:near' ({ riddleId } or null), and E sends 'quest:talk'.
+// Standing at the Lodge with no Riddle near sends 'quest:near' ({ place: 'lodge' }), and E sends 'quest:lodge' (the
+// stats board). R3: standing by the hub's notice board ('B') sends ({ place: 'board' }), and E sends 'quest:board'.
+// R4: standing next to a Keeper with no Riddle sends ({ keeper: slot }), and E sends 'quest:keeper' ({ slot }) to start work.
 // 'quest:input' ({ locked }) stops the player moving while the conversation box is open.
 const keeperActors = [];
-let riddlers = [], nearRiddle = null, inputLocked = false;
+let riddlers = [], nearRiddle = null, nearLodge = false, nearBoard = false, nearKeeper = null, nearPost = null, inputLocked = false;
+const boardCell = (() => { for (let r = 0; r < grid.rows; r++) { const c = rows[r].indexOf('B'); if (c >= 0) return [c, r]; } return null; })();
 const bangMat = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d');
@@ -411,13 +458,28 @@ addEventListener('quest:haze', e => { hazeTarget = Math.min(1, Math.max(0, Numbe
 addEventListener('quest:input', e => { inputLocked = !!e.detail?.locked; if (inputLocked) { held.clear(); order.length = 0; tapped = null; } });
 function riddleTick(t) {
   for (const b of bangs) if (b.visible) b.position.set(b.userData.at.x, 2.1 + (reduceMotion ? 0 : Math.sin(t * 3) * 0.06), b.userData.at.z);
-  let near = null;
-  if (player) {
+  let near = null, lodge = false, board = false, keeper = null, post = null;
+  if (player && world !== hubWorld) post = world.posts.find(p => Math.abs(p.c - player.c) + Math.abs(p.r - player.r) <= 1)?.workId ?? null;
+  else if (player) {
+    if (boardCell) board = Math.abs(player.c - boardCell[0]) <= 1 && Math.abs(player.r - boardCell[1]) <= 1;
+    // the Lodge's 2x2 plot runs from (lc, lr - 1) to (lc + 1, lr), but the house draws larger and the camera looks
+    // north, so it reads as "at the door" up to three rows in front and a step or two either side
+    const [lc, lr] = lodgeCell;
+    lodge = player.c >= lc - 1 && player.c <= lc + 3 && player.r >= lr - 2 && player.r <= lr + 3;
     const by = (c, r) => Math.abs(c - player.c) + Math.abs(r - player.r) <= 1;
     near = keeperActors.find(a => a.riddleId && a.k >= 1 && by(a.c, a.r))?.riddleId
       || (villager.riddleId && villagerCell && by(...villagerCell) ? villager.riddleId : null);
+    const k = keeperActors.findIndex(a => !a.riddleId && a.k >= 1 && by(a.c, a.r));
+    keeper = k >= 0 ? k : null;
   }
-  if (near !== nearRiddle) { nearRiddle = near; dispatchEvent(new CustomEvent('quest:near', { detail: near ? { riddleId: near } : null })); }
+  lodge &&= !near; // a Riddle beside the Lodge comes first
+  board &&= !near && !lodge;
+  keeper = near || lodge || board ? null : keeper; // a Keeper wandering by never hides the Lodge or the board
+  if (near !== nearRiddle || lodge !== nearLodge || board !== nearBoard || keeper !== nearKeeper || post !== nearPost) {
+    nearRiddle = near; nearLodge = lodge; nearBoard = board; nearKeeper = keeper; nearPost = post;
+    dispatchEvent(new CustomEvent('quest:near', { detail: near ? { riddleId: near } : post ? { place: 'post', workId: post } : lodge ? { place: 'lodge' } : board ? { place: 'board' }
+      : keeper != null ? { keeper } : null }));
+  }
 }
 
 // ---------- player input ----------
@@ -429,6 +491,10 @@ const KEY = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: '
 addEventListener('keydown', e => { if (inputLocked) return; const k = KEY[e.key]; if (k) { e.preventDefault(); if (!held.has(k)) order.push(k); held.add(k); tapped = k; } if (e.key === 't' || e.key === 'T') { fastTime = !fastTime; if (!fastTime && pinned == null) skyClock = 0; }
   if (e.key === 'r' || e.key === 'R') atmos.cycle(e.shiftKey ? -1 : 1);
   if ((e.key === 'e' || e.key === 'E') && nearRiddle) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: nearRiddle } })); }
+  else if ((e.key === 'e' || e.key === 'E') && nearLodge) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:lodge')); }
+  else if ((e.key === 'e' || e.key === 'E') && nearBoard) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:board')); }
+  else if ((e.key === 'e' || e.key === 'E') && nearPost) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:post', { detail: { workId: nearPost } })); }
+  else if ((e.key === 'e' || e.key === 'E') && nearKeeper != null) { e.preventDefault(); dispatchEvent(new CustomEvent('quest:keeper', { detail: { slot: nearKeeper } })); }
   audio.unlock(); });
 addEventListener('keyup', e => { const k = KEY[e.key]; if (k) { held.delete(k); order.splice(0, order.length, ...order.filter(d => d !== k)); } });
 for (const b of document.querySelectorAll('[data-dir]')) {
@@ -533,7 +599,7 @@ function updateSky(dt) {
   bloom.strength = (0.3 + (1 - day) * 0.45) * LOOK.lens.bloom;
   const label = day > 0.6 ? 'Day' : day > 0.15 ? (dayT < 0.5 ? 'Dawn' : 'Dusk') : 'Night';
   const when = fastTime || pinned != null ? 'preview' : clockLabel();
-  if (hud) hud.textContent = `Ember Hollow · ${label} · ${when}`;
+  if (hud) hud.textContent = `${world.name} · ${label} · ${when}`;
   return day;
 }
 
@@ -542,7 +608,7 @@ let player, sunny = null;
 // Sunnyside paints the ground, water and meadow; the 3D grass blades go, since they fight the pixel grass.
 function paintSunnyside(ss) {
   const dim = new THREE.Color().setScalar(LOOK.ground.brightness);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(grid.cols, grid.rows), new THREE.MeshLambertMaterial({ map: ss.ground(grid.cols, grid.rows, at), alphaTest: 0.5, color: dim }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(grid.cols, grid.rows), new THREE.MeshLambertMaterial({ map: ss.ground(grid.cols, grid.rows, groundAt), alphaTest: 0.5, color: dim }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = 0.002; ground.receiveShadow = true;
   scene.add(ground);
   meadow.material = new THREE.MeshLambertMaterial({ map: ss.tiled('grass', 160), color: dim });
@@ -556,10 +622,10 @@ async function tree(c, r, opts) {
   // 'mixed' leans on the two big trees, with pines and bushes for variety (indices into sunnyside.js TREES).
   const kinds = LOOK.trees.kind === 'round' ? [0] : LOOK.trees.kind === 'tall' ? [1] : [0, 1, 0, 1, 0, 1, 2, 3, 4, 5, 6, 7];
   const obj = sunny && await sunny.tree(kinds[h % kinds.length], LOOK.trees.scale);
-  if (!obj) return place('tree', 'tree', c, r, opts);
-  const { x, z } = grid.toWorld(c, r), [ox, oz] = opts.offset || [0, 0];
+  if (!obj) return place('tree', 'tree', c, r, { ...opts, still: true });
+  const { x, z } = (opts.g || grid).toWorld(c, r), [ox, oz] = opts.offset || [0, 0];
   obj.position.set(x + ox, 0, z + oz);
-  scene.add(obj);
+  (opts.parent || chunkGroup(c, r)).add(obj);
 }
 // People are 3D models by default (LOOK.characters); 'pixel' uses the Sunnyside sprites. ?chars=pixel|3d overrides.
 const CHARS = new URLSearchParams(location.search).get('chars') || LOOK.characters;
@@ -568,6 +634,7 @@ async function person(role, c, r, color, hair, variant = 0) {
   if (sunny) { const p = await sunny.person(hair); const { x, z } = grid.toWorld(c, r); p.obj.position.set(x, 0, z); scene.add(p.obj); return { obj: p.obj, clips: [], sprite: p.sprite }; }
   return place(role, 'person', c, r, { color });
 }
+const hashCell = (c, r) => ((c * 73856093) ^ (r * 19349663)) >>> 0;
 async function build() {
   await loadManifest();
   sunny = await loadSunnyside();
@@ -585,13 +652,15 @@ async function build() {
     const ch = at(c, r);
     if (ch === 'T') jobs.push(tree(c, r, { rot: (c * 7 + r * 3) % 6, scale: 0.9 + ((c + r) % 3) * 0.12 }));
     // The Keeper's Lodge: the ember-orange house, larger, on its 2x2 plot. Village houses take the blue and green roofs.
-    if (ch === 'C' && sunny) { const h = sunny.house(2, LOOK.houses.lodge), { x, z } = grid.toWorld(c, r); h.position.set(x + 0.5, 0, z - 0.5); scene.add(h); }
-    else if (ch === 'C') jobs.push(place('center', 'center', c, r, { color: 0xd97757, offset: [0.5, -0.5] }));
-    if (ch === 'H' && sunny) { const h = sunny.house((c + r) % 2), { x, z } = grid.toWorld(c, r); h.position.set(x, 0, z); scene.add(h); }
-    else if (ch === 'H') jobs.push(place('house', 'house', c, r, { color: [0xe0a84f, 0x7a8fd0, 0xc05050][(c + r) % 3], rot: Math.PI }));
-    if (ch === 'B') jobs.push(place('board', 'prop', c, r, { color: 0x8a6440 }));
-    if (ch === 'M') jobs.push(place('mailbox', 'prop', c, r, { color: 0xc04040 }));
-    if (ch === 'S') jobs.push(place('waystone', 'prop', c, r, { color: 0x6aa8e8 }));
+    if (ch === 'C' && sunny) { const h = sunny.house(2, LOOK.houses.lodge), { x, z } = grid.toWorld(c, r); h.position.set(x + 0.5, 0, z - 0.5); chunkGroup(c, r).add(h); }
+    else if (ch === 'C') jobs.push(place('center', 'center', c, r, { color: 0xd97757, offset: [0.5, -0.5], still: true }));
+    if (ch === 'H' && sunny) { const h = sunny.house((c + r) % 2), { x, z } = grid.toWorld(c, r); h.position.set(x, 0, z); chunkGroup(c, r).add(h); }
+    else if (ch === 'H') jobs.push(place('house', 'house', c, r, { color: [0xe0a84f, 0x7a8fd0, 0xc05050][(c + r) % 3], rot: Math.PI, still: true }));
+    if (ch === 'B') jobs.push(place('board', 'prop', c, r, { color: 0x8a6440, still: true }));
+    if (ch === 'M') jobs.push(place('mailbox', 'prop', c, r, { color: 0xc04040, still: true }));
+    if (ch === 'K') jobs.push(place('stall', 'stall', c, r, { color: [0xc04040, 0x4f7fc0, 0xd9a441, 0x5aa05a][hashCell(c, r) % 4], rot: Math.PI, still: true }));
+    if (ch === 'L') jobs.push(place('lamp', 'lamp', c, r, { still: true }));
+    if (ch === 'S') jobs.push(place('waystone', 'prop', c, r, { color: 0x6aa8e8, still: true }));
   }
   // A ring of forest beyond the edge so the map never ends at a cliff (LOOK.trees: ring depth and density).
   const ring = LOOK.trees.ring;
@@ -604,14 +673,14 @@ async function build() {
   // A few trees standing in the open grass inside the map, away from the well and the player's start.
   const open = [];
   for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
-    if ((at(c, r) === '.' || at(c, r) === ',') && Math.abs(c - wellCell[0]) + Math.abs(r - wellCell[1]) > 3 && !(c === 11 && r === 9)) open.push([c, r]);
+    if ((at(c, r) === '.' || at(c, r) === ',') && Math.abs(c - wellCell[0]) + Math.abs(r - wellCell[1]) > 3 && !(c === START[0] && r === START[1])) open.push([c, r]);
   }
   const rank = ([c, r]) => ((c * 7 + 3) * 73856093 ^ (r * 5 + 1) * 19349663) >>> 0;
   for (const [c, r] of open.sort((a, b) => rank(a) - rank(b)).slice(0, LOOK.trees.inside)) { treeCells.add(c + ',' + r); jobs.push(tree(c, r, {})); }
   await Promise.all(jobs);
-  const p = await person('player', 11, 9, 0x3050c0, 'shorthair');
-  player = makeActor(p.obj, p.clips, 11, 9, LOOK.move.walk, p.sprite);
-  const keeperSpots = [[4, 7], [17, 8], [11, 13], [6, 4], [19, 12]].slice(0, LOOK.people.keepers);
+  const p = await person('player', ...START, 0x3050c0, 'shorthair');
+  player = makeActor(p.obj, p.clips, ...START, LOOK.move.walk, p.sprite);
+  const keeperSpots = KEEPER_SPOTS.slice(0, LOOK.people.keepers);
   for (const [i, [c, r]] of keeperSpots.entries()) {
     const m = await person('keeper', c, r, 0xd97757, sunny?.HAIR[(i + 1) % sunny.HAIR.length], i);
     const a = makeActor(m.obj, m.clips, c, r, 2.6 * LOOK.move.npcPace, m.sprite);
@@ -640,11 +709,157 @@ async function build() {
   document.body.classList.add('ready');
 }
 
+// ---------- Marches: one region per March, reached by a gate in the hub (CLA-15) ----------
+// boot.js sends 'quest:regions' (public/quest/regions.js: one region per March, or a default set when the ledger has no
+// Marches). The renderer treats every region alike and never learns where it came from. Each region gets a gate at a
+// road end of the hub. Walking into it builds that region's map far from the hub, shows its Works as posts, and drops
+// the previous one; the gate back returns you to the hub's side of the road. Only one region exists at a time (phones).
+// Standing beside a post sends 'quest:near' ({ place: 'post', workId }), and E sends 'quest:post' ({ workId }).
+// Not built yet: Speaking Stones and the Fallen Bridge between Marches.
+const REGION_ORIGIN = { x: 300, z: 0 };
+const hubWorld = { id: 'hub', name: 'Ember Hollow', grid, rows, treeCells, gates: new Map(), posts: [] };
+let world = hubWorld, regions = window.__questRegions || [], traveling = false, returnAt = null;
+const gateGroup = new THREE.Group();
+scene.add(gateGroup);
+const enterWorld = w => { world = w; grid = w.grid; rows = w.rows; treeCells = w.treeCells; };
+function labelSprite(text) {
+  const c = document.createElement('canvas'); c.width = 384; c.height = 72;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(14,16,24,.8)'; g.fillRect(0, 0, 384, 72);
+  g.fillStyle = '#f3e6c8'; g.font = '600 30px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text.length > 24 ? text.slice(0, 23) + '…' : text, 192, 38);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = mine(new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true })));
+  sp.scale.set(2.4, 0.45, 1);
+  return sp;
+}
+const wood = () => new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.9 });
+// A gate: two posts and a lintel in the March's banner colour, with its name above. `across` is the axis the posts sit on.
+function makeGate(banner, name, across) {
+  const g = new THREE.Group(), flag = new THREE.MeshStandardMaterial({ color: new THREE.Color(banner), roughness: 0.7 });
+  for (const s of [-0.5, 0.5]) {
+    const post = mine(new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.5, 0.16), wood()));
+    post.position.set(across === 'x' ? s : 0, 0.75, across === 'x' ? 0 : s);
+    g.add(post);
+  }
+  const lintel = mine(new THREE.Mesh(new THREE.BoxGeometry(across === 'x' ? 1.2 : 0.2, 0.18, across === 'x' ? 0.2 : 1.2), flag));
+  lintel.position.y = 1.55;
+  const label = labelSprite(name);
+  label.position.y = 2.2;
+  g.add(lintel, label);
+  return shadowed(g);
+}
+// Frees only what the Marches code made itself (tagged `mine`); trees and people share cached geometry and textures.
+const mine = m => { m.userData.mine = true; return m; };
+function disposeTree(o) { o.traverse(m => { if (!m.userData.mine) return; m.geometry?.dispose?.(); m.material?.map?.dispose(); m.material?.dispose(); }); }
+function setRegions(list) {
+  regions = Array.isArray(list) ? list : [];
+  for (const o of [...gateGroup.children]) { gateGroup.remove(o); disposeTree(o); }
+  const { gates } = hubGates(regions);
+  hubWorld.gates = new Map(gates.map(g => [g.c + ',' + g.r, g.regionId]));
+  for (const g of gates) {
+    const o = makeGate(g.banner, g.name, g.r === 0 || g.r === hubWorld.grid.rows - 1 ? 'x' : 'z');
+    const { x, z } = hubWorld.grid.toWorld(g.c, g.r);
+    o.position.set(x, 0, z);
+    gateGroup.add(o);
+  }
+  if (world !== hubWorld && !regions.some(r => r.id === world.id) && player) travel('hub');
+}
+addEventListener('quest:regions', e => setRegions(e.detail));
+setRegions(regions);
+
+const POST_COLOR = { blocked: 0xd9534f, in_review: 0x5b8def, in_progress: 0xf0a030, todo: 0xb9c4d0, backlog: 0x8a8f99, done: 0x5cb85c, cancelled: 0x555a63 };
+async function buildRegion(reg) {
+  const map = regionMap(reg), g = new SquareGrid(map.cols, map.rows.length, 1, REGION_ORIGIN);
+  const atR = (c, r) => (g.inside(c, r) ? map.rows[r][c] : 'T');
+  const group = new THREE.Group(), own = [];
+  scene.add(group);
+  try {
+    const tl = makeTiles(g, atR);
+    group.add(tl); own.push(tl.geometry, tl.material);
+    const wt = new THREE.Group();
+    group.add(wt); makeWater(g, atR, () => wt); wt.children.forEach(q => own.push(q.geometry));
+    const mid = g.toWorld((g.cols - 1) / 2, (g.rows - 1) / 2);
+    const mead = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), meadow.material);
+    mead.rotation.x = -Math.PI / 2; mead.position.set(mid.x, meadow.position.y, mid.z); mead.receiveShadow = true;
+    group.add(mead); own.push(mead.geometry);
+    if (sunny) {
+      const gm = new THREE.MeshLambertMaterial({ map: sunny.ground(g.cols, g.rows, atR), alphaTest: 0.5, color: new THREE.Color().setScalar(LOOK.ground.brightness) });
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(g.cols, g.rows), gm);
+      ground.rotation.x = -Math.PI / 2; ground.position.set(mid.x, 0.002, mid.z); ground.receiveShadow = true;
+      group.add(ground); own.push(ground.geometry, gm, gm.map);
+    }
+    const jobs = [], blocked = new Set(['14,3']);
+    for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) if (atR(c, r) === 'T') jobs.push(tree(c, r, { g, parent: group, rot: (c * 7 + r * 3) % 6, scale: 0.9 + ((c + r) % 3) * 0.12 }));
+    for (let r = -2; r < g.rows + 2; r++) for (let c = -2; c < g.cols + 2; c++) {
+      if (g.inside(c, r)) continue;
+      const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
+      if ((h % 1000) / 1000 < LOOK.trees.density) jobs.push(tree(c, r, { g, parent: group, rot: h % 6, scale: 0.85 + (h % 5) * 0.08 }));
+    }
+    const byId = new Map(reg.posts.map(p => [p.workId, p]));
+    for (const p of map.posts) {
+      const post = new THREE.Group(), { x, z } = g.toWorld(p.c, p.r);
+      const pole = mine(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.9, 0.1), wood())); pole.position.y = 0.45;
+      const board = mine(new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.07), new THREE.MeshStandardMaterial({ color: POST_COLOR[byId.get(p.workId)?.status] ?? 0xb9c4d0, roughness: 0.8 })));
+      board.position.y = 0.95;
+      post.add(pole, board); post.position.set(x, 0, z);
+      group.add(shadowed(post)); blocked.add(p.c + ',' + p.r);
+    }
+    const flagpole = new THREE.Group(), fp = g.toWorld(14, 3);
+    const mast = mine(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.6, 6), wood())); mast.position.y = 1.3;
+    const cloth = mine(new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.9), new THREE.MeshStandardMaterial({ color: new THREE.Color(reg.banner), side: THREE.DoubleSide })));
+    cloth.position.set(0.38, 2.0, 0);
+    const name = labelSprite(reg.name); name.position.set(0, 3.1, 0);
+    flagpole.add(mast, cloth, name); flagpole.position.set(fp.x, 0, fp.z);
+    group.add(shadowed(flagpole));
+    const back = makeGate(reg.banner, 'Back to ' + hubWorld.name, 'x'), gp = g.toWorld(...map.gate);
+    back.position.set(gp.x, 0, gp.z); group.add(back);
+    await Promise.all(jobs);
+    return { id: reg.id, name: reg.name, grid: g, rows: map.rows, treeCells: blocked, gates: new Map([[map.gate.join(','), 'hub']]), posts: map.posts, group, own, start: map.start };
+  } catch (err) { scene.remove(group); disposeTree(group); own.forEach(o => o.dispose?.()); throw err; }
+}
+function dropRegion(w) { scene.remove(w.group); disposeTree(w.group); w.own.forEach(o => o.dispose?.()); }
+
+const veil = document.createElement('div');
+veil.setAttribute('aria-hidden', 'true');
+Object.assign(veil.style, { position: 'fixed', inset: '0', zIndex: 900, background: '#0b0d14', opacity: '0', pointerEvents: 'none', display: 'flex', alignItems: 'center',
+  justifyContent: 'center', color: '#f3e6c8', font: '600 20px Georgia, serif', padding: '0 16px', textAlign: 'center', transition: reduceMotion ? 'none' : 'opacity .25s ease' });
+document.body.append(veil);
+const fade = async (on, text = '') => { veil.textContent = text; veil.style.opacity = on ? '1' : '0'; await new Promise(ok => setTimeout(ok, reduceMotion ? 0 : 280)); };
+function warp(a, g, c, r) {
+  a.c = c; a.r = r; a.from = a.to = g.toWorld(c, r); a.k = 1;
+  a.obj.position.x = a.to.x; a.obj.position.z = a.to.z;
+  snapped = false;
+}
+async function travel(to) {
+  if (traveling || !player) return;
+  traveling = true;
+  held.clear(); order.length = 0; tapped = null;
+  let shown = false;
+  try {
+    if (to === 'hub') {
+      const old = world;
+      await fade(true, hubWorld.name); shown = true;
+      enterWorld(hubWorld); dropRegion(old);
+      warp(player, hubWorld.grid, ...(returnAt || START));
+    } else {
+      const reg = regions.find(r => r.id === to);
+      if (!reg) return;
+      await fade(true, reg.name); shown = true;
+      const w = await buildRegion(reg);
+      returnAt = hubGates(regions).gates.find(x => x.regionId === to)?.inward ?? null;
+      enterWorld(w);
+      warp(player, w.grid, ...w.start);
+    }
+  } catch (err) { console.warn('travel:', err.message); }
+  finally { if (shown) await fade(false); traveling = false; }
+}
+
 // ---------- loop ----------
 const timer = new THREE.Timer();
 let snapped = false;
 const camPos = new THREE.Vector3(), look = new THREE.Vector3();
-let lastStepK = 1;
+let lastStepK = 1, cullTick = 0;
 function loop() {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.05), t = timer.getElapsed();
@@ -658,6 +873,7 @@ function loop() {
       if (tryMove(player, dir)) lastStepK = 0;
     }
     for (const a of actors) {
+      if (a !== player && world !== hubWorld) continue; // the hub's people stand still while you are away
       if (a.npc && !a.riddleId && a.k >= 1 && (a.wait -= dt * (a.pace ?? LOOK.move.npcPace)) <= 0) {
         const dirs = ['up', 'down', 'left', 'right'].sort(() => Math.random() - 0.5);
         for (const d of dirs) if (tryMove(a, d)) break;
@@ -665,12 +881,17 @@ function loop() {
       }
       updateActor(a, dt);
     }
+    if (player.k >= 1 && !traveling) {
+      const to = world.gates.get(player.c + ',' + player.r);
+      if (to && (to === 'hub' || !exploreLocked)) travel(to);
+    }
     look.set(player.obj.position.x, 0, player.obj.position.z);
     camPos.copy(look).add(camOffset);
     camera.position.lerp(camPos, reduceMotion || !snapped ? 1 : Math.min(1, dt * LOOK.camera.follow));
     snapped = true;
     camera.lookAt(camera.position.x - camOffset.x, 0, camera.position.z - camOffset.z);
     sun.target.position.copy(look);
+    if (++cullTick % 10 === 1) cullChunks(look.x, look.z);
     sun.position.add(look);
   }
   sunny?.update(dt, t, camera, reduceMotion, player?.obj.position);

@@ -3,7 +3,8 @@
 // events have no id, so theirs is an autoIncrement key. A 'meta' store holds the realm and the ledger version.
 // Records keep their insertion order, as memoryStore does: each is held as { id, seq, r } and read back by seq.
 // Subscribers hear every change, from this tab and (through a BroadcastChannel) from the others.
-import { KINDS, LEDGER_VERSION, emptyLedger } from './contract.js';
+// Events are chained (chainEvent) onto the last one inside the same write transaction, so two tabs can't fork the chain.
+import { KINDS, LEDGER_VERSION, emptyLedger, chainEvent } from './contract.js';
 
 const DB_VERSION = 1;
 const CHANNEL = 'quest-ledger';
@@ -81,8 +82,10 @@ export async function openLedger(name = 'quest-ledger') {
       if (kind !== 'events' && (typeof r.id !== 'string' || !r.id)) throw new Error(`a ${kind} record needs a string id`);
       const tx = db.transaction([kind, META], 'readwrite');
       const store = tx.objectStore(kind);
-      if (kind === 'events') store.add(r);
-      else {
+      if (kind === 'events') {
+        const [count, last] = await Promise.all([req(store.count()), req(store.openCursor(null, 'prev'))]);
+        store.add(chainEvent(r, last?.value || null, count));
+      } else {
         const old = await req(store.get(r.id));
         const seq = old ? old.seq : await nextSeq(tx.objectStore(META), kind);
         store.put({ id: r.id, seq, r });

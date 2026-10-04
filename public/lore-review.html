@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lore review · Quest</title>
+<style>
+  :root { --ink: #303040; --muted: #686878; --paper: #f8f8f0; --line: #c8c8c0; --frame: #4878b8; --frame-dark: #284878; --bg: #101018; --ok: #489868; --bad: #c04040; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { color: #fff; font-size: 26px; margin: 8px 0 4px; }
+  .lead { color: #a8a8b8; margin: 0 0 16px; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; color: #d8d8e8; }
+  .card { background: var(--paper); border: 3px solid var(--frame-dark); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 6px; word-break: break-word; }
+  .line { font-weight: 700; font-size: 18px; margin: 0 0 6px; }
+  .riddle { background: #fff; border: 2px dashed var(--line); border-radius: 6px; padding: 8px 10px; margin: 8px 0; }
+  .riddle ul { margin: 6px 0 0; padding-left: 20px; }
+  .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  button { min-height: 40px; padding: 0 16px; font: inherit; font-weight: 700; border: 2px solid var(--frame-dark); border-radius: 6px; background: #fff; color: var(--frame-dark); cursor: pointer; }
+  button.ok { background: var(--ok); border-color: #2c6c46; color: #fff; }
+  button.no { background: #fff; border-color: var(--bad); color: var(--bad); }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=text], textarea { width: 100%; font: inherit; border: 2px solid var(--frame); border-radius: 4px; padding: 8px; margin: 4px 0; min-height: 40px; }
+  label.pick { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+  label.pick input { width: 22px; height: 22px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: #dde6f4; color: var(--frame-dark); }
+  .tag.published { background: #d6efe0; color: #2c6c46; } .tag.rejected { background: #f4dcdc; color: var(--bad); }
+  #msg { color: #fff; min-height: 24px; margin-bottom: 8px; } #msg.err { color: #ff9a9a; }
+  h2 { color: #fff; font-size: 18px; margin: 24px 0 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lore review</h1>
+  <p class="lead">Nothing here reaches the game until you approve it. Approved stories are pushed to the <b>lore</b> branch.</p>
+  <div id="msg" role="status"></div>
+  <div class="bar" id="bar"></div>
+  <div id="pending"></div>
+  <h2>Approved, not yet pushed</h2><div id="approved"></div>
+  <h2>Published</h2><div id="published"></div>
+  <h2>Rejected</h2><div id="rejected"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) k in e ? (e[k] = v) : e.setAttribute(k, v);
+  for (const k of kids) e.append(k);
+  return e;
+};
+const say = (t, err) => { $('msg').textContent = t; $('msg').className = err ? 'err' : ''; };
+const when = iso => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+const picked = new Set();
+let state = null;
+
+async function call(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json', 'x-lore-review': '1' }, body: JSON.stringify(body) } : {});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+async function decide(ids, action, extra = {}) {
+  say('Working...');
+  try {
+    const r = await call('/api/lore/decide', { ids, action, ...extra });
+    ids.forEach(i => picked.delete(i));
+    const bits = [`${r.changed.length} ${action === 'approve' ? 'approved' : 'rejected'}`];
+    if (r.refused.length) bits.push(`refused: ${r.refused.map(x => `${x.id} (${x.why})`).join('; ')}`);
+    if (r.publish?.error) bits.push(`push failed, will retry: ${r.publish.error}`);
+    else if (r.publish?.published) bits.push(`pushed ${r.publish.published}${r.publish.commit ? ` in ${r.publish.commit.slice(0, 7)}` : ''}`);
+    say(bits.join('. '), !!r.refused.length || !!r.publish?.error);
+  } catch (err) { say(err.message, true); }
+  await load();
+}
+
+function card(it) {
+  const e = it.entry, c = el('div', { className: 'card' });
+  const meta = el('div', { className: 'meta' });
+  meta.append(el('span', { className: `tag ${it.status}`, textContent: it.status }), ` cell ${it.cell} · ${e.kind} · ${when(e.startsAt)} to ${when(e.endsAt)} · ${e.writer}`);
+  c.append(meta);
+  if (it.status === 'pending') c.append(el('label', { className: 'pick' }, Object.assign(el('input', { type: 'checkbox', checked: picked.has(it.id) }), { onchange: ev => (ev.target.checked ? picked.add(it.id) : picked.delete(it.id), bar()) }), 'Select'));
+  c.append(el('p', { className: 'line', textContent: e.line }));
+  c.append(el('div', { className: 'meta', textContent: `Real source (the hint players see): ${e.hint}${e.source?.name ? ` · ${e.source.name}` : ''}` }));
+  const rd = el('div', { className: 'riddle' }, el('div', { textContent: e.question }));
+  if (it.riddle.options) rd.append(el('ul', {}, ...it.riddle.options.map(o => el('li', { textContent: o }))));
+  else rd.append(el('div', { className: 'meta', textContent: 'An errand: no choices, it is simply done.' }));
+  c.append(el('div', { className: 'meta', textContent: 'The Riddle this creates:' }), rd);
+  if (it.reason) c.append(el('div', { className: 'meta', textContent: `Reason: ${it.reason}` }));
+  if (it.status === 'pending') {
+    const acts = el('div', { className: 'acts' });
+    const edit = el('div'), reasonBox = el('div');
+    acts.append(
+      Object.assign(el('button', { className: 'ok', textContent: 'Approve' }), { onclick: () => decide([it.id], 'approve') }),
+      Object.assign(el('button', { textContent: 'Edit then approve' }), { onclick: () => { edit.hidden = !edit.hidden; reasonBox.hidden = true; } }),
+      Object.assign(el('button', { className: 'no', textContent: 'Reject' }), { onclick: () => { reasonBox.hidden = !reasonBox.hidden; edit.hidden = true; } }));
+    const line = el('input', { type: 'text', value: e.line, maxLength: 60 }), q = el('textarea', { value: e.question, rows: 2, maxLength: 140 });
+    const opts = el('textarea', { value: (e.options || []).join('\n'), rows: 3, placeholder: 'One choice per line (up to 3). Empty makes it an errand.' });
+    edit.hidden = true;
+    edit.append(el('label', { textContent: 'Headline' }), line, el('label', { textContent: 'Question' }), q, el('label', { textContent: 'Choices' }), opts,
+      Object.assign(el('button', { className: 'ok', textContent: 'Approve edited' }), { onclick: () => decide([it.id], 'approve', { edits: { [it.id]: { line: line.value, question: q.value, options: opts.value.split('\n') } } }) }));
+    const why = el('input', { type: 'text', placeholder: 'Reason (optional)', maxLength: 200 });
+    reasonBox.hidden = true;
+    reasonBox.append(why, Object.assign(el('button', { className: 'no', textContent: 'Confirm reject' }), { onclick: () => decide([it.id], 'reject', { reason: why.value }) }));
+    c.append(acts, edit, reasonBox);
+  }
+  return c;
+}
+
+function bar() {
+  const pend = state.items.filter(i => i.status === 'pending'), b = $('bar');
+  b.replaceChildren(
+    Object.assign(el('button', { textContent: picked.size ? `Approve ${picked.size} selected` : 'Approve selected', disabled: !picked.size, className: 'ok' }), { onclick: () => decide([...picked], 'approve') }),
+    Object.assign(el('button', { textContent: 'Select all pending', disabled: !pend.length }), { onclick: () => { pend.forEach(i => picked.add(i.id)); render(); } }),
+    Object.assign(el('button', { textContent: 'Generate now' }), { onclick: async () => { say('Generating (this can take a few minutes)...'); try { const r = await call('/api/lore/generate', {}); say(`${r.added} new stories${r.error ? `, error: ${r.error}` : ''}`, !!r.error); } catch (e) { say(e.message, true); } await load(); } }),
+    el('span', { textContent: state.areas.length ? `Cells: ${state.areas.map(a => a.cell).join(', ')}` : 'No cell configured (config.json "lore.cell")' }),
+    el('span', { textContent: state.status.lastGeneratedAt ? `Last run ${when(state.status.lastGeneratedAt)}` : 'Not generated yet' }));
+}
+
+function render() {
+  for (const s of ['pending', 'approved', 'published', 'rejected']) {
+    const box = $(s), list = state.items.filter(i => i.status === s);
+    box.replaceChildren(...(list.length ? list.map(card) : [el('div', { className: 'meta', style: 'color:#a8a8b8', textContent: 'None.' })]));
+  }
+  bar();
+}
+
+async function load() {
+  try { state = await call('/api/lore/queue'); if (state.status.lastError) say(state.status.lastError, true); render(); }
+  catch (err) { say(err.message, true); }
+}
+load();
+</script>
+</body>
+</html>

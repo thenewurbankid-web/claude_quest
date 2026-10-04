@@ -308,6 +308,6 @@ if (first) select(first);
 mountChat($('chat'), {
   key: 'editor',
   placeholder: 'e.g. what props would a fishing village need?',
-  system: 'You help the player of Quest, a cosy fantasy adventure game, with its art in the asset editor. The world is 16 px pixel art; '
+  system: 'You help the player of A Vibe Called Quest, a cosy fantasy adventure game, with its art in the asset editor. The world is 16 px pixel art; '
     + 'people and buildings are smooth low-poly 3D in a stylised, flat-coloured look. Be brief and practical. Fantasy tone; never name real products or companies.',
 });

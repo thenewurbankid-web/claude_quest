@@ -3,8 +3,17 @@
 // append-only `events` list (contract.js Event: { at, kind, ref }); it never leaves the machine.
 // The pure functions run under node:test; mountDigest is the only part that needs a DOM.
 // Safety: text only ever goes in through textContent. Styles are scoped under the qdg- prefix and injected once.
+// R3: events about game-only Riddles and Works (area lore) are left out of every count here, so lore never moves the
+// digest, the stats board or question-to-answer time.
+import { isGameOnly } from './contract.js';
 
 const time = iso => { const t = Date.parse(iso); return Number.isNaN(t) ? null : t; };
+
+/** The ledger's events minus those whose ref is a game-only Riddle or Work. */
+function realEvents(ledger) {
+  const skip = new Set([...(ledger?.riddles || []), ...(ledger?.works || [])].filter(isGameOnly).map(r => r.id));
+  return (ledger?.events || []).filter(e => !(e?.ref && skip.has(e.ref)));
+}
 
 /** ISO string of the latest 'session.end' in the log, or null when there is none. */
 export function lastSessionEnd(events) {
@@ -29,7 +38,7 @@ export function digest(ledger, since) {
   for (const k of Object.keys(DIGEST_KINDS)) d[k] = 0;
   const after = since == null ? -Infinity : time(since) ?? -Infinity;
   const byKind = Object.fromEntries(Object.entries(DIGEST_KINDS).map(([k, v]) => [v, k]));
-  for (const e of ledger?.events || []) {
+  for (const e of realEvents(ledger)) {
     const k = byKind[e?.kind];
     if (!k) continue;
     const t = time(e.at);
@@ -57,11 +66,12 @@ export function digestLines(d) {
 /**
  * Question-to-answer time per Riddle ref: its first riddle.raised to its LAST riddle.answered (a recall then a new
  * answer counts the final one). Riddles never answered are left out. Items are in order of first raising.
- * @returns {{ count: number, medianMinutes: number|null, items: { ref: string, minutes: number }[] }}
+ * @returns {{ count: number, medianMinutes: number|null, items: { ref: string, minutes: number, at: string }[] }}
+ *   at: when the final answer came
  */
 export function answerTimes(ledger) {
   const raised = new Map(), answered = new Map();
-  for (const e of ledger?.events || []) {
+  for (const e of realEvents(ledger)) {
     if (!e?.ref) continue;
     const t = time(e.at);
     if (t === null) continue;
@@ -70,10 +80,69 @@ export function answerTimes(ledger) {
   }
   const items = [...raised.entries()].sort((a, b) => a[1] - b[1])
     .filter(([ref, t]) => answered.has(ref) && answered.get(ref) >= t)
-    .map(([ref, t]) => ({ ref, minutes: (answered.get(ref) - t) / 60000 }));
-  const m = items.map(i => i.minutes).sort((a, b) => a - b), mid = m.length >> 1;
-  const medianMinutes = !m.length ? null : m.length % 2 ? m[mid] : (m[mid - 1] + m[mid]) / 2;
-  return { count: items.length, medianMinutes, items };
+    .map(([ref, t]) => ({ ref, minutes: (answered.get(ref) - t) / 60000, at: new Date(answered.get(ref)).toISOString() }));
+  return { count: items.length, medianMinutes: median(items.map(i => i.minutes)), items };
+}
+
+const median = xs => {
+  const m = [...xs].sort((a, b) => a - b), mid = m.length >> 1;
+  return !m.length ? null : m.length % 2 ? m[mid] : (m[mid - 1] + m[mid]) / 2;
+};
+
+const STAT_KINDS = { raised: 'riddle.raised', answered: 'riddle.answered', deferred: 'riddle.deferred',
+  sealed: 'riddle.sealed', faded: 'riddle.faded', blocked: 'agent.blocked', unblocked: 'agent.unblocked',
+  sessions: 'session.start', won: 'boss.defeated', retreated: 'boss.retreated', pushed: 'boss.pushed' };
+
+/** Minutes played from `from` on: each session.start to the next session.end, an open session up to now. */
+function playMinutes(events, from, now) {
+  let total = 0, start = null;
+  const sorted = events.filter(e => e.kind === 'session.start' || e.kind === 'session.end')
+    .map(e => [e.kind, time(e.at)]).filter(([, t]) => t !== null).sort((a, b) => a[1] - b[1]);
+  for (const [kind, t] of sorted) {
+    if (kind === 'session.start') start ??= t;
+    else if (start !== null) { total += Math.max(0, t - Math.max(start, from)); start = null; }
+  }
+  if (start !== null) total += Math.max(0, now - Math.max(start, from));
+  return total / 60000;
+}
+
+/**
+ * The Keeper's Lodge stats board (PLAN-engine.md, success measures): counts over the last `days` and over the whole
+ * log, question-to-answer time, play time, and, per Keeper, how many answers they got and how long they waited.
+ * Riddles on a Work with no Keeper count under keeper null.
+ */
+export function realmStats(ledger, now = new Date(), { days = 7 } = {}) {
+  const events = realEvents(ledger).filter(e => e && typeof e.kind === 'string');
+  const t = now.getTime(), from = t - days * 24 * 3600e3;
+  const times = answerTimes(ledger);
+  const window = since => {
+    const out = {};
+    for (const [k, kind] of Object.entries(STAT_KINDS))
+      out[k] = events.filter(e => e.kind === kind && (time(e.at) ?? -Infinity) >= since).length;
+    const answers = times.items.filter(i => time(i.at) >= since).map(i => i.minutes);
+    return { ...out, medianMinutes: median(answers), playMinutes: playMinutes(events, since, t) };
+  };
+
+  const riddle = new Map((ledger?.riddles || []).map(r => [r.id, r]));
+  const work = new Map((ledger?.works || []).map(w => [w.id, w]));
+  const keeperOf = ref => work.get(riddle.get(ref)?.workId)?.keeperId ?? null;
+  const rows = new Map((ledger?.keepers || []).map(k => [k.id, { keeper: k.id, name: k.name, answered: 0, waits: [], waiting: 0 }]));
+  const row = id => rows.get(id) ?? (rows.set(id, { keeper: id, name: id ? 'A Keeper' : 'No Keeper', answered: 0, waits: [], waiting: 0 }), rows.get(id));
+  for (const i of times.items) { const r = row(keeperOf(i.ref)); r.answered++; r.waits.push(i.minutes); }
+  for (const r of riddle.values()) if (['open', 'deferred'].includes(r.state) && !isGameOnly(r)) row(keeperOf(r.id)).waiting++;
+  const keepers = [...rows.values()]
+    .map(({ waits, ...r }) => ({ ...r, medianMinutes: median(waits) }))
+    .sort((a, b) => b.answered + b.waiting - (a.answered + a.waiting) || String(a.name).localeCompare(b.name));
+
+  return { days, recent: window(from), all: window(-Infinity), keepers };
+}
+
+/** "4 min", "2.5 h", "3 days"; an em dash for no data. */
+export function duration(minutes) {
+  if (minutes == null) return '—';
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+  if (minutes < 48 * 60) return `${+(minutes / 60).toFixed(1)} h`;
+  return `${Math.round(minutes / 1440)} days`;
 }
 
 /**
