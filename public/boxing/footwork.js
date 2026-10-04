@@ -12,7 +12,7 @@ export const FOOTWORK = {
   stanceWidth: 0.31,       // m between the feet sideways (the stance this was tuned for)
   leadFrac: 0.75,          // lag, as a share of stance width, before the lead foot lifts (~23 cm: hips and knees absorb the rest)
   trailFrac: 0.85,         // the back foot tolerates more
-  followFrac: 0.3,         // once the lead foot has landed, a back foot this far behind follows it (step-drag)
+  followFrac: 0.4,         // once the lead foot has landed, a back foot this far behind follows it (step-drag)
   yawWeight: 0.12,         // metres of "lag" per radian the foot is turned away from the body
   emergencyFrac: 1.1,      // past this share of stance width a foot steps whatever the cadence limit or the other foot says
   minGap: 0.42,            // s between step groups (about 2 foot steps a second at the very most)
@@ -112,7 +112,7 @@ export class Footwork {
       const isLead = lead ? s === lead : s === 'l';
       let thr = (isLead ? c.leadFrac : c.trailFrac) * W * hold;
       // Step-drag: right after the other foot landed, this one follows from a smaller lag.
-      const follow = this.stepped && this.stepped !== s && this.clock - this.lastLand[this.stepped] < 0.25 && !other.step;
+      const follow = vd && this.stepped && this.stepped !== s && this.clock - this.lastLand[this.stepped] < 0.25 && !other.step;
       if (follow) thr = Math.min(thr, c.followFrac * W * hold);
       const emergency = lag > c.emergencyFrac * W * (1 + 0.6 * (opts.still ?? 0));
       const ready = this.clock - this.lastLand[s] > c.cooldown && !other.step && (this.clock - this.lastStart > c.minGap || follow);

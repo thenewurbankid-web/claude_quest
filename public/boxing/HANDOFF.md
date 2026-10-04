@@ -4,6 +4,13 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): step-drag only follows body travel (BOX-33)
+
+- **`footwork.js`**: the step-drag `follow` rule now needs body travel (`vd && ...`), so an overshoot no longer marches the feet while the body is still; `followFrac` 0.3 -> 0.4 to bring blue under the target.
+- **Numbers** (`motion-metrics.mjs 11`, run on the BOX-31 sim, main 369e8c1, in a scratch copy because this branch does not have BOX-31 yet): steps/s 2.67/2.93 -> 1.88/2.10 (target <= 2.2; follow fix alone gave 1.91/2.24). Feet stay planted (tests green), foot reversals/s 1.41/1.55 -> lower. Idle hip/head reversals are 1.42/s at the test's 0.5x injected noise (unchanged; the CLI's 5/s is at 2x that noise, feet 0), so the BOX-31 idle sway adds no shiver.
+- **On this branch** the sim is still pre-BOX-31, so `motion-metrics` here shows 3.1-3.9 steps/s until BOX-31 (main 369e8c1) is merged in. That merge is for you.
+- 334 tests pass. **Untested**: how it looks in a browser (http://localhost:4792/boxing/).
+
 ## Done (2026-10-04): bell waits for the scene (BOX-8)
 
 - BOX-8's three items were written for the pre-BOX-13 screen. The "Start round" button before a fight and the "Pick a mode on the right" copy no longer exist (the fight now always starts from the corner panel). The surviving bug was item 2: the corner's **Ring the bell** was live while the 3D or 2D photoreal scene was still loading behind the card. Now `startMatch` sets `state.arenaPending` for the 3d and photo2d views; `awaitCorner` shows a disabled "Setting up the fight…" button until `createArena3D`/`createArena2D` settle (success or failure), then `sceneReady()` enables it. 2D top-down and headless are unaffected. Loading spinner is white (was the old red accent).
