@@ -1,5 +1,6 @@
 // node bridge/demo-agent.js <keeperId> [name] — a stand-in agent for the demo: registers as the Keeper, waits for the
-// Bridge's work offer, then reports progress and done. Reads the Realm login from bridge/credential.json.
+// Bridge's work offer, then reports progress and, after DEMO_DELAY_MS (15 s, so you can wake the Keeper in the game: a
+// report on a queued run is refused), done. Reads the Realm login from bridge/credential.json.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import mqtt from 'mqtt';
