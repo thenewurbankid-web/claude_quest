@@ -15,7 +15,7 @@ no attribution required. We credit them anyway.
 All three share one humanoid rig (pelvis, spine_01..03, upperarm_l, lowerarm_l, hand_l, thigh_l, ...), so the clips
 play on the character directly. The finger channels and the animation library's mannequin mesh were dropped.
 
-Not from a pack (drawn in code in `arena-babylon.js`): gloves, trunks, the ring, the crowd, the canvas texture.
+Not from a pack (drawn in code in `arena-babylon.js`): gloves, trunks, the ring, the canvas texture (the crowd is rendered from `person.glb`, see `textures/CREDITS.md`).
 
 ## The realistic person (`person.glb`, `person_skin_light|medium|deep.webp`)
 

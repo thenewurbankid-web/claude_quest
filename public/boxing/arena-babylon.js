@@ -911,9 +911,9 @@ function buildCrowd(B, scene, atlas, opts) {
 // ─── The crowd as photo impostors ───────────────────────────────────────────────────
 
 /**
- * textures/crowd_atlas.webp holds one cut-out photo per frame: a row per person, a column per view (0°, 45°, 90°, 135°,
+ * textures/crowd_atlas.webp holds one rendered cut-out per frame: a row per person, a column per view (0°, 45°, 90°, 135°,
  * 180° off the person's front; the other side is the same frame mirrored). crowd_atlas.json says how it is laid out.
- * scripts/build-crowd-atlas.py writes both. Returns null if either fails to load, and the procedural crowd is built.
+ * scripts/build-crowd-person.py renders the frames and scripts/build-crowd-atlas.mjs packs both files. Returns null if either fails to load, and the procedural crowd is built.
  */
 async function loadCrowdAtlas(B, scene) {
   try {

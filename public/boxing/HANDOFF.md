@@ -191,6 +191,15 @@ asset packs are CC0 (add-on code is GPL-3.0 but only runs at build time). It is 
 `node scripts/measure-boxing.mjs --cam=hard|ringside` at 400 px (Metal GPU): the person loads and fights, no console errors, 122 meshes, ~100 draw calls, CPU frame 3-4 ms. Screenshots: `public/boxing/qa/box-10-person-hard.png` / `-ringside.png`. At 338x190 the fighters read as people in the right outfits (white tee and red wraps vs navy jacket and blue wraps), standing on the court at the right scale. No code changed.
 - **Still untested**: detail the small canvas can't show (tint strength, hair, jeans cut, shoes, mid-punch skinning), the Look panel and its preview at 375px, skin tones, P2P looks, the fallback on a real 404. You check these; balance still needs your numbers.
 
+## Done (2026-10-04): crowd from open-source people (BOX-10)
+
+User: "try using open source free resources instead", and picked **the crowd** when asked what to replace. The crowd atlas was AI-generated cut-outs (ComfyUI); it is now rendered from `person.glb` (the CC0 MPFB person), so every source is open.
+- `scripts/build-crowd-person.py` (headless Blender; command in its docstring) poses `person.glb` (arms down, or raised for 4 of 12), shows a garment set, tints it with hex colours, picks the skin tone, adds a primitive cap, and renders 5 views per person with Cycles on a transparent film (orthographic, overcast light, standard view transform). `scripts/build-crowd-atlas.mjs` packs them into `textures/crowd_atlas.webp` (206 KB, was 26 KB) and `.json` (same format; `flip` 1, side views face image-right, `frameHeightM` 1.95). 12 people vary skin, garment, colours, cap or hair, build.
+- The old ComfyUI scripts (`gen_crowd_photos.py`, `build-crowd-atlas.py`, `comfy_lib.py`) are removed (still in git history). `arena-babylon.js` only changed in a comment.
+- Checked in headless Chromium at 400 px (`measure-boxing.mjs`, hard and ringside): atlas loads, crowd reads as varied people, no console errors, CPU frame 2-5 ms. `npm test` passes.
+- Not done: all the crowd is male (MPFB base is male here; the old crowd had women), the T-shirt hem is a little ragged on back views, night crowd not checked, the arms-up pose is a plain V.
+- **Untested**: the crowd at night and on a real phone.
+
 ## Next jobs
 
 1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
