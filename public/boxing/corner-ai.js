@@ -3,7 +3,7 @@
 // a plan always resolves to one of the sim's existing tactic keys, chosen at the round break like a button press, so
 // determinism and P2P lockstep are untouched. No model of ours, no key of ours, no server of ours.
 
-export const TACTIC_KEYS = ['pressure', 'outbox', 'counter', 'body_attack', 'recover'];
+export const TACTIC_KEYS = ['pressure', 'outbox', 'counter', 'body_attack', 'recover', 'brawl', 'dirty_boxing'];
 export const FOCUSES = ['none', 'head', 'body'];
 export const AGGRESSIONS = ['low', 'normal', 'high'];
 export const SAY_MAX = 140;
@@ -80,6 +80,8 @@ export function parseBubbles(text) {
 
 const RULES = [
   { re: /\b(recover|rest|breathe|breather|catch your breath|slow down|relax|calm down|tired|gassed|save (your )?(energy|gas))\b/, plan: { tactic: 'recover', focus: 'none', aggression: 'low' } },
+  { re: /\b(brawl|street fight|swing|swinging|haymakers?|overhands?|go wild|throw bombs|slug|slugfest|war)\b/, plan: { tactic: 'brawl', focus: 'head', aggression: 'high' } },
+  { re: /\b(dirty|clinch|tie him up|smother|shove|rough him|grab|elbows?|inside work|get inside|fight inside)\b/, plan: { tactic: 'dirty_boxing', focus: 'body', aggression: 'normal' } },
   { re: /\b(protect|cover|defen[cs]e|defend|guard|hands up|keep your hands|shell|block|survive)\b.*\b(body|ribs|liver|gut|stomach)\b|\b(body|ribs|liver|gut)\b.*\b(protect|cover|defen[cs]e|guard|hands)\b/, plan: { tactic: 'counter', focus: 'body', aggression: 'low' } },
   { re: /\b(body|ribs|liver|gut|stomach|midsection)\b/, plan: { tactic: 'body_attack', focus: 'body', aggression: 'high' } },
   { re: /\b(counter|slip|wait for|patient|patience|make him miss|bait|let him come|return fire)\b/, plan: { tactic: 'counter', focus: 'none', aggression: 'low' } },
@@ -93,6 +95,8 @@ const SAYS = {
   counter: ['Let him come. Slip and fire back.', 'Be patient. Make him miss.'],
   body_attack: ['Dig to the ribs. Break him down.', 'Go downstairs, then up top.'],
   pressure: ['Walk him down. Throw the hooks.', 'Press him. Do not let him breathe.'],
+  brawl: ['Swing for the fences. This is a street fight.', 'Throw bombs. Make it ugly.'],
+  dirty_boxing: ['Get inside, tie him up, work close.', 'Smother him. Rough him up inside.'],
 };
 const sayFor = (plan, round) => SAYS[plan.tactic][(round ?? 0) % SAYS[plan.tactic].length];
 
@@ -166,6 +170,8 @@ export const TACTIC_HELP = {
   counter: 'defend first, slip and return fire, low output',
   body_attack: 'work the body with hooks and body shots',
   recover: 'low output at long range to win back stamina',
+  brawl: 'wild street fight: overhands, haymakers, shoves and taunts, high output',
+  dirty_boxing: 'fight at close quarters: clinch, shove, short uppercuts and body hooks',
 };
 
 export function plannerMessages(ctx, playerText) {
