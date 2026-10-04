@@ -69,7 +69,14 @@ export async function createLookPreview({ parent, look, corner = 'red' }) {
     time += dt;
     boxer.pose(ME, OPP, 0, 0, dt, time);
   });
-  engine.runRenderLoop(() => scene.render());
+  // Render only while the preview is on screen: during a fight (panel hidden) the arena is the one engine drawing.
+  const loop = () => scene.render();
+  const setRunning = (on) => {
+    if (on) { if (!engine.activeRenderLoops.includes(loop)) engine.runRenderLoop(loop); }
+    else engine.stopRenderLoop(loop);
+  };
+  const io = new IntersectionObserver((entries) => setRunning(entries[entries.length - 1].isIntersecting));
+  io.observe(parent);
   const onResize = () => engine.resize();
   const ro = new ResizeObserver(onResize);
   ro.observe(parent);
@@ -78,6 +85,6 @@ export async function createLookPreview({ parent, look, corner = 'red' }) {
   let pending = null;
   return {
     setLook(l) { clearTimeout(pending); pending = setTimeout(() => build(l), 120); },
-    destroy() { clearTimeout(pending); ro.disconnect(); engine.stopRenderLoop(); scene.dispose(); engine.dispose(); canvas.remove(); },
+    destroy() { clearTimeout(pending); io.disconnect(); ro.disconnect(); engine.stopRenderLoop(); scene.dispose(); engine.dispose(); canvas.remove(); },
   };
 }

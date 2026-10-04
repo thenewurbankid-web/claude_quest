@@ -181,6 +181,11 @@ asset packs are CC0 (add-on code is GPL-3.0 but only runs at build time). It is 
 - Known gaps: the head leans a few cm forward of the Quaternius stance; the T-shirt's tank/tee share one mesh; the primitive
   fallback is unchanged.
 
+## Done (2026-10-04): preview stops rendering off-screen (BOX-7)
+
+`look-preview.js`: an IntersectionObserver on the preview's parent starts its render loop only while the preview is visible (Look panel shown), and stops it when the panel is hidden or scrolled away, so a fight draws with the arena engine alone. The engine and scene stay alive, and `setLook` still rebuilds the boxer while hidden, so the preview matches the saved look when it returns. `npm test` 100 pass; no test covers it (needs a browser).
+- **Untested in a browser**: that `BABYLON.EngineStore.Instances[i].activeRenderLoops` is empty for the preview during a fight, that it resumes on return, a look change made while hidden showing up afterwards. The preview's WebGL context is still held during a fight (loop stopped, not disposed).
+
 ## Next jobs
 
 1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
