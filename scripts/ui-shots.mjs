@@ -57,5 +57,17 @@ try {
   await shot(page, 'training');
   await page.click('#s-upgrade .back'); await page.click('#f-next'); await page.waitForSelector('#opps .opp'); await page.waitForTimeout(500);
   await shot(page, 'opponent');
-  console.log(JSON.stringify({ seen, errors }, null, 1));
+  // Button audit: every settings option takes, title Gym opens the gym, every Back returns.
+  const bad = [];
+  await page.click('#s-opponent .back'); await page.click('#s-fighter .back'); await page.waitForTimeout(900);
+  await page.click('[data-go=settings]'); await page.waitForTimeout(600);
+  for (const b of await page.locator('#s-settings .seg button').all()) {
+    await b.click(); if ((await b.getAttribute('aria-pressed')) !== 'true') bad.push('settings: ' + (await b.textContent()));
+  }
+  await page.click('#s-settings .back'); await page.waitForTimeout(900);
+  await page.click('#t-gym'); await page.waitForTimeout(500);
+  if (!(await visible(page, '#s-gym'))) bad.push('title gym did not open the gym');
+  await page.click('#s-gym .back'); await page.click('#s-career .back'); await page.waitForTimeout(900);
+  if (!(await visible(page, '#s-title'))) bad.push('back chain did not reach title');
+  console.log(JSON.stringify({ seen, bad, errors }, null, 1));
 } finally { await browser.close(); server.kill(); }
