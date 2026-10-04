@@ -34,11 +34,18 @@ const GUARD_OFFSET_M = 0.25;               // fist rests this far ahead of centr
 const TARGET_DEPTH_M = 0.15;               // head/body surface ahead of centre
 const SLIP_DISTANCE_M = 0.12;              // how far a head must move to evade
 const EXCHANGE_IDLE_MS = 800;              // quiet time that closes an exchange
-const DIVISOR_LONG = 475, DIVISOR_SHORT = 54;   // joules per health point at 180 s and at 35 s rounds
-/** Fewer punches fit in a short round, so each one has to hurt more. Linear between 35 s and 180 s (no pow: lockstep-safe). */
-export function damageDivisorFor(roundSeconds) {
-  const k = (clamp(roundSeconds, 35, 180) - 35) / 145;
-  return DIVISOR_SHORT + (DIVISOR_LONG - DIVISOR_SHORT) * k;
+export const DEFAULT_ROUNDS = 3, DEFAULT_ROUND_SECONDS = 35, DEFAULT_BREAK_SECONDS = 10;
+/** Fight formats: how many rounds each kind of fight runs (min..max), street fights start short. */
+export const FIGHT_FORMATS = {
+  street_early: { label: 'Street fight', rounds: 2, minRounds: 1, maxRounds: 2 },
+  street:       { label: 'Street fight', rounds: 3, minRounds: 3, maxRounds: 3 },
+  title:        { label: 'Title fight',  rounds: 5, minRounds: 3, maxRounds: 5 },
+};
+const DIVISOR_LONG = 475, DIVISOR_SHORT = 54;   // joules per health point at 1080 s (6 x 180) and at 105 s (3 x 35) of fighting
+/** Fewer punches fit in a short fight, so each one has to hurt more. Linear in total fight seconds (no pow: lockstep-safe). */
+export function damageDivisorFor(roundSeconds, rounds = DEFAULT_ROUNDS) {
+  const k = (clamp(roundSeconds * rounds, 35, 1080) - 105) / 975;
+  return Math.max(12, DIVISOR_SHORT + (DIVISOR_LONG - DIVISOR_SHORT) * k);
 }
 const BLOCK_MARGIN_MS = 35;                // late reactions within this are blocks
 const PERIPHERAL_MS = 30;                  // extra perception for punches from the side
@@ -346,7 +353,7 @@ function contactOf(p, atk, def) {
  * Listeners: on('exchange' | 'impact' | 'round_end' | 'fight_end', fn).
  */
 export class CombatSimulation {
-  constructor({ red, blue, seed = 1, rounds = 6, roundSeconds = 180, matchId, ruleset = 'street' }) {
+  constructor({ red, blue, seed = 1, rounds = DEFAULT_ROUNDS, roundSeconds = DEFAULT_ROUND_SECONDS, breakSeconds = DEFAULT_BREAK_SECONDS, matchId, ruleset = 'street' }) {
     this.fighters = { red, blue };
     this.ruleset = RULESETS[ruleset] ? ruleset : 'street';   // both P2P peers must pass the same one
     this.rules = RULESETS[this.ruleset];
@@ -356,7 +363,9 @@ export class CombatSimulation {
     this.rng = mulberry32(this.seed);
     this.totalRounds = rounds;
     this.roundTicks = Math.round(roundSeconds * SIM_HZ);
-    this.damageDivisor = damageDivisorFor(roundSeconds);
+    this.roundSeconds = roundSeconds;
+    this.breakSeconds = breakSeconds;
+    this.damageDivisor = damageDivisorFor(roundSeconds, rounds);
     this.matchId = matchId ?? `m_${this.seed.toString(36)}`;
     this.roundIndex = 0;              // 1-based once a round starts
     this.phase = 'awaiting_corner';
@@ -392,10 +401,11 @@ export class CombatSimulation {
     this.cornerActions = { red: cornerActions.red, blue: cornerActions.blue };
     for (const c of ['red', 'blue']) {
       const f = this.fighters[c];
-      // Between-round recovery: 40 % of the missing gas comes back.
+      // Between-round recovery: a share of the missing gas comes back, break / (break + 15 s) (40 % for the 10 s default).
       if (this.roundIndex > 1) {
-        f.gas = Math.min(f.attr.maxGas, f.gas + (f.attr.maxGas - f.gas) * 0.4);
-        f.composure += (100 - f.composure) * 0.4;
+        const share = this.breakSeconds / (this.breakSeconds + 15);
+        f.gas = Math.min(f.attr.maxGas, f.gas + (f.attr.maxGas - f.gas) * share);
+        f.composure += (100 - f.composure) * share;
       }
       f.resetForRound();
       f.tacticKey = TACTICS[cornerActions[c]] ? cornerActions[c] : 'outbox';
@@ -429,6 +439,19 @@ export class CombatSimulation {
   runRoundToEnd() {
     while (this.phase === 'running') this.step();
     return this.rounds[this.rounds.length - 1];
+  }
+
+  /**
+   * Sim to result: runs every remaining round with no rendering and returns the result. `pick(sim)` returns
+   * {red, blue} tactics for each round (e.g. the manager's AI); without it each corner keeps its last tactic.
+   */
+  runToEnd(pick) {
+    while (this.phase !== 'fight_over') {
+      const last = this.cornerActions;
+      this.startRound((pick && pick(this)) ?? last ?? { red: 'outbox', blue: 'outbox' });
+      this.runRoundToEnd();
+    }
+    return this.result;
   }
 
   // ── movement ──
@@ -913,6 +936,12 @@ function scoreFight(sim, koWinner) {
   for (const r of sim.rounds) { cards.red += r.cards.red; cards.blue += r.cards.blue; }
   let winner = koWinner;
   let method = koWinner ? `KO in round ${sim.roundIndex}` : 'Decision';
+  if (!winner && cards.red === cards.blue) {
+    // Level cards (common over 2 or 4 rounds): the fighter who landed clearly more takes it, within 5 % is a draw.
+    const total = (c) => sim.rounds.reduce((s, r) => s + r.totals[c].joules_landed + 25 * r.totals[c].landed, 0);
+    const tr = total('red'), tb = total('blue');
+    if (Math.abs(tr - tb) > 0.05 * Math.max(tr, tb)) winner = tr > tb ? 'red' : 'blue';
+  }
   if (!winner) winner = cards.red === cards.blue ? 'draw' : cards.red > cards.blue ? 'red' : 'blue';
   if (winner === 'draw') method = 'Draw';
   return { match_id: sim.matchId, winner, method, cards, rounds: sim.rounds.length };

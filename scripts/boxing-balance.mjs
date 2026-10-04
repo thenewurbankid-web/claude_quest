@@ -1,5 +1,5 @@
 // Headless balance batch: seeded fights for every tactic pair. Usage:
-//   node scripts/boxing-balance.mjs [--engine path] [--n 200] [--rounds 6] [--seconds 180] [--ruleset street|sanctioned] [--stats 50,50,50,50] [--tactics pressure,counter] [--moves]
+//   node scripts/boxing-balance.mjs [--engine path] [--n 200] [--rounds 3] [--seconds 35] [--ruleset street|sanctioned] [--stats 50,50,50,50] [--tactics pressure,counter] [--moves]
 // --set pressure.crowdMs=20,counter.moves.feint=0.2 overrides tactic fields for this run (no engine copy needed).
 // --moves also prints how often each move was thrown or used per fight (all pairs pooled).
 // --engine points at an alternate physics-engine.js (used to compare tuning proposals).
@@ -8,7 +8,7 @@ import path from 'node:path';
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i < 0 ? d : process.argv[i + 1]; };
 const enginePath = path.resolve(arg('engine', 'public/boxing/physics-engine.js'));
-const N = +arg('n', 200), ROUNDS = +arg('rounds', 6), SECONDS = +arg('seconds', 180), RULESET = arg('ruleset', 'street');
+const N = +arg('n', 200), ROUNDS = +arg('rounds', 3), SECONDS = +arg('seconds', 35), RULESET = arg('ruleset', 'street');
 const SHOW_MOVES = process.argv.includes('--moves');
 const moveCounts = {};
 const [sp, pw, st, iq] = arg('stats', '50,50,50,50').split(',').map(Number);

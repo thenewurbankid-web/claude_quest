@@ -98,3 +98,28 @@ Commit ff459d4 on `worktree-boxing-balance`. Files: `physics-engine.js`, `script
 - `index.html` has no venue concept and builds the sim without `ruleset` or `roundSeconds`; both peers must send and use the same `ruleset` in the P2P `start` message (normalize it against `RULESETS`). Default is street.
 - Untested: anything in the browser (no renderer reads `action` events or `move` yet), other stat mixes, per-round tactic changes, `--ruleset sanctioned` balance (only unit-tested).
 - Tactic rebalance beyond the KO band and 0.37-0.66 mean shares is not attempted; user call if pairwise extremes matter.
+
+## BOX-20: shorter fights (2026-10-04, sim side)
+`physics-engine.js`, `test/boxing.test.js` (126 pass, was 122), `scripts/boxing-balance.mjs` (defaults now 3 rounds x 35 s). Deterministic, no rendering touched.
+
+### What exists
+- Defaults: `DEFAULT_ROUNDS` 3, `DEFAULT_ROUND_SECONDS` 35, `DEFAULT_BREAK_SECONDS` 10 (constructor option `breakSeconds`). `FIGHT_FORMATS`: `street_early` (2 rounds, 1-2 allowed), `street` (3), `title` (5, 3-5 allowed). Nothing in `index.html` reads them yet.
+- Break: recovery between rounds is `break / (break + 15)` of the missing gas and composure (40 % at 10 s, the old fixed value). The sim does not simulate the break itself; the UI shows the 10 s corner timer and calls `startRound` after it.
+- `sim.runToEnd(pick?)`: sim to result. `pick(sim)` returns `{red, blue}` per round; without it each corner keeps its last tactic. Same output as stepping round by round (tested).
+- Fast-forward is a UI job: step the sim more ticks per frame (it is deterministic, so any rate gives the same fight). `runRoundToEnd()` skips a single round.
+- `damageDivisorFor(roundSeconds, rounds = 3)` now scales with total fight seconds (54 at 105 s, 475 at 1080 s, floor 12), so a 5-round title fight no longer KOs 69 % of the time. Before: 3 x 35 s unchanged (54).
+- Scorecards: when cards are level (usual over 1, 2 or 4 rounds), the fighter with clearly more landed score (joules + 25 per landed shot, over 5 %) wins; within 5 % is a draw. Method label stays `Decision`.
+
+### Numbers (294 fights per row: every tactic pair x 6 seeds, stats 50, 35 s rounds)
+| rounds | KO | decision | draw |
+|---|---|---|---|
+| 1 | .06 | .92 | .02 |
+| 2 | .14 | .77 | .09 |
+| 3 | .17 | .81 | .02 |
+| 4 | .17 | .73 | .11 |
+| 5 | .17 | .81 | .02 |
+Before: KO 0 / 0 / .17 / - / .69 at 1 / 2 / 3 / - / 5 rounds, 2-round draws 31 %. The remaining draws are mostly recover v recover (no punches thrown). 1-round fights rarely KO; raise their damage if you want more.
+
+### Open
+- Untested in the browser: nothing here touches the UI. `index.html` still passes `rounds` from its select and no `roundSeconds`/`breakSeconds`, so it now runs 35 s rounds with the old round counts (option values 1-6). Wiring the format picker, corner timer, fast-forward and a sim-to-result button belongs to Boxing Dev. Both P2P peers must send the same `rounds`, `roundSeconds`, `breakSeconds`.
+- Not tried: other stat mixes, the sanctioned ruleset, tactic pair extremes (unchanged from BOX-22).

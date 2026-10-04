@@ -2,10 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { FighterModel, CombatSimulation, computePunch, mulberry32, PUNCHES, TACTICS, RULESETS, RING_HALF_M, TICK_MS, damageDivisorFor } from '../public/boxing/physics-engine.js';
+import { FighterModel, CombatSimulation, computePunch, mulberry32, PUNCHES, TACTICS, RULESETS, RING_HALF_M, TICK_MS, damageDivisorFor, DEFAULT_ROUNDS, FIGHT_FORMATS } from '../public/boxing/physics-engine.js';
 import { buildFightLogRow, rankPrecedents, similarity, profileTags, successScore, toLLMContext } from '../public/boxing/game-db.js';
 
-const PINNED_SEED_11 = '70cbbcde181741d10ecc1a40c0a3165752fdca008b5942dcdb466dd452c177c2'; // re-pinned for BOX-22 (street moveset changed the sim);
+const PINNED_SEED_11 = '47dc40268a627b44e67c84dfd8e332d73c7b30d4937b564a9e21a023d89ac9e5'; // re-pinned for BOX-20 (35 s x 3 defaults, fight-time damage divisor); before that BOX-22;
 const AVG = { speed: 50, power: 50, stamina: 50, ringIQ: 50 };
 const fighter = (corner, stats = AVG) => new FighterModel({ corner, name: corner, stats });
 const fight = (seed, red = AVG, blue = AVG, tactics = { red: 'pressure', blue: 'outbox' }) => {
@@ -1001,8 +1001,10 @@ test('Brawl throws more haymakers and overhands, Dirty boxing clinches and works
 test('street fights are deterministic, actions included, and the short-round damage scale has a KO band', () => {
   const run = () => { const out = []; const sim = new CombatSimulation({ seed: 21, rounds: 3, roundSeconds: 35, red: fighter('red'), blue: fighter('blue') }); sim.on('action', (e) => out.push(e)); while (sim.phase !== 'fight_over') { sim.startRound({ red: 'dirty_boxing', blue: 'brawl' }); sim.runRoundToEnd(); } return JSON.stringify([out, sim.rounds, sim.result]); };
   assert.equal(run(), run());
-  assert.equal(damageDivisorFor(180), 475);
-  assert.ok(damageDivisorFor(35) < damageDivisorFor(60) && damageDivisorFor(60) < damageDivisorFor(180) && damageDivisorFor(10) === damageDivisorFor(35));
+  assert.equal(damageDivisorFor(180, 6), 475);
+  assert.equal(damageDivisorFor(35, 3), 54);
+  assert.ok(damageDivisorFor(35, 3) < damageDivisorFor(60, 3) && damageDivisorFor(60, 3) < damageDivisorFor(180, 3));
+  assert.ok(damageDivisorFor(35, 1) < damageDivisorFor(35, 3) && damageDivisorFor(35, 3) < damageDivisorFor(35, 5));
   // 3 x 35 s fights, every tactic pair, 4 seeds: some KOs, mostly decisions.
   const keys = Object.keys(TACTICS); let ko = 0, n = 0;
   for (const a of keys) for (const b of keys) for (let seed = 1; seed <= 4; seed++) {
@@ -1011,4 +1013,57 @@ test('street fights are deterministic, actions included, and the short-round dam
     n++; if (sim.result.method.startsWith('KO')) ko++;
   }
   assert.ok(ko / n >= 0.05 && ko / n <= 0.3, `KO rate ${ko / n}`);
+});
+
+// ─── Shorter fights (BOX-20) ────────────────────────────────────────────────
+
+test('fights default to 3 rounds of 35 s with a 10 s break, and formats cover 1 to 5 rounds', () => {
+  const sim = new CombatSimulation({ red: fighter('red'), blue: fighter('blue') });
+  assert.equal(sim.totalRounds, DEFAULT_ROUNDS);
+  assert.equal(sim.roundTicks, 35 * 240);
+  assert.equal(sim.breakSeconds, 10);
+  assert.equal(FIGHT_FORMATS.title.rounds, 5);
+  assert.ok(FIGHT_FORMATS.street_early.minRounds === 1 && FIGHT_FORMATS.street_early.maxRounds === 2);
+  for (const f of Object.values(FIGHT_FORMATS)) assert.ok(f.minRounds <= f.rounds && f.rounds <= f.maxRounds && f.rounds >= 1 && f.rounds <= 5);
+});
+
+test('a longer corner break gives back more gas, 40 % at the 10 s default', () => {
+  const gasAfterBreak = (breakSeconds) => {
+    const sim = new CombatSimulation({ seed: 4, breakSeconds, red: fighter('red'), blue: fighter('blue') });
+    sim.startRound({ red: 'brawl', blue: 'brawl' }); sim.runRoundToEnd();
+    const before = sim.fighters.red.gas, max = sim.fighters.red.attr.maxGas;
+    sim.startRound({ red: 'brawl', blue: 'brawl' });
+    return { before, max, after: sim.fighters.red.gas };
+  };
+  const a = gasAfterBreak(10), b = gasAfterBreak(30);
+  assert.ok(Math.abs(a.after - (a.before + (a.max - a.before) * 0.4)) < 1e-9);
+  assert.ok(b.after > a.after);
+});
+
+test('runToEnd gives the same fight as stepping round by round, and honours the picker', () => {
+  const mk = () => new CombatSimulation({ seed: 9, rounds: 4, red: fighter('red'), blue: fighter('blue') });
+  const manual = mk();
+  while (manual.phase !== 'fight_over') { manual.startRound({ red: 'pressure', blue: 'counter' }); manual.runRoundToEnd(); }
+  const auto = mk();
+  const result = auto.runToEnd(() => ({ red: 'pressure', blue: 'counter' }));
+  assert.equal(JSON.stringify([auto.rounds, result]), JSON.stringify([manual.rounds, manual.result]));
+  const keep = mk(); keep.startRound({ red: 'pressure', blue: 'counter' }); keep.runRoundToEnd();   // no picker: tactics carry over
+  keep.runToEnd();
+  assert.equal(JSON.stringify(keep.rounds), JSON.stringify(manual.rounds));
+  assert.equal(new CombatSimulation({ seed: 9, red: fighter('red'), blue: fighter('blue') }).runToEnd().rounds <= 3, true);
+});
+
+test('level cards are settled by the clearly better fighter, and KO rates stay in band for 1 to 5 rounds', () => {
+  const keys = Object.keys(TACTICS);
+  for (const [rounds, lo, hi] of [[1, 0, 0.2], [2, 0.03, 0.3], [3, 0.05, 0.3], [5, 0.05, 0.3]]) {
+    let ko = 0, n = 0, draws = 0;
+    for (const a of keys) for (const b of keys) for (let seed = 1; seed <= 3; seed++) {
+      const sim = new CombatSimulation({ seed, rounds, red: fighter('red'), blue: fighter('blue') });
+      sim.runToEnd(() => ({ red: a, blue: b }));
+      n++; if (sim.result.method.startsWith('KO')) ko++; else if (sim.result.winner === 'draw') draws++;
+      if (sim.result.winner === 'draw') assert.equal(sim.result.cards.red, sim.result.cards.blue);
+    }
+    assert.ok(ko / n >= lo && ko / n <= hi, `${rounds} rounds: KO rate ${ko / n}`);
+    assert.ok(draws / n <= 0.2, `${rounds} rounds: draw rate ${draws / n}`);
+  }
 });
