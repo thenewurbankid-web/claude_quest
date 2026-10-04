@@ -126,3 +126,31 @@ Before: KO 0 / 0 / .17 / - / .69 at 1 / 2 / 3 / - / 5 rounds, 2-round draws 31 %
 
 ## BOX-27: shipped to main (2026-10-04)
 Rebased BOX-20/22 onto origin/main (BOX-15 was already there). Conflict was test-only: both sides appended tests to `test/boxing.test.js`; kept both. One fix beyond the merge: Boxing Dev's BOX-17 test requires every `PUNCHES` key to have an `ATTACK_CLIP`, so `public/boxing/clips2d.js` now maps the seven BOX-22 punches onto existing clips (haymaker/check_hook -> hook, overhand -> cross, hook_body/shovel -> body, short_upper -> uppercut, cheap_shot -> jab). Placeholders: Boxing Dev should author or pick proper clips. `npm test` 302 pass. Untested in the browser.
+
+## BOX-31: sim locomotion, fewer purposeful moves (2026-10-04)
+`physics-engine.js` (`_move`, `_push-off`), `test/boxing.test.js` (335 pass, was 334; new locomotion test, shell test now pressure v counter, hash re-pinned). Deterministic, no rendering touched.
+
+### What changed in `_move`
+- **Held intent**: radial and lateral intent are re-decided every 400-900 ms (seeded, `MOVE_HOLD_*`), not every tick. After a burst the fighter holds for one interval unless more than `MOVE_FORCE_M` (0.6 m) out of range, so two fighters with different ranges can't dance back and forth.
+- **Dead zone with hysteresis**: a stride starts when 0.14 m too far or 0.3 m too close (`MOVE_START_FAR_M` / `MOVE_START_NEAR_M`; closing is cheap, backing off needs more) and ends inside 0.06 m (`MOVE_STOP_M`).
+- **Lateral circling** is a burst or a hold (probability `0.4 x tactic.lateral`, max 0.3), at 0.4 of foot speed (`MOVE_SPEED_SCALE`). The direction flip and `circle_off` event are now decided at the same cadence.
+- **Acceleration limit** 5 m/s^2 on a separate `footVel` (shoves and pivots still add on top, so they stay snappy). Velocity into the ropes is dropped (no running on the spot at the ropes; before, `vel` stayed high while the position was clamped).
+- Mobility while punching 0.2 (unchanged). Push-off shoves 0.45 m, was 0.7 (the queued punch otherwise fell out of reach, since fighters no longer snap back in).
+
+### Numbers
+`node scripts/motion-metrics.mjs 11` (35 s round, pressure v outbox; the round ends at 27.7 s now): steps/s red 3.65 -> 2.67, blue 4.07 -> 2.93. Other pairs (`measureRound`, seeds 11/12): counter v body_attack 3.1-3.7 -> 1.1-2.8; brawl v dirty 2.5 -> 1.2-2.0; outbox v outbox 3.3-3.9 -> 2.5-3.0. Sim path per fighter is about 0.25 m/s (was ~0.7) and the fighter is still about 65 % of the time. Idle test unchanged (0 steps, 0 foot reversals). Hip/head reversals/s in a round went UP (2.35/3.32 -> 3.68/4.66) because still fighters now show the render's idle sway (idle test: 5.08/4.42); I read it as sway, not shiver, but it is not "no regression" on that raw number.
+
+**The target (<= 2.2 steps/s) is not met by the sim alone, and the rest is a render bug.** While the sim position is exactly still (checked: x/y constant for 4 s), the feet keep marching, a step every 0.3 s. Cause in `footwork.js`: a step lands past its spot (`overshoot`), so the other foot's lag is now on the far side, and the step-drag rule (`follow`, threshold `followFrac` 0.3 x stance width) fires from that overshoot, which makes the first foot follow, and so on. Any one genuine step starts a perpetual march. A static-body unit test doesn't show it because it never starts. Experiment (not committed, `footwork.js` is Boxing Dev's): `const follow = vd && this.stepped && ...` (follow only while the body is travelling) gives, with this sim, pressure v outbox seed 11 1.91 / 2.24, counter v body_attack 1.0 / 0.6, brawl v dirty 0.8 / 1.0, outbox v outbox 1.2 / 1.5. Boxing Dev should apply that or an equivalent (overshoot shouldn't count toward follow lag) under a new issue.
+
+### Balance (3 x 35 s, 40 seeds a pair, stats 50)
+| | pressure | outbox | counter | body_attack | recover | brawl | dirty |
+|---|---|---|---|---|---|---|---|
+| before | .66 | .60 | .55 | .58 | .03 | .37 | .64 |
+| after | .68 | .49 | .55 | .49 | .40 | .23 | .65 |
+Overall KO rate .16 -> .21 (band .10-.25). Recover stops being a dead tactic (.03 -> .40, it is now slower to chase); brawl drops from .37 to .23 (it can no longer snap back to range, and it eats 60-90 % KOs from pressure/outbox/counter). Brawl below the earlier 0.37-0.66 band is a user call (e.g. raise its damage or reach).
+
+### Pin test
+`PINNED_SEED_11` re-pinned: the sim now moves differently by design (positions are in the hash). Shell test now uses pressure v counter (shell is rope-only and fighters are no longer pinned to the ropes in counter v counter). Clinch test passes with the shorter shove.
+
+### Untested
+Anything in a browser; other stat mixes; sanctioned ruleset balance; the `--moves` rates (clinch/shove counts) before/after.

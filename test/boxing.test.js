@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { FighterModel, CombatSimulation, computePunch, mulberry32, PUNCHES, TACTICS, RULESETS, RING_HALF_M, TICK_MS, damageDivisorFor, DEFAULT_ROUNDS, FIGHT_FORMATS } from '../public/boxing/physics-engine.js';
 import { buildFightLogRow, rankPrecedents, similarity, profileTags, successScore, toLLMContext } from '../public/boxing/game-db.js';
 
-const PINNED_SEED_11 = '47dc40268a627b44e67c84dfd8e332d73c7b30d4937b564a9e21a023d89ac9e5'; // re-pinned for BOX-20 (35 s x 3 defaults, fight-time damage divisor); before that BOX-22;
+const PINNED_SEED_11 = 'fc297163519c3059a51dd9b829ea2c12cec0b2baab51f9cb2e8892ab444ac1de'; // re-pinned for BOX-31 (held locomotion intents, dead zone, acceleration limit); before that BOX-20 (35 s x 3 defaults, fight-time damage divisor); before that BOX-22;
 const AVG = { speed: 50, power: 50, stamina: 50, ringIQ: 50 };
 const fighter = (corner, stats = AVG) => new FighterModel({ corner, name: corner, stats });
 const fight = (seed, red = AVG, blue = AVG, tactics = { red: 'pressure', blue: 'outbox' }) => {
@@ -673,6 +673,30 @@ test('the sim output is pinned: contact data is read-only and no listener change
   assert.equal(createHash('sha256').update(run(false)).digest('hex'), PINNED_SEED_11);
 });
 
+test('locomotion (BOX-31): footwork accelerates smoothly, holds still most of the time and moves in bursts', () => {
+  const lim = 5 * (1 / 240) + 1e-9;                       // MOVE_ACCEL_MPS2 per tick
+  for (const [a, b] of [['pressure', 'outbox'], ['counter', 'body_attack'], ['outbox', 'outbox']]) {
+    for (const seed of [11, 12]) {
+      const sim = new CombatSimulation({ seed, rounds: 1, roundSeconds: 35, red: fighter('red', AVG), blue: fighter('blue', AVG) });
+      sim.startRound({ red: a, blue: b });
+      const prev = { red: { x: 0, y: 0 }, blue: { x: 0, y: 0 } }; let moving = 0, ticks = 0, bursts = 0, was = false;
+      while (sim.phase === 'running') {
+        sim.step(); ticks++;
+        const f = sim.fighters.red;
+        const dv = Math.hypot(f.footVel.x - prev.red.x, f.footVel.y - prev.red.y);
+        assert.ok(dv <= lim, `${a} v ${b} seed ${seed}: footwork velocity jumped ${dv} in one tick`);
+        prev.red = { ...f.footVel };
+        const mv = Math.hypot(f.footVel.x, f.footVel.y) > 0.05;
+        if (mv) moving++;
+        if (mv && !was) bursts++;
+        was = mv;
+      }
+      assert.ok(moving / ticks < 0.55, `${a} v ${b} seed ${seed}: moving ${(moving / ticks).toFixed(2)} of the round`);
+      assert.ok(bursts / (ticks / 240) < 1.2, `${a} v ${b} seed ${seed}: ${bursts} bursts in ${(ticks / 240).toFixed(0)} s`);
+    }
+  }
+});
+
 test('damage by zone adds up the sim impacts per defender', () => {
   const sim = new CombatSimulation({ seed: 11, rounds: 3, red: fighter('red', AVG), blue: fighter('blue', AVG) });
   const dmg = emptyDamage(), seen = [];
@@ -1039,7 +1063,7 @@ test('shell up: covered-up fighters take half damage from landed shots, and only
   const { sim, red, blue, actions } = setup('street');
   sim._shell(blue, red);
   assert.equal(actions[0].kind, 'shell'); assert.equal(actions[0].contact.region, 'guard'); assert.ok(sim.snapshot().blue.shell);
-  const { actions: acts, sims } = collect({ red: 'counter', blue: 'counter' }, { seeds: 6 });
+  const { actions: acts, sims } = collect({ red: 'pressure', blue: 'counter' }, { seeds: 6 });
   assert.ok(acts.some((a) => a.kind === 'shell'));
 });
 

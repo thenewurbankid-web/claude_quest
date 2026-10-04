@@ -27,6 +27,11 @@
 export const SIM_HZ = 240;                 // physics ticks per simulated second
 export const TICK_MS = 1000 / SIM_HZ;      // ≈ 4.1667 ms per tick
 const DT = 1 / SIM_HZ;                     // seconds per tick
+const MOVE_HOLD_MIN_MS = 400, MOVE_HOLD_MAX_MS = 900;  // how long a locomotion intent is held
+const MOVE_START_FAR_M = 0.1, MOVE_START_NEAR_M = 0.3, MOVE_STOP_M = 0.06;  // range dead zone: a stride starts past these (too far / too close) and ends inside the stop band
+const MOVE_FORCE_M = 0.6;                               // farther out of range than this, no rest between strides
+const MOVE_ACCEL_MPS2 = 5;                              // foot acceleration limit
+const MOVE_SPEED_SCALE = 0.4;                          // circling is a slow shuffle; closing and backing off stay at full foot speed
 
 export const RING_HALF_M = 3.0;            // 6 m × 6 m ring, origin at centre
 const BODY_RADIUS_M = 0.25;                // torso radius, used for collisions
@@ -212,6 +217,9 @@ export class FighterModel {
     this.shellUntilTick = 0;        // covered up: landed shots do half damage
     this.clinch = null;             // { endTick, initiator } while tied up
     this.push = null;               // { vx, vy, untilTick } shove or pivot impulse
+    this.footVel = { x: 0, y: 0 };  // footwork velocity before shoves, eased by the acceleration limit
+    this.moveUntilTick = 0;         // locomotion intent is held until here
+    this.moveIntent = { radial: 0, lateral: 0, striding: false, moved: false };
     this.afterBreakUntilTick = 0;   // a clinch or shove just broke: cheap-shot window
     this.clinchCooldownTick = 0;
     this.lastDefense = null;
@@ -461,7 +469,7 @@ export class CombatSimulation {
     self.composure = Math.min(100, self.composure + 0.4 * DT);
     if (self.clinch) {
       // Tied up: no footwork, and holding on is a rest.
-      self.vel.x = 0; self.vel.y = 0;
+      self.vel.x = 0; self.vel.y = 0; self.footVel.x = 0; self.footVel.y = 0;
       self.gas = clamp(self.gas + self.attr.gasRegenPerS * 0.6 * DT, 0, self.attr.maxGas);
       return;
     }
@@ -475,24 +483,46 @@ export class CombatSimulation {
     const mobility = committed ? 0.2 : 1.0;
     const foot = self.attr.footSpeedMps * sf * mobility;
 
-    // Radial: proportional controller toward the preferred range.
+    // Locomotion is a held intent, not a per-tick controller: re-decided every 400-900 ms (seeded), with a dead zone
+    // around the preferred range (hysteresis: a stride starts past MOVE_START_M and ends inside MOVE_STOP_M).
     const err = dist - t.rangeM;
-    const radial = clamp(err * 3, -1, 1) * foot;
-    // Lateral: circle, switching direction now and then (seeded).
-    if (this.rng() < 0.25 * DT) {
-      self.circleDir = -self.circleDir;
-      if (dist < 2.2 && this.tick >= self.nextActionTick) this._act(self, opp, 'circle_off', { target: 'none', region: 'air', heightM: 0, durMs: 400, dir: self.circleDir });
+    if (this.tick >= self.moveUntilTick) {
+      const hold = MOVE_HOLD_MIN_MS + this.rng() * (MOVE_HOLD_MAX_MS - MOVE_HOLD_MIN_MS);
+      self.moveUntilTick = this.tick + Math.ceil(hold / TICK_MS);
+      const it = self.moveIntent;
+      // After a burst the fighter holds for one interval unless badly out of range, so the pair can't dance back and forth.
+      const rest = it.moved && Math.abs(err) < MOVE_FORCE_M;
+      it.striding = !rest && Math.abs(err) > (it.striding ? MOVE_STOP_M : err > 0 ? MOVE_START_FAR_M : MOVE_START_NEAR_M);
+      it.radial = it.striding ? Math.sign(err) : 0;
+      // Lateral: circle in one direction for a burst or hold the spot; the direction flips now and then.
+      if (this.rng() < 0.25 * hold / 1000) {
+        self.circleDir = -self.circleDir;
+        if (dist < 2.2 && this.tick >= self.nextActionTick) this._act(self, opp, 'circle_off', { target: 'none', region: 'air', heightM: 0, durMs: 400, dir: self.circleDir });
+      }
+      const pOn = clamp(t.lateral * 0.4, 0.03, 0.3);
+      it.lateral = !rest && this.rng() < pOn ? Math.min(1, t.lateral / pOn) * self.circleDir : 0;
+      it.moved = it.radial !== 0 || it.lateral !== 0;
     }
-    const lateral = t.lateral * foot * self.circleDir;
+    // A stride ends as soon as the fighter is back inside the stop band, even mid-hold.
+    if (Math.abs(err) < MOVE_STOP_M) self.moveIntent.radial = 0;
+    const radial = self.moveIntent.radial * clamp(Math.abs(err) * 3, 0.5, 1) * foot;
+    const lateral = self.moveIntent.lateral * foot * MOVE_SPEED_SCALE;
 
-    self.vel.x = ux * radial + px * lateral;
-    self.vel.y = uy * radial + py * lateral;
+    // Acceleration limit: velocity eases toward the intent's, so it never flips sign tick to tick.
+    const tvx = ux * radial + px * lateral, tvy = uy * radial + py * lateral;
+    const dv = MOVE_ACCEL_MPS2 * DT, c = self.footVel, ddx = tvx - c.x, ddy = tvy - c.y, dd = Math.sqrt(ddx * ddx + ddy * ddy);
+    if (dd <= dv) { c.x = tvx; c.y = tvy; } else { c.x += ddx / dd * dv; c.y += ddy / dd * dv; }
+    self.vel.x = c.x; self.vel.y = c.y;
     if (self.push) {
       if (this.tick >= self.push.untilTick) self.push = null;
       else { self.vel.x += self.push.vx; self.vel.y += self.push.vy; }
     }
-    self.pos.x = clamp(self.pos.x + self.vel.x * DT, -RING_HALF_M + BODY_RADIUS_M, RING_HALF_M - BODY_RADIUS_M);
-    self.pos.y = clamp(self.pos.y + self.vel.y * DT, -RING_HALF_M + BODY_RADIUS_M, RING_HALF_M - BODY_RADIUS_M);
+    const lim = RING_HALF_M - BODY_RADIUS_M;
+    self.pos.x = clamp(self.pos.x + self.vel.x * DT, -lim, lim);
+    self.pos.y = clamp(self.pos.y + self.vel.y * DT, -lim, lim);
+    // Against the ropes there is no running on the spot: the blocked velocity component is dropped.
+    if (Math.abs(self.pos.x) >= lim && self.vel.x * self.pos.x > 0) self.vel.x = self.footVel.x = 0;
+    if (Math.abs(self.pos.y) >= lim && self.vel.y * self.pos.y > 0) self.vel.y = self.footVel.y = 0;
 
     // Gas: footwork costs a little, rest regenerates when not punching.
     const speed = Math.sqrt(self.vel.x * self.vel.x + self.vel.y * self.vel.y);
@@ -588,7 +618,7 @@ export class CombatSimulation {
     // No ref: the fresher fighter pushes off and throws.
     const [pusher, other] = b.gasRatio > a.gasRatio ? [b, a] : [a, b];
     const u = this._unit(pusher, other);
-    this._impulse(other, u.x, u.y, 0.7, 150);
+    this._impulse(other, u.x, u.y, 0.45, 150);   // short enough that the push-off punch still reaches now that footwork no longer snaps back
     this._hold(other, 250); other.nextActionTick = Math.max(other.nextActionTick, this.tick + Math.ceil(250 / TICK_MS));
     const w = {};
     for (const k of ['cross', 'hook', 'overhand', 'haymaker']) if ((pusher.tactic.weights[k] ?? 0) > 0) w[k] = pusher.tactic.weights[k];
