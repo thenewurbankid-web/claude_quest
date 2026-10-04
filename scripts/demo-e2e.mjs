@@ -24,7 +24,7 @@ try {
       await page.screenshot({ path: `${QA}2-settings.png` });
       await page.click('#s-settings .back');
     }
-    await page.click(time === 'day' ? '#t-play' : '#t-continue');
+    await page.click('#t-play');
     if (time === 'day') {
       await page.fill('#fighter-name', 'Demo Kid');
       await page.waitForTimeout(3500);
@@ -34,8 +34,8 @@ try {
       await page.screenshot({ path: `${QA}4-upgrade.png` });
       await page.click('#camp-confirm');
       await page.click('#s-upgrade .back');
-      await page.click('#f-next');
     }
+    await page.click('#f-next');
     await page.waitForSelector('#opps .opp');
     await page.screenshot({ path: `${QA}5-opponent-${time}.png` });
     await page.click('#o-fight');

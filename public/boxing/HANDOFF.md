@@ -234,9 +234,22 @@ The user said "the boxing game needs to feel like a game". `index.html` is now a
 - **Not built (needs art or a decision)**: night-court title background and opponent portraits (CSS gradients and initials stand in; drop `title-bg.webp` / `portraits/<key>.webp` and wire them in), a real home for crowd music.
 - **Untested**: a real phone (touch, long-press on the logo, safe-area insets, audio autoplay rules, sound levels), P2P through the new sheet, sound by ear, KO slow-mo and shake by eye, portrait camera framing at other aspect ratios, Settings → Music playback.
 
+## Done (2026-10-04): career mode, first slice (BOX-13)
+
+User added a career mode as the main mode (Quick fight stays as the exhibition). This slice is the loop: Title → Career hub → gym drill or rest or fight card → fight → result → hub. Pure rules in `career.js` (no DOM, tested); screens `career`, `card`, `gym` in `index.html`; `flow.js` has the new edges.
+- **Hub**: tier (Block parties, Local circuit, City title, Underground championship; rep 0/30/90/200), rank on the tier's ladder, rep, money, record, energy bar and condition. This week's two offers (opponent portrait initial, style, record, rounds, venue, purse; "Rival" and "Title" tags), the next two weeks peeked, rankings table, rivals who remember you, last weeks log. Footer: Gym, Rest.
+- **Offers** are deterministic from the career seed and week (reload can't reroll). A rival who beat you (or a first-meeting KO win) comes back two weeks later, a little stronger, with a bigger purse; beating him clears it.
+- **Fight card**: VS poster, purse, both stat sets ("You tonight" shows tiredness or injury penalty), Accept / Decline. Accept starts the normal fight with `effectiveStats` (energy under 60 and injuries lower stats up to about 30%). Leaving a career fight counts as a loss.
+- **After a fight**: purse (loss 1/4, draw 1/2), rep, rank change, tier promotion, energy -25, injury (loss 1 week, KO loss 3), a week passes. Result shows a "What changed" card. Quick-fight XP and record still apply too.
+- **Gym**: heavy bag (power). Timing drill, 8 taps on a sweeping marker (`markerAt`, deterministic), gain 0-3 (less at higher stats), costs 20 energy and a week, trainer one-liner. `DRILLS` is config, so the other three drills are table entries plus a new `stat`.
+- Career is saved inside the `fighters` row (`fighter.career`, `normalizeCareer` on load). Title: Career (primary), Quick fight, Settings.
+- Tests: 117 pass (9 new: flow, offers, win/loss, rivals, tiers/ladder, condition and rest, drill, normalize, trainer tip). `node scripts/career-e2e.mjs` plays hub → drill → card → fight → result → hub at 375 px with no console errors; screenshots `public/boxing/qa/career-*.png`. `scripts/demo-e2e.mjs` updated for the new title.
+- **Not built yet** (remaining BOX-13 asks): speed bag, roadwork, sparring drills; rounds of 30-40 s (default 35) with a 10 s corner break, fast-forward and "sim to result" (needs a rebalance of the damage and KO rate with Boxing Sim Dev, I did not guess numbers); Fight IQ / tendencies / "learned from past fights" panels and the in-fight plan tag; the fight view is still 3D (screens are independent of it, so the 2D swap needs no change here); night-court title art and real portraits.
+- **Untested**: a real phone (tap timing on the HIT button, safe-area insets), the career at other widths, a long career (tiers 3-4 balance: purse, rep thresholds and opponent stats are my first guesses, tune them), P2P untouched.
+
 ## Next jobs
 
-0. **Play BOX-13 on a phone** and tell me what feels off (see its untested list).
+0. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
 
 1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
 

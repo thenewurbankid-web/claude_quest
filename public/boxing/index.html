@@ -51,6 +51,7 @@
   .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font: 600 13px var(--mono); }
   .scroll { flex: 1; overflow-y: auto; padding: 4px 14px 16px; -webkit-overflow-scrolling: touch; }
   .bottom { padding: 10px 14px calc(var(--bottom) + 12px); background: linear-gradient(transparent, var(--bg) 30%); display: flex; gap: 10px; }
+  .bottom[hidden] { display: none; }
   .big { min-height: 56px; font: 400 24px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; border-radius: 12px; flex: 1; }
   .big small { display: block; font: 500 12px/1.3 system-ui; letter-spacing: 0; text-transform: none; opacity: .75; margin-top: 3px; }
   .primary { background: linear-gradient(180deg, var(--accent-2), var(--accent)); border-color: #b86a1c; color: #1b1004; box-shadow: 0 6px 20px rgba(255,154,60,.25); }
@@ -183,6 +184,47 @@
   .unlock b { color: var(--accent); font: 400 13px var(--display); letter-spacing: .12em; text-transform: uppercase; display: block; }
   #r-actions { display: grid; gap: 10px; padding: 4px 0 8px; opacity: 0; animation: fade .4s forwards; animation-delay: var(--bd, 0s); }
 
+  /* ── Career ── */
+  .stat-line { display: flex; justify-content: space-between; gap: 8px; text-align: center; }
+  .stat-line b { display: block; font: 400 26px/1 var(--display); color: var(--accent); }
+  .stat-line span { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .energy { height: 10px; border-radius: 5px; background: var(--panel-2); overflow: hidden; margin: 12px 0 6px; }
+  .energy i { display: block; height: 100%; background: linear-gradient(90deg, #d9a12b, #3fb950); }
+  .cond { font-size: 12.5px; color: var(--muted); } .cond.bad { color: #ff9a7a; }
+  .week-h { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 0 8px; font: 400 15px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .offer { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 10px; margin-bottom: 10px; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; min-height: 84px; }
+  .offer .avatar { width: 64px; height: 64px; font-size: 32px; }
+  .offer .nm { font: 400 20px/1.1 var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .offer .meta { font-size: 12px; color: var(--muted); }
+  .offer .purse { font: 400 22px var(--display); color: var(--accent-2); text-align: right; }
+  .offer.rival { border-color: var(--red); }
+  .tagpill { display: inline-block; font: 700 9px system-ui; letter-spacing: .1em; padding: 2px 7px; border-radius: 999px; background: var(--red); color: #fff; margin-left: 6px; vertical-align: middle; text-transform: uppercase; }
+  .tagpill.gold { background: var(--accent); color: #1b1004; }
+  .soon { font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .rank { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .rank td { padding: 6px 4px; border-top: 1px solid var(--line); } .rank td:last-child { text-align: right; font-family: var(--mono); color: var(--muted); }
+  .rank tr.you td { color: var(--accent-2); font-weight: 700; background: #231a10; }
+  .logl { font-size: 12.5px; color: var(--muted); margin: 4px 0; }
+  .poster { text-align: center; padding-top: 6px; }
+  .poster .tier { font: 600 12px system-ui; letter-spacing: .22em; text-transform: uppercase; color: var(--accent); }
+  .poster .venue { color: var(--muted); font-size: 13px; margin: 2px 0 14px; }
+  .poster .vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; }
+  .poster .vs > b { font: 400 34px var(--display); color: var(--muted); }
+  .poster .avatar { width: min(34vw, 130px); height: min(34vw, 130px); margin: 0 auto 8px; font-size: 56px; }
+  .poster .nm { font: 400 22px/1.1 var(--display); letter-spacing: .05em; text-transform: uppercase; }
+  .poster .rec { font: 600 13px var(--mono); color: var(--muted); }
+  .poster .purse-big { font: 400 54px/1 var(--display); color: var(--accent-2); margin: 18px 0 2px; }
+  .drill-bar { position: relative; height: 64px; border-radius: 12px; border: 2px solid var(--line); overflow: hidden; margin: 14px 0;
+    background: linear-gradient(90deg, #2b1a1a 0, #2b1a1a 15%, #3a3417 15%, #3a3417 32.5%, #6b5a1d 32.5%, #6b5a1d 44%, #d9a12b 44%, #d9a12b 56%, #6b5a1d 56%, #6b5a1d 67.5%, #3a3417 67.5%, #3a3417 85%, #2b1a1a 85%); }
+  .drill-bar .mk { position: absolute; top: 0; bottom: 0; width: 6px; margin-left: -3px; background: #fff; box-shadow: 0 0 10px #fff; }
+  .bag { width: 74px; height: 130px; margin: 6px auto 0; border-radius: 22px; background: linear-gradient(90deg, #5b1d1d, #a73535 45%, #5b1d1d); border: 2px solid #2a0d0d; position: relative; transform-origin: 50% -30px; }
+  .bag::before { content: ''; position: absolute; left: 50%; top: -36px; width: 3px; height: 36px; background: #777; }
+  .bag.hit { animation: swing .35s ease-out; }
+  @keyframes swing { 0% { transform: rotate(0) } 25% { transform: rotate(9deg) } 60% { transform: rotate(-4deg) } 100% { transform: rotate(0) } }
+  .hit-btn { min-height: 92px; font: 400 40px var(--display); letter-spacing: .1em; }
+  .grade { font: 400 54px/1 var(--display); text-align: center; color: var(--accent-2); margin: 8px 0 0; }
+  .tip-c { margin: 10px 0 0; padding: 8px 12px; background: rgba(255,154,60,.12); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 14px; }
+
   /* ── Settings ── */
   .setting { padding: 12px 0; border-bottom: 1px solid var(--line); }
   .setting > span { display: block; font: 400 17px var(--display); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
@@ -226,11 +268,32 @@
   <h1 class="logo" id="logo" aria-label="Bring the Ruckus"><span>Bring</span><span>The</span><em>Ruckus</em></h1>
   <p class="tag">Street boxing · Uptown NYC</p>
   <div class="menu">
-    <button class="big primary" id="t-play" data-go="play">Play</button>
-    <button class="big" id="t-continue" data-go="continue" hidden>Continue<small id="t-continue-sub"></small></button>
+    <button class="big primary" id="t-career" data-go="career">Career<small id="t-career-sub"></small></button>
+    <button class="big" id="t-play" data-go="play">Quick fight</button>
     <button class="big ghost" data-go="settings">Settings</button>
   </div>
   <div class="ver" id="t-record"></div>
+</section>
+
+<!-- ─── Career ─── -->
+<section class="screen" id="s-career" hidden>
+  <header class="top"><button class="back" data-go="back" aria-label="Back">‹</button><h2>Career</h2><span class="chip" id="c-week"></span></header>
+  <div class="scroll" id="c-body"></div>
+  <footer class="bottom" id="c-foot"><button class="big" id="c-gym" data-go="gym">Gym<small>Train a stat</small></button><button class="big" id="c-rest">Rest<small>Skip a week, recover</small></button></footer>
+</section>
+
+<!-- ─── Fight card ─── -->
+<section class="screen" id="s-card" hidden>
+  <header class="top"><button class="back" data-go="back" aria-label="Back">‹</button><h2>Fight card</h2></header>
+  <div class="scroll" id="card-body"></div>
+  <footer class="bottom"><button class="big" data-go="decline" id="card-decline">Decline</button><button class="big primary" data-go="accept" id="card-accept" style="flex:2">Accept</button></footer>
+</section>
+
+<!-- ─── Gym ─── -->
+<section class="screen" id="s-gym" hidden>
+  <header class="top"><button class="back" data-go="back" aria-label="Back">‹</button><h2>Gym</h2><span class="chip" id="g-energy"></span></header>
+  <div class="scroll" id="gym-body"></div>
+  <footer class="bottom" id="gym-foot"></footer>
 </section>
 
 <!-- ─── Settings ─── -->
@@ -351,6 +414,7 @@ import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
 import { profileOf, receivedProfile } from './profile.js';
 import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
+import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, markerAt, drillResult, applyDrill, trainerTip } from './career.js';
 import { createSfx } from './sfx.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -405,10 +469,12 @@ function ask(text, buttons) {
 
 const onEnter = {
   title: renderTitle, settings: renderSettings, fighter: renderFighterScreen, upgrade: renderUpgrade, opponent: renderOpponents,
+  career: renderCareer, card: renderCard, gym: renderGym,
 };
 
 function show(name) {
   if (state.screen === 'fight' && name !== 'fight') stopMatch();
+  if (state.screen === 'gym' && name !== 'gym') stopDrill();
   state.screen = name;
   for (const s of SCREENS) $(`s-${s}`).hidden = s !== name;
   onEnter[name]?.();
@@ -416,7 +482,9 @@ function show(name) {
 const go = (event) => {
   const next = navigate(state.screen, event);
   if (state.screen === 'fighter') db.saveFighter(state.fighter).then(() => { state.hasSaved = true; });
-  if (next === 'fight') return event === 'rematch' ? rematch() : startSingle();
+  if (state.screen === 'fighter' && event === 'back' && state.fromCareer) { state.fromCareer = false; return show('career'); }
+  if (event === 'fighter') state.fromCareer = true;
+  if (next === 'fight') return event === 'rematch' ? rematch() : event === 'accept' ? startCareerFight() : startSingle();
   show(next);
 };
 
@@ -433,9 +501,9 @@ const recordText = (r) => `${r.w}-${r.l}-${r.d}`;
 // ─── Title ──────────────────────────────────────────────────────────────────
 
 function renderTitle() {
-  $('t-continue').hidden = !state.hasSaved;
-  $('t-continue-sub').textContent = `${state.fighter.name} · ${recordText(state.fighter.record)}`;
-  $('t-record').textContent = state.hasSaved ? '' : 'Create a fighter and fight your way up.';
+  const c = state.fighter.career;
+  $('t-career-sub').textContent = c ? `${state.fighter.name} · ${TIERS[tierIndex(c.rep)].name} · week ${c.week}` : 'Rise from an unknown street fighter';
+  $('t-record').textContent = state.hasSaved ? `${state.fighter.name} · ${recordText(state.fighter.record)}` : 'Create a fighter and fight your way up.';
 }
 
 // ─── Settings ───────────────────────────────────────────────────────────────
@@ -520,6 +588,8 @@ function renderFighterScreen() {
     bar.firstChild.style.width = `${s[k]}%`;
     return el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[k] }), bar, el('span', { className: 'val', textContent: s[k] }));
   }));
+  $('f-next').textContent = state.fromCareer ? 'Back to career' : 'Pick opponent';
+  $('f-next').dataset.go = state.fromCareer ? 'back' : 'fight';
   $('f-train').textContent = state.fighter.points > 0 ? `Train · ${state.fighter.points} points` : 'Train';
   if (!preview && !previewStarting) {
     previewStarting = true;
@@ -638,7 +708,7 @@ function startSingle() {
 }
 const rematch = () => startSingle();
 
-function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner }) {
+function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner, career = null }) {
   red = receivedProfile(red, 'red'); blue = receivedProfile(blue, 'blue');   // the other player's look is untrusted
   stopMatch();
   $('p2p-sheet').hidden = true;
@@ -649,7 +719,7 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner }) {
     blue: new FighterModel({ corner: 'blue', name: blue.name, stats: blue.stats }),
   });
   state.sim = sim;
-  state.match = { mode, seed, matchId, myCorner, fighters: { red: red.stats, blue: blue.stats }, names: { red: red.name, blue: blue.name } };
+  state.match = { mode, seed, matchId, myCorner, career, fighters: { red: red.stats, blue: blue.stats }, names: { red: red.name, blue: blue.name } };
   state.corners = {};           // corner calls received for the next round (P2P)
   state.result = null;
 
@@ -807,13 +877,19 @@ async function onFightEnd(result) {
   const outcome = outcomeOf(result.winner, m.myCorner);
   state.fighter.record[outcome] += 1;
   state.fighter.points += REWARDS[outcome];
+  let careerResult = null;
+  if (m.career) {
+    const done = applyFight(state.fighter.career, m.career, outcome, ko);
+    state.fighter.career = done.career;
+    careerResult = { offer: m.career, ...done.changes };
+  }
   await db.saveFighter(state.fighter);
   state.hasSaved = true;
   state.result = {
     outcome, method: result.method, ko, names: m.names, myCorner: m.myCorner, mode: m.mode,
     card: scorecard(sim.rounds), stats: fightStats(sim.rounds), cards: result.cards,
     before, after: { ...state.fighter.record }, gained: REWARDS[outcome], pointsAfter: state.fighter.points, pointsBefore,
-    unlocked: newUnlocks(before.w, state.fighter.record.w),
+    unlocked: newUnlocks(before.w, state.fighter.record.w), career: careerResult,
   };
   addFeed(el('li', { className: 'round', textContent: `══ ${result.winner} by ${result.method}` }));
   updateDbStatus();
@@ -858,14 +934,197 @@ function renderResult() {
       el('div', {}, el('b', { textContent: `+${r.gained}` }), el('span', { textContent: 'XP · training points' })),
       el('div', {}, el('b', { textContent: `${rec('w')}-${rec('l')}-${rec('d')}` }), el('span', { textContent: `record (${recChanged === 'w' ? 'win' : recChanged === 'l' ? 'loss' : 'draw'} added)` })),
       el('div', {}, el('b', { textContent: r.pointsAfter }), el('span', { textContent: 'to spend' }))),
+    ...(r.career ? [careerChanges(r.career)] : []),
     ...r.unlocked.map((u) => el('div', { className: 'unlock' }, el('b', { textContent: 'Unlocked' }), `${u.label}. Find it on the Fighter screen.`)),
     el('div', { id: 'r-actions' },
-      ...(r.mode === 'single' ? [el('button', { className: 'big primary', textContent: 'Rematch', onclick: () => { sfx.click(); go('rematch'); } })] : []),
-      el('button', { className: 'big', textContent: 'New opponent', onclick: () => { sfx.click(); go('opponent'); } }),
+      ...(r.career ? [el('button', { className: 'big primary', textContent: 'Continue career', onclick: () => { sfx.click(); go('career'); } })] : []),
+      ...(r.mode === 'single' && !r.career ? [el('button', { className: 'big primary', textContent: 'Rematch', onclick: () => { sfx.click(); go('rematch'); } })] : []),
+      ...(r.career ? [] : [el('button', { className: 'big', textContent: 'New opponent', onclick: () => { sfx.click(); go('opponent'); } })]),
       el('button', { className: 'big', textContent: `Train · ${r.pointsAfter} points`, onclick: () => { sfx.click(); go('train'); } }),
       el('button', { className: 'big ghost', textContent: 'Title', onclick: () => { sfx.click(); go('title'); } })));
   body.scrollTop = 0;
   setTimeout(() => { if (state.screen === 'result') (r.outcome === 'w' ? sfx.win() : r.outcome === 'l' ? sfx.lose() : sfx.click()); }, verdictAt * 1000);
+}
+
+// ─── Career ─────────────────────────────────────────────────────────────────
+
+const money = (n) => `$${n.toLocaleString('en-US')}`;
+const portrait = (o) => el('div', { className: 'avatar', style: `background:linear-gradient(160deg, ${LOOK_TINT[o.arch] ?? '#4a4a55'}, #0b0d12)` }, o.name[0]);
+const LOOK_TINT = { slugger: '#6b1d22', speedster: '#6b5a1d', technician: '#1d3a6b', grinder: '#1d5a3a' };
+const saveCareer = () => db.saveFighter(state.fighter).then(() => { state.hasSaved = true; });
+
+function offerButton(o) {
+  return el('button', { className: `offer${o.rival ? ' rival' : ''}`, type: 'button', onclick: () => { sfx.click(); state.offer = o; show('card'); } },
+    portrait(o),
+    el('div', {},
+      el('div', { className: 'nm' }, o.name, ...(o.rival ? [el('span', { className: 'tagpill', textContent: 'Rival' })] : []), ...(o.title ? [el('span', { className: 'tagpill gold', textContent: 'Title' })] : [])),
+      el('div', { className: 'meta', textContent: `${o.style} · ${o.record.w}-${o.record.l} · ${o.rounds} round${o.rounds > 1 ? 's' : ''}` }),
+      el('div', { className: 'meta', textContent: o.venue })),
+    el('div', { className: 'purse', textContent: money(o.purse) }));
+}
+
+function renderCareer() {
+  const c = state.fighter.career, body = $('c-body');
+  $('c-foot').hidden = !c;
+  if (!c) {
+    $('c-week').textContent = '';
+    body.replaceChildren(
+      el('div', { className: 'card' }, el('h3', { textContent: 'The come-up' }),
+        el('p', { textContent: `${state.fighter.name} is nobody yet. Fight block parties, climb the local circuit, take the city title, then the underground championship. Each week you train, rest or take a fight. Money, reputation and rivals follow you.` }),
+        el('p', { className: 'muted small', textContent: 'Your fighter, look and stats carry over from Quick fight.' })),
+      el('button', { className: 'big primary', style: 'width:100%;margin-bottom:10px', textContent: 'Start career', onclick: async () => { sfx.click(); state.fighter.career = newCareer(randomSeed()); await saveCareer(); renderCareer(); } }),
+      el('button', { className: 'big', style: 'width:100%', textContent: 'Name and dress your fighter', onclick: () => { sfx.click(); go('fighter'); } }));
+    return;
+  }
+  const ti = tierIndex(c.rep), tier = TIERS[ti], next = TIERS[ti + 1], rows = ladder(c, state.fighter.name), pen = conditionPenalty(c);
+  $('c-week').textContent = `Week ${c.week}`;
+  $('c-gym').disabled = false;
+  const energy = el('div', { className: 'energy' }, el('i'));
+  energy.firstChild.style.width = `${c.energy}%`;
+  const cond = c.injury ? `Injured, ${c.injury} week${c.injury > 1 ? 's' : ''} to heal. Stats −${pen}%.` : pen ? `Tired. Stats −${pen}% in a fight.` : 'Fresh. Full strength.';
+  const status = el('div', { className: 'card' },
+    el('h3', { textContent: `${tier.name}${next ? ` · next at ${next.rep} rep` : ' · top of the world'}` }),
+    el('div', { className: 'stat-line' },
+      el('div', {}, el('b', { textContent: `#${rankOf(c)}` }), el('span', { textContent: `of ${rows.length}` })),
+      el('div', {}, el('b', { textContent: c.rep }), el('span', { textContent: 'rep' })),
+      el('div', {}, el('b', { textContent: money(c.money) }), el('span', { textContent: 'money' })),
+      el('div', {}, el('b', { textContent: recordText(state.fighter.record) }), el('span', { textContent: 'record' }))),
+    energy, el('div', { className: `cond${pen ? ' bad' : ''}`, textContent: `Energy ${c.energy}/${ENERGY.max}. ${cond}` }));
+  const rivals = Object.entries(c.rivals).filter(([, r]) => r.meetings);
+  body.replaceChildren(
+    status,
+    el('div', { className: 'week-h' }, el('span', { textContent: `This week` }), el('span', { textContent: 'Tap a fight to see the card' })),
+    ...offersFor(c).map(offerButton),
+    el('div', { className: 'week-h' }, el('span', { textContent: 'Coming up' })),
+    ...[1, 2].flatMap((d) => offersFor(c, c.week + d).map((o) => el('div', { className: 'soon' }, el('span', { textContent: `Week ${c.week + d}: ${o.name}${o.rival ? ' (rival)' : ''}` }), el('span', { textContent: `${money(o.purse)} · ${o.venue}` })))),
+    el('div', { className: 'week-h' }, el('span', { textContent: 'Rankings' })),
+    el('div', { className: 'card' }, el('table', { className: 'rank' }, ...rows.map((r) => el('tr', { className: r.you ? 'you' : '' }, el('td', { textContent: r.rank }), el('td', { textContent: r.you ? `${r.name} (you)` : r.name }), el('td', { textContent: r.rep }))))),
+    ...(rivals.length ? [el('div', { className: 'week-h' }, el('span', { textContent: 'Rivals remember' })), el('div', { className: 'card' }, ...rivals.map(([n, r]) => el('div', { className: 'logl', textContent: `${n}: you ${r.w}, them ${r.l}${r.grudge ? ' · wants another go' : ''}` })))] : []),
+    ...(c.log.length ? [el('div', { className: 'week-h' }, el('span', { textContent: 'Last weeks' })), ...c.log.slice(-4).reverse().map((e) => el('div', { className: 'logl', textContent: `Week ${e.week}: ${e.text}` }))] : []));
+  body.scrollTop = 0;
+}
+$('c-rest').onclick = async () => {
+  state.fighter.career = rest(state.fighter.career);
+  sfx.click(); toast('Rested. A week passes.');
+  await saveCareer(); renderCareer();
+};
+
+function renderCard() {
+  const o = state.offer, c = state.fighter.career;
+  if (!o || !c) return show('career');
+  const pen = conditionPenalty(c);
+  const stats = (s) => STAT_KEYS.map((k) => {
+    const bar = el('div', { className: 'bar' }, el('i'));
+    bar.firstChild.style.width = `${s[k]}%`;
+    return el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[k] }), bar, el('span', { className: 'val', textContent: s[k] }));
+  });
+  const mine = effectiveStats(state.fighter.stats, c);
+  $('card-body').replaceChildren(el('div', { className: 'poster' },
+    el('div', { className: 'tier', textContent: `${o.tierName}${o.title ? ' · title fight' : ''}${o.rival ? ' · rematch' : ''}` }),
+    el('div', { className: 'venue', textContent: `${o.venue} · ${o.rounds} round${o.rounds > 1 ? 's' : ''}` }),
+    el('div', { className: 'vs' },
+      el('div', {}, el('div', { className: 'avatar', style: 'background:linear-gradient(160deg,#6b1d22,#0b0d12)' }, state.fighter.name[0]), el('div', { className: 'nm', textContent: state.fighter.name }), el('div', { className: 'rec', textContent: recordText(state.fighter.record) })),
+      el('b', { textContent: 'VS' }),
+      el('div', {}, portrait(o), el('div', { className: 'nm', textContent: o.name }), el('div', { className: 'rec', textContent: `${o.record.w}-${o.record.l}-0` }))),
+    el('div', { className: 'purse-big', textContent: money(o.purse) }),
+    el('div', { className: 'muted small', textContent: `Purse for a win. Lose and you keep ${money(Math.round(o.purse / 4))}.` })),
+    el('div', { className: 'card', style: 'margin-top:16px' }, el('h3', { textContent: `${o.name}: ${o.style}` }), ...stats(o.stats)),
+    el('div', { className: 'card' }, el('h3', { textContent: 'You tonight' }), ...stats(mine),
+      el('div', { className: `cond${pen ? ' bad' : ''}`, textContent: pen ? `Stats are −${pen}% from ${c.injury ? 'injury' : 'tiredness'}. Rest first, or fight like this.` : 'Fresh. Full strength.' })));
+  $('card-accept').textContent = `Accept · ${money(o.purse)}`;
+}
+
+function startCareerFight() {
+  const o = state.offer, c = state.fighter.career;
+  if (state.pending) toast('Unconfirmed training is not used in this fight');
+  startMatch({
+    mode: 'single', seed: randomSeed(), matchId: `m_${uid()}`, rounds: o.rounds, career: o,
+    red: profileOf({ name: state.fighter.name, stats: effectiveStats(state.fighter.stats, c), look: state.fighter.look }),
+    blue: profileOf({ name: o.name, stats: o.stats, look: o.look }), myCorner: 'red',
+  });
+}
+
+function careerChanges(r) {
+  const d = (label, value) => el('div', { className: 'logl', style: 'text-align:left' }, el('b', { textContent: `${label} ` }), value);
+  const lines = [
+    d('Purse', `${money(r.purse)}`),
+    d('Reputation', `${r.repBefore} → ${r.repAfter} (${r.repGain >= 0 ? '+' : ''}${r.repGain})`),
+    d('Ranking', r.rankAfter === r.rankBefore ? `#${r.rankAfter}, unchanged` : `#${r.rankBefore} → #${r.rankAfter}`),
+    d('Energy', `−${r.energyCost}`),
+    ...(r.injuryWeeks ? [d('Injury', `${r.injuryWeeks} weeks to heal. Stats drop until then.`)] : []),
+    ...(r.rival ? [d('Rival', r.rival)] : []),
+  ];
+  return el('div', { className: 'card', style: 'text-align:left' }, el('h3', { textContent: 'What changed' }),
+    ...(r.promoted ? [el('div', { className: 'unlock' }, el('b', { textContent: 'Moved up' }), r.promoted)] : []), ...lines);
+}
+
+// ─── Gym: a timing drill ─────────────────────────────────────────────────────
+
+let drill = null;   // { raf, t0, taps: [], done }
+function stopDrill() { if (drill) cancelAnimationFrame(drill.raf); drill = null; }
+
+function renderGym() {
+  stopDrill();
+  const c = state.fighter.career;
+  if (!c) return show('career');
+  $('g-energy').textContent = `Energy ${c.energy}`;
+  const d = DRILLS.heavybag, ok = canDrill(c), val = state.fighter.stats[d.stat];
+  const t = c.trained[d.stat];
+  $('gym-body').replaceChildren(
+    el('div', { className: 'tip-c', textContent: `Trainer: "${trainerTip(state.fighter.stats, c)}"` }),
+    el('div', { className: 'card', style: 'margin-top:14px' }, el('h3', { textContent: d.name }),
+      el('div', { className: 'bag' }),
+      el('p', { textContent: `Trains ${STAT_LABEL[d.stat]} (now ${val}). ${d.blurb} ${d.hits} hits. Costs ${ENERGY.drill} energy and a week.` }),
+      el('p', { className: 'muted small', textContent: t ? `${t.sessions} session${t.sessions > 1 ? 's' : ''}, +${t.gain} ${STAT_LABEL[d.stat]} so far.` : 'Never trained here.' })));
+  $('gym-foot').replaceChildren(el('button', { className: 'big primary', disabled: !ok, textContent: ok ? 'Start drill' : 'Too tired. Rest first', onclick: () => { sfx.click(); beginDrill('heavybag'); } }));
+}
+
+function beginDrill(key) {
+  const d = DRILLS[key], c = state.fighter.career;
+  const mk = el('i', { className: 'mk' }), bar = el('div', { className: 'drill-bar' }, mk);
+  const count = el('div', { className: 'muted', style: 'text-align:center', textContent: `0 / ${d.hits}` });
+  const bag = el('div', { className: 'bag' });
+  const btn = el('button', { className: 'big primary hit-btn', style: 'width:100%', textContent: 'HIT' });
+  $('gym-body').replaceChildren(el('div', { className: 'tip-c', textContent: 'Hit when the marker is in the gold.' }), bag, bar, count);
+  $('gym-foot').replaceChildren(btn);
+  stopDrill();
+  drill = { t0: performance.now(), taps: [], raf: 0 };
+  const me = drill;
+  const frame = () => {
+    if (drill !== me) return;
+    mk.style.left = `${50 + 50 * markerAt((performance.now() - me.t0) / 1000, d.speed)}%`;
+    me.raf = requestAnimationFrame(frame);
+  };
+  frame();
+  btn.onpointerdown = (e) => {
+    e.preventDefault();
+    if (drill !== me || me.taps.length >= d.hits) return;
+    me.taps.push(markerAt((performance.now() - me.t0) / 1000, d.speed));
+    bag.classList.remove('hit'); void bag.offsetWidth; bag.classList.add('hit');
+    sfx.click();
+    count.textContent = `${me.taps.length} / ${d.hits}`;
+    if (me.taps.length === d.hits) finishDrill(key, me.taps);
+  };
+}
+
+async function finishDrill(key, taps) {
+  stopDrill();
+  const d = DRILLS[key], stat = state.fighter.stats[d.stat];
+  const res = drillResult(key, taps, stat);
+  const done = applyDrill(state.fighter.career, state.fighter.stats, key, res);
+  state.fighter.career = done.career; state.fighter.stats = done.stats; state.pending = null;
+  await saveCareer();
+  (res.gain ? sfx.win : sfx.click)();
+  $('g-energy').textContent = `Energy ${done.career.energy}`;
+  $('gym-body').replaceChildren(
+    el('div', { className: 'grade', textContent: res.grade }),
+    el('div', { className: 'card', style: 'margin-top:14px;text-align:center' },
+      el('div', { className: 'stat-line', style: 'justify-content:space-around' },
+        el('div', {}, el('b', { textContent: `+${res.gain}` }), el('span', { textContent: STAT_LABEL[d.stat] })),
+        el('div', {}, el('b', { textContent: done.stats[d.stat] }), el('span', { textContent: 'now' })),
+        el('div', {}, el('b', { textContent: `${res.perfect}/${d.hits}` }), el('span', { textContent: 'dead centre' }))),
+      el('p', { className: 'muted small', textContent: `Week ${done.career.week} begins. ${res.gain ? '' : 'Nothing stuck. Slow down and wait for the gold.'}` })));
+  $('gym-foot').replaceChildren(el('button', { className: 'big primary', textContent: 'Back to career', onclick: () => { sfx.click(); show('career'); } }));
 }
 
 // ─── Live HUD (reads the simulation; never writes it) ───────────────────────
@@ -897,8 +1156,15 @@ $('speed-btn').onclick = () => {
   sfx.click();
 };
 $('quit-btn').onclick = async () => {
-  const v = await ask('Leave the fight? It will not count.', [{ label: 'Stay', value: false }, { label: 'Leave', value: true, primary: true }]);
-  if (v && state.screen === 'fight') go('quit');
+  const career = state.match?.career;
+  const v = await ask(career ? 'Walk out? It counts as a loss and you keep a quarter of the purse.' : 'Leave the fight? It will not count.', [{ label: 'Stay', value: false }, { label: 'Leave', value: true, primary: true }]);
+  if (!v || state.screen !== 'fight') return;
+  if (career) {
+    state.fighter.career = applyFight(state.fighter.career, career, 'l', false).career;
+    await db.saveFighter(state.fighter);
+    return show('career');
+  }
+  go('quit');
 };
 
 // ─── RAG intel (debug drawer, and the coach's precedent) ────────────────────
@@ -1080,6 +1346,7 @@ async function boot() {
   if (saved) {
     const stats = normalizeStats(saved.stats);
     state.fighter = { ...state.fighter, ...saved, stats, look: lockedLook(normalizeLook(saved.look), saved.record?.w ?? 0, PHOTO_OUTFITS.red) };
+    state.fighter.career = normalizeCareer(saved.career);
     state.hasSaved = true;
   }
   applySettings();

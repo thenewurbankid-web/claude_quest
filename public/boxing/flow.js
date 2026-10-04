@@ -1,16 +1,19 @@
 // Game flow rules with no DOM: screen transitions, progression, unlocks, scorecards, corner tips, settings.
 // index.html draws them; test/boxing.test.js pins them.
 
-export const SCREENS = ['title', 'settings', 'fighter', 'upgrade', 'opponent', 'fight', 'result'];
+export const SCREENS = ['title', 'settings', 'fighter', 'upgrade', 'opponent', 'fight', 'result', 'career', 'card', 'gym'];
 
 const EDGES = {
-  title:    { play: 'fighter', continue: 'opponent', settings: 'settings' },
+  title:    { career: 'career', play: 'fighter', continue: 'opponent', settings: 'settings' },
   settings: { back: 'title' },
   fighter:  { fight: 'opponent', train: 'upgrade', back: 'title' },
   upgrade:  { back: 'fighter', fight: 'opponent' },
   opponent: { start: 'fight', back: 'fighter' },
   fight:    { finished: 'result', quit: 'title' },
-  result:   { rematch: 'fight', opponent: 'opponent', train: 'upgrade', title: 'title' },
+  result:   { rematch: 'fight', opponent: 'opponent', train: 'upgrade', title: 'title', career: 'career' },
+  career:   { fight: 'card', gym: 'gym', fighter: 'fighter', back: 'title' },
+  card:     { accept: 'fight', decline: 'career', back: 'career' },
+  gym:      { back: 'career' },
 };
 
 /** The screen an event leads to. Throws on an event the screen doesn't have, so a wrong button is a loud bug. */

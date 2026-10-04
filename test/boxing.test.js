@@ -316,3 +316,111 @@ test('settings: junk falls back to the defaults', () => {
   assert.equal(normalizeSettings({ speed: '2', time: 'night' }).speed, 2);
   assert.equal(normalizeSettings({ time: 'night' }).time, 'night');
 });
+
+// ─── Career mode (career.js) ───
+import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, ladder, rankOf, offersFor, rest, applyFight, DRILLS, markerAt, hitScore, drillResult, applyDrill, canDrill, tierIndex } from '../public/boxing/career.js';
+
+test('career flow: Title to Career to Fight card to Fight to Result back to Career; Gym and decline return', () => {
+  let s = 'title';
+  for (const [ev, to] of [['career', 'career'], ['fight', 'card'], ['decline', 'career'], ['gym', 'gym'], ['back', 'career'], ['fight', 'card'], ['accept', 'fight'], ['finished', 'result'], ['career', 'career'], ['back', 'title']]) {
+    s = navigate(s, ev); assert.equal(s, to);
+  }
+});
+
+test('career offers are the same for a seed and week, differ by week, and scale with the tier', () => {
+  const c = newCareer(7);
+  assert.deepEqual(offersFor(c, 3), offersFor(c, 3));
+  assert.notDeepEqual(offersFor(c, 3), offersFor(c, 4));
+  const o = offersFor(c, 1);
+  assert.equal(o.length, 2);
+  assert.notEqual(o[0].name, o[1].name);
+  for (const x of o) { assert.ok(x.rounds >= 1 && x.rounds <= 2); assert.ok(x.purse >= 40 && x.purse <= 90); }
+  const pro = offersFor({ ...c, rep: 250 }, 1);
+  assert.ok(pro.every((x) => x.rounds === 5 && x.purse >= 1500));
+});
+
+test('career: a win pays, raises rep and rank, and spends the week and energy; a KO loss injures', () => {
+  const c = newCareer(1), offer = offersFor(c, 1)[0];
+  const rank0 = rankOf(c);
+  const w = applyFight(c, offer, 'w', true);
+  assert.equal(w.career.week, 2);
+  assert.equal(w.career.money, offer.purse);
+  assert.equal(w.changes.repGain, 15);
+  assert.ok(w.career.rep > 0 && rankOf(w.career) < rank0);
+  assert.equal(w.career.energy, ENERGY.max - ENERGY.fight + ENERGY.weekly);
+  const l = applyFight(c, offer, 'l', true);
+  assert.equal(l.career.injury, 3 - 1);              // three weeks, one already passed
+  assert.equal(l.career.money, Math.round(offer.purse / 4));
+  assert.ok(l.career.rivals[offer.name].grudge);
+  assert.equal(l.career.rep, 0);
+});
+
+test('career: a rival who beat you comes back two weeks later with a better edge; beating him clears it', () => {
+  let c = newCareer(2);
+  const offer = offersFor(c, 1)[0];
+  c = applyFight(c, offer, 'l', false).career;                       // week 2 now
+  assert.ok(!offersFor(c, 2).some((o) => o.rival));
+  const back = offersFor(c, 3).find((o) => o.rival);
+  assert.equal(back.name, offer.name);
+  assert.ok(back.purse >= offer.purse * 0.5);
+  c = applyFight(c, back, 'w', false).career;
+  assert.equal(c.rivals[offer.name].grudge, false);
+  assert.equal(c.rivals[offer.name].meetings, 2);
+});
+
+test('career: rep moves you up a tier, the ladder slots you in by rep', () => {
+  assert.equal(tierIndex(0), 0); assert.equal(tierIndex(30), 1); assert.equal(tierIndex(250), 3);
+  const c = { ...newCareer(1), rep: 12 };
+  const rows = ladder(c);
+  assert.equal(rows.length, TIERS[0].pool.length + 1);
+  assert.equal(rows.filter((r) => r.you).length, 1);
+  assert.deepEqual(rows.map((r) => r.rank), rows.map((_, i) => i + 1));
+  const up = applyFight({ ...newCareer(1), rep: 25 }, offersFor(newCareer(1), 1)[0], 'w', false);
+  assert.equal(up.changes.promoted, 'Local circuit');
+});
+
+test('career: tiredness and injury lower stats, rest restores energy and heals', () => {
+  const stats = { speed: 60, power: 60, stamina: 60, ringIQ: 60 };
+  assert.deepEqual(effectiveStats(stats, newCareer(1)), stats);
+  const tired = effectiveStats(stats, { ...newCareer(1), energy: 0 });
+  assert.ok(tired.power < 50 && tired.power >= 40);
+  assert.ok(effectiveStats(stats, { ...newCareer(1), injury: 2 }).power < 60);
+  const r = rest({ ...newCareer(1), energy: 20, injury: 2 });
+  assert.equal(r.energy, 65); assert.equal(r.injury, 1); assert.equal(r.week, 2);
+});
+
+test('gym drill: the marker is deterministic, centre taps score best, gains shrink as the stat rises, and it costs energy and a week', () => {
+  assert.equal(markerAt(0, 2.4), 0);
+  assert.equal(markerAt(1, 2.4), markerAt(1, 2.4));
+  assert.ok(hitScore(0) > hitScore(0.2) && hitScore(0.2) > hitScore(0.5) && hitScore(0.9) === 0);
+  const n = DRILLS.heavybag.hits;
+  const perfect = drillResult('heavybag', Array(n).fill(0), 50);
+  assert.deepEqual([perfect.gain, perfect.grade], [3, 'Perfect']);
+  assert.equal(drillResult('heavybag', Array(n).fill(0), 70).gain, 2);
+  assert.equal(drillResult('heavybag', Array(n).fill(0), 90).gain, 1);
+  assert.equal(drillResult('heavybag', [], 50).gain, 0);
+  assert.equal(drillResult('heavybag', Array(n).fill(0), 99).gain, 1);
+  const c = newCareer(1), stats = { speed: 50, power: 50, stamina: 50, ringIQ: 50 };
+  const d = applyDrill(c, stats, 'heavybag', perfect);
+  assert.equal(d.stats.power, 53);
+  assert.deepEqual(d.career.trained.power, { gain: 3, sessions: 1 });
+  assert.equal(d.career.energy, ENERGY.max - ENERGY.drill + ENERGY.weekly);
+  assert.equal(d.career.week, 2);
+  assert.equal(canDrill({ ...c, energy: 19 }), false);
+});
+
+test('normalizeCareer drops junk and clamps numbers', () => {
+  assert.equal(normalizeCareer(null), null);
+  const n = normalizeCareer({ week: -4, money: 'x', rep: 1e12, energy: 500, injury: 99, rivals: { Bad: { arch: 'nope' }, Ok: { arch: 'slugger', w: 2, grudge: 1 } }, log: [{ text: 5 }], trained: { power: { gain: 2, sessions: 1 }, evil: {} } });
+  assert.equal(n.week, 1); assert.equal(n.money, 0); assert.equal(n.rep, 1e6); assert.equal(n.energy, 100); assert.equal(n.injury, 6);
+  assert.deepEqual(Object.keys(n.rivals), ['Ok']); assert.equal(n.rivals.Ok.grudge, true);
+  assert.deepEqual(Object.keys(n.trained), ['power']);
+});
+
+test('trainer tip points at a stat the gym can train, tiredness first', async () => {
+  const { trainerTip } = await import('../public/boxing/career.js');
+  const stats = { speed: 10, power: 50, stamina: 50, ringIQ: 50 };
+  assert.match(trainerTip(stats, newCareer(1)), /heavy bag/);
+  assert.match(trainerTip(stats, { ...newCareer(1), energy: 5 }), /Rest/);
+  assert.match(trainerTip(stats, { ...newCareer(1), injury: 2 }), /hurt/);
+});
