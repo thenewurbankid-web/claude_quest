@@ -247,6 +247,15 @@ User added a career mode as the main mode (Quick fight stays as the exhibition).
 - **Not built yet** (remaining BOX-13 asks): speed bag, roadwork, sparring drills; rounds of 30-40 s (default 35) with a 10 s corner break, fast-forward and "sim to result" (needs a rebalance of the damage and KO rate with Boxing Sim Dev, I did not guess numbers); Fight IQ / tendencies / "learned from past fights" panels and the in-fight plan tag; the fight view is still 3D (screens are independent of it, so the 2D swap needs no change here); night-court title art and real portraits.
 - **Untested**: a real phone (tap timing on the HIT button, safe-area insets), the career at other widths, a long career (tiers 3-4 balance: purse, rep thresholds and opponent stats are my first guesses, tune them), P2P untouched.
 
+## Done (2026-10-04): BOX-18 slice 1, foot planting (shipped live)
+
+User standing rule (2026-10-04): ship each slice as soon as it is built and tested (merge, sync `public/boxing` into bring-the-ruckus and push, push claude-quest main; never push a broken build). Shipped: claude-quest main d33b533, bring-the-ruckus 60b8f1a.
+- `footwork.js` (pure, render-only): each foot is planted at a world point or on a short low step. A foot steps when it lags its stance spot (lead foot 7 cm, back foot 8.5 cm, plus a turn term), lands ahead of the body's travel, and the other foot stays down. Standing still re-sets a foot only if it is 5 cm off.
+- `boxer-model.js`: `ModelRig.plant()` is two-bone leg IK (thigh/calf/foot, then toes aimed) holding the ankle on the planted point; the Walk_Loop layer is gone. Hips sit 5 cm lower (`KNEE_BEND`) so legs have slack; idle bounce on the balls of the feet and a dip on each step. `boxer.footSlip` reports per-frame ankle movement while planted.
+- Test: poses the person at walk, shuffle, side step, pivot and standing: planted ankle moves < 0.5 mm per frame, and feet do step. `npm test` 269 pass; `demo-e2e.mjs` clean locally and against the live URL.
+- **Not done in BOX-18**: start/stop/turn clips, mocap footwork (CMU / Quaternius), punch weight transfer and rear-foot pivot (planted feet currently stay put through punches), head movement, blocks/hit reactions, before/after clip on the live site, phone frame-time measure.
+- **Untested by eye** (no browser here): that the steps look like a shuffle rather than a hop, knee direction and foot orientation on the person, leg stretch when lunging, KO fall.
+
 ## Next jobs
 
 0. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
