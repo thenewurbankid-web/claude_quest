@@ -346,3 +346,7 @@ The sim records only `target` ('head'/'body') and `outcome` per punch (the `ZONE
 
 ### Style pass follow-up (2026-10-04)
 Eyeballed hub, gym, fight card, corner and result at 375 px (career-e2e screenshots) and fixed leftovers: energy bar, archetype portrait tints, blue/red corner names and table headers now grey/white, all big numbers (purse, money, XP, record, damage) use Barlow Condensed bold instead of the graffiti face. Left as is: damage figure heat colours (functional). Still unchecked: real phone, Safari.
+
+## Done (2026-10-04): BOX-9 slice 2, full stats screen (Boxing UI Dev)
+`flow.js` `punchBreakdown(rounds)` (landed/thrown per punch type and per round, from `sim.rounds`, tested). `index.html`: a "Fight stats" button in the between-rounds corner sheet opens a full-screen overlay (damage by zone so far, punches by type with land rate, round by round); the result screen has the same punches-by-type and round-by-round cards. `npm test` 272 pass; `demo-e2e.mjs` clean, screenshots `qa/game-7c-stats-*.png`, `game-8-result-*.png`.
+- Not built from BOX-9: the AI corner timeline (tactic per round, retrieved precedents and why, labelled as retrieval). **Untested**: real phone, overlay scroll on short screens.

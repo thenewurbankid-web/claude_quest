@@ -75,6 +75,25 @@ export function fightStats(rounds) {
   return out;
 }
 
+export const PUNCH_TYPES = ['jab', 'cross', 'hook', 'uppercut', 'body'];
+
+/** Thrown/landed per punch type and per round, from the sim's round summaries. */
+export function punchBreakdown(rounds) {
+  const zero = () => Object.fromEntries(PUNCH_TYPES.map((t) => [t, { thrown: 0, landed: 0 }]));
+  const byType = { red: zero(), blue: zero() };
+  const perRound = rounds.map((r) => {
+    for (const e of r.exchanges) for (const p of e.punches) {
+      const slot = byType[p.attacker][p.punch];
+      if (!slot) continue;
+      slot.thrown += 1;
+      if (p.outcome === 'landed') slot.landed += 1;
+    }
+    const side = (c) => ({ thrown: r.totals[c].thrown, landed: r.totals[c].landed, rate: r.totals[c].land_rate, dealt: r.totals[c].damage_dealt });
+    return { round: r.round_index, red: side('red'), blue: side('blue') };
+  });
+  return { byType, perRound };
+}
+
 /** Body zones for the damage silhouette. The sim records only a punch's target (head/body) and outcome, so a blocked shot is the guard zone. */
 export const DAMAGE_ZONES = ['head', 'body', 'guard'];
 export const zoneOf = (p) => (p.outcome === 'landed' ? (p.target === 'body' ? 'body' : 'head') : p.outcome === 'blocked' ? 'guard' : null);

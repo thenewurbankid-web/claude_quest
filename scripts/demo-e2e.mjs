@@ -47,6 +47,11 @@ try {
     await page.screenshot({ path: `${QA}7-fight-${time}.png` });
     await page.waitForTimeout(25000);                         // damage builds on the HUD silhouettes
     await page.screenshot({ path: `${QA}7b-fight-damage-${time}.png`, clip: { x: 0, y: 0, width: 375, height: 120 } });
+    await page.waitForSelector('#corner:not([hidden])', { timeout: 90000 });   // between rounds: full stats overlay
+    await page.click('#stats-btn');
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${QA}7c-stats-${time}.png` });
+    await page.click('#stats-close');
     await page.evaluate(() => { const s = document.getElementById('speed-override'); s.value = 'instant'; });   // later rounds run instantly
     for (let i = 0; i < 200 && !(await visible(page, '#s-result')); i++) {
       if (await visible(page, '#start-round') && await page.locator('#start-round').isEnabled()) await page.click('#start-round');
