@@ -251,6 +251,25 @@ test('planted feet do not slip at walk, shuffle and pivot speeds, and the feet d
   }
 });
 
+test('punches pivot the punching-side foot without sliding it, and a tired boxer still holds the planted feet', async () => {
+  const { ModelBoxer, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  const { B, scene, person } = await personWorld();
+  const boxer = new ModelBoxer(B, scene, person, 'red', SHADOW, { glove: '#c9343a', trunks: '#9e1c24', wraps: true, outfit: PHOTO_OUTFITS.red });
+  const dt = 1 / 60;
+  for (const [type, gas] of [['cross', 1], ['hook', 0.3], ['body', 0.3], ['uppercut', 1], ['jab', 1]]) {
+    let worst = 0, hip0 = null, hipLow = Infinity;
+    for (let i = 0; i < 120; i++) {
+      const k = i % 60;
+      const ap = k < 20 ? { type, launchTick: i - k, arriveTick: i - k + 20 } : null;
+      boxer.pose({ x: 0, y: 0, vx: 0, vy: 0, gasRatio: gas, activePunch: ap }, { x: 0, y: 1.3, activePunch: null }, i, i * dt * 1000, dt, i * dt);
+      if (i > 10) worst = Math.max(worst, boxer.footSlip.l, boxer.footSlip.r);
+      const p = boxer.rig.pos('pelvis'); hip0 ??= p.y; hipLow = Math.min(hipLow, p.y);
+    }
+    assert.ok(worst < 0.0005, `${type}: a planted foot slipped ${(worst * 100).toFixed(2)} cm in one frame`);
+    if (type === 'body') assert.ok(hip0 - hipLow > 0.02, 'body shots drop the hips');
+  }
+});
+
 test('boxer assets fall back to the Quaternius boxer when person.glb will not load', async () => {
   const { loadBoxerAssets } = await import('../public/boxing/boxer-model.js');
   const asked = [];

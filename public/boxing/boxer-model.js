@@ -510,13 +510,13 @@ export class ModelBoxer {
   }
 
   /** Locks planted feet to their world points with leg IK; `footSlip` is how far each planted ankle moved this frame. */
-  plantFeet(body, f, me, w, dt) {
+  plantFeet(body, f, me, w, dt, pivot = null) {
     const rig = this.rig, r = v(f.z, 0, -f.x);
     const st = this.fw.update({ x: body.x, z: body.z }, { x: f.x, z: f.z }, { x: me.vx, z: me.vy }, dt);
     this.fwStepping = !st.l.planted || !st.r.planted;
     this.footSlip = { l: 0, r: 0 };
     for (const [s, side] of [['l', -1], ['r', 1]]) {
-      const F = st[s], ff = v(Math.sin(F.yaw), 0, Math.cos(F.yaw)), fr = v(ff.z, 0, -ff.x), t = this.fwToes[s];
+      const F = st[s], yaw = F.yaw + (pivot && pivot.foot === s ? pivot.yaw : 0), ff = v(Math.sin(yaw), 0, Math.cos(yaw)), fr = v(ff.z, 0, -ff.x), t = this.fwToes[s];
       const ankle = v(F.x, this.fwAnkleY[s] + F.lift, F.z);
       const toe = add(ankle, add(add(mul(fr, t.x), mul(UPV, t.y - 0.6 * F.lift)), mul(ff, t.z)));
       const pole = add(mul(f, 1), mul(r, side * 0.25));
@@ -598,11 +598,20 @@ export class ModelBoxer {
     const slipOff = mul(r, slipSide * slip * 0.14);
     const body = add(add(root, slipOff), mul(f, lunge));
     if (!this.fw) this.initFootwork(body, f);
+    // Punch weight transfer (render-only): the punching-side foot pivots toes toward the target, weight rocks onto the
+    // lead leg, and body shots drop the knees.
+    const pe = pc ? (punch.back > 0 ? 1 - punch.back : smooth(punch.k)) : 0;
+    const pivot = pc && punch.type !== 'jab' ? { foot: pc.side > 0 ? 'r' : 'l', yaw: -pc.side * 0.7 * pe } : null;
+    const rock = pc ? mul(r, -0.012 * pe * (pc.side > 0 ? 1 : -1)) : v(0, 0, 0);
+    // Street looseness: the upper body sways and the guard bobs, wider as the boxer tires.
+    const loose = 1 + 1.5 * tired, calm = 1 - clamp(speed / 1.2, 0, 1);
+    const sway = add(mul(r, 0.016 * loose * calm * Math.sin(time * 2.1)), mul(f, 0.01 * loose * calm * Math.sin(time * 1.6 + 1)));
     // On the balls of the feet: a small bounce in the guard, a dip as each step lands. Render-only.
-    const bob = -KNEE_BEND + (1 - clamp(speed / 1.2, 0, 1)) * 0.011 * Math.sin(time * 15) * (1 - 0.6 * tired) + (this.fwStepping ? -0.012 : 0);
-    rig.place(add(body, v(0, bob, 0)), f);
+    const bob = -KNEE_BEND + (1 - clamp(speed / 1.2, 0, 1)) * 0.011 * Math.sin(time * 15) * (1 - 0.6 * tired) + (this.fwStepping ? -0.012 : 0)
+      - (punch?.type === 'body' ? 0.05 * pe : 0);
+    rig.place(add(add(add(body, rock), sway), v(0, bob, 0)), f);
     rig.applyLayers(layers);
-    this.plantFeet(body, f, me, 1 - (this.fall > 0 || this.knocked ? 1 : 0), dt);
+    this.plantFeet(body, f, me, 1 - (this.fall > 0 || this.knocked ? 1 : 0), dt, pivot);
 
     // ── arm IK on top of the clips ──
     const ikW = 1 - koW;
@@ -630,7 +639,7 @@ export class ModelBoxer {
             target = bez2(guard, ctrl, ribs, e);
           } else if (punch.type === 'hook') {
             // Round the side with the elbow up and out, into the side of the head.
-            const ctrl = add(add(rig.pos(ARM[side].upper), mul(r, side * 0.45)), mul(f, 0.2));
+            const ctrl = add(add(rig.pos(ARM[side].upper), mul(r, side * 0.45 * (1 + 0.5 * tired))), mul(f, 0.2));
             target = bez2(guard, ctrl, add(head, mul(r, side * 0.08)), e);
             rig.reach(side, target, add(mul(r, side), mul(UPV, 0.8)), ikW);
             continue;
