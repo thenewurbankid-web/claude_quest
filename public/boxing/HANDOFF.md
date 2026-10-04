@@ -256,6 +256,14 @@ User standing rule (2026-10-04): ship each slice as soon as it is built and test
 - **Not done in BOX-18**: start/stop/turn clips, mocap footwork (CMU / Quaternius), punch weight transfer and rear-foot pivot (planted feet currently stay put through punches), head movement, blocks/hit reactions, before/after clip on the live site, phone frame-time measure.
 - **Untested by eye** (no browser here): that the steps look like a shuffle rather than a hop, knee direction and foot orientation on the person, leg stretch when lunging, KO fall.
 
+## Done (2026-10-04): BOX-18 slice 2, punch pivot and street sway (shipped live)
+
+User (2026-10-04) asked for more natural street-style fighting and more moves (haymakers, clinches, shoves, feints, rolls, shelling up, taunts...). Those moves need new sim punch/action types from the Sim Dev's new issue, which isn't in the sim yet, so this slice is what the current moveset allows. Shipped: claude-quest main c465f26, bring-the-ruckus 63eb097.
+- `boxer-model.js` `pose()`: cross/hook/uppercut/body pivot the punching-side foot toes toward the target (0.7 rad, jab doesn't); weight rocks 1.2 cm onto the lead leg; body shots drop the hips 5 cm; the upper body sways (16 mm side, 10 mm fore-aft, only while still) and widens up to 2.5x as stamina drops; hooks swing 50% wider when tired. Sway/rock go on the rig only, the footwork gets the clean body point, so planted feet don't re-step.
+- Test: punches (cross, hook, body, uppercut, jab, tired and fresh) leave planted ankles under 0.5 mm per frame; body shots drop the hips. `npm test` 270 pass; `demo-e2e.mjs` clean locally and on the live URL.
+- **Untested by eye**: that the pivot, rock and sway read as natural and not as a wobble; sway amounts are my guesses.
+- **Next for BOX-18**: animate the street moves once the Sim Dev's issue lands (needs the new action types in `snapshot()`); start/stop/turn transitions; CMU/Quaternius mocap (the CMU files need a download and retarget onto the straightened rig: not done); before/after clip; phone frame time.
+
 ## Next jobs
 
 0. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
