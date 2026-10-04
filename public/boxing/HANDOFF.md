@@ -283,6 +283,12 @@ User: the fighters "look weak and crooked" (BOX-14). Before shots showed the Qua
 `scripts/build-mpfb-boxer.py` now builds an athletic body: `ATHLETE` detail targets (V-shape torso, lats, pecs, thick neck, strong jaw, shoulder/arm/leg muscle), `proportions=0.6`, and a `--variant balanced|lean|heavy` switch (only balanced is shipped; lean/heavy write `person_raw_<variant>.glb`, for slice 3). Garments are inflated 4-6 mm along their normals so the muscle doesn't poke through clothes. `person.glb` rebuilt (`node scripts/build-mpfb-models.mjs`). Before/after: `qa/box-14-before-front.png` vs `qa/box-14-athletic-front.png`/`-side.png`. 272 tests pass. Untested in a real game/phone: frame time with the new mesh, clipping of every punch against the wider shoulders.
 - Still to do for BOX-14: slice 3 (lean/balanced/heavy blended by stats, morph targets), slice 4 (trunks, sanctioned gloves, mouthguard), animation clip re-check.
 
+## Done (2026-10-04): BOX-18 slice 3, lean into starts, stops and turns (shipped live)
+
+`boxer-model.js` `pose()`: smoothed acceleration of the sim velocity shifts the body up to 3 cm along it (a start drives forward, a stop rocks back, a turn leans into the curve); render-only, feet stay planted. `npm test` 274 pass; `demo-e2e.mjs` clean locally and live. Shipped: claude-quest main 9908bb7, bring-the-ruckus 39c7d47. **Untested by eye**; the 3 cm cap and 8 Hz smoothing are guesses.
+- **Street moves are blocked on BOX-22** (Sim Dev; the sim has no haymaker, overhand, feint, clinch, shove or taunt yet). Animate them after it lands.
+- Still open in BOX-18: CMU mocap footwork, before/after clip, phone frame time.
+
 ## Next jobs
 
 0. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
