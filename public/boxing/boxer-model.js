@@ -663,7 +663,14 @@ export class ModelBoxer {
     // On the balls of the feet: a small bounce in the guard, a dip as each step lands. Render-only.
     const bob = -KNEE_BEND + (1 - clamp(speed / 1.2, 0, 1)) * 0.011 * Math.sin(time * 15) * (1 - 0.6 * tired) + (this.fwStepping ? -0.012 : 0)
       - (punch?.type === 'body' ? 0.05 * pe : 0);
-    rig.place(add(add(add(body, rock), sway), v(0, bob, 0)), f);
+    // Start/stop/turn: the body leans into a change of velocity (smoothed acceleration), so a start drives forward and a stop rocks back.
+    const lv = this.lastVel ?? { x: me.vx, z: me.vy };
+    const k = 1 - Math.exp(-dt * 8), ax = (me.vx - lv.x) / Math.max(dt, 1e-3), az = (me.vy - lv.z) / Math.max(dt, 1e-3);
+    this.lastVel = { x: lv.x + (me.vx - lv.x) * k, z: lv.z + (me.vy - lv.z) * k };
+    const acc = this.accLean ?? { x: 0, z: 0 };
+    acc.x += (clamp(ax, -6, 6) - acc.x) * k; acc.z += (clamp(az, -6, 6) - acc.z) * k; this.accLean = acc;
+    const leanOff = v(clamp(acc.x * 0.006, -0.03, 0.03), 0, clamp(acc.z * 0.006, -0.03, 0.03));
+    rig.place(add(add(add(add(body, rock), sway), leanOff), v(0, bob, 0)), f);
     rig.applyLayers(layers);
     rig.straighten(f, STRAIGHT * (1 - 0.7 * koW));
     this.plantFeet(body, f, me, 1 - (this.fall > 0 || this.knocked ? 1 : 0), dt, pivot);
