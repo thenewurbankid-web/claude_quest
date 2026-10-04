@@ -78,14 +78,16 @@
   #s-title { justify-content: flex-end; padding: 0 22px calc(var(--bottom) + 26px); overflow: hidden; background: #05070b; --sh: 0; }
   #s-title .cam { filter: saturate(.18) contrast(1.08); position: absolute; inset: -6%; animation: drift 38s ease-in-out infinite alternate; will-change: transform; }
   #s-title .wall, #s-title .wall img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  #s-title .wall img { object-fit: cover; object-position: 60% 40%; filter: brightness(1.7) contrast(1.06); }
+  #s-title .wall img { object-fit: cover; object-position: 60% 40%; filter: brightness(1.7) contrast(1.06) blur(1.4px); }
+  #s-title .wall::after { content: ""; position: absolute; inset: 0; background: radial-gradient(34% 30% at 50% 28%, rgba(5,7,11,.34), transparent 100%); }
   #s-title .duel { position: absolute; top: 0; bottom: 0; left: 50%; width: min(100%, 520px); transform: translateX(-50%); pointer-events: none; }
   #s-title .fgt { position: absolute; top: 12%; height: 30%; aspect-ratio: 200 / 536; background-size: 800% 200%; background-repeat: no-repeat; background-position: 0 0;
-    filter: brightness(.78) contrast(1.06); -webkit-mask-image: linear-gradient(#000 70%, transparent 97%); mask-image: linear-gradient(#000 70%, transparent 97%); }
-  #s-title .duel::before, #s-title .duel::after { content: ""; position: absolute; top: 37%; height: 9%; width: 30%; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,.62), rgba(0,0,0,.28) 55%, transparent 100%); filter: blur(6px); }
+    filter: brightness(.78) contrast(1.06) drop-shadow(1.5px -1px 0 rgba(236,240,255,.38)); -webkit-mask-image: linear-gradient(#000 70%, transparent 97%); mask-image: linear-gradient(#000 70%, transparent 97%); }
+  #s-title .duel::before, #s-title .duel::after { content: ""; position: absolute; top: 37%; height: 9%; width: 30%; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,.8), rgba(0,0,0,.4) 50%, transparent 100%); filter: blur(5px); }
+  #s-title .duel .fog { position: absolute; left: -20%; right: -20%; top: 30%; height: 20%; filter: blur(14px); background: radial-gradient(50% 50% at 50% 55%, rgba(176,188,212,.3), rgba(176,188,212,.12) 55%, transparent 100%); }
   #s-title .duel::before { left: 14%; } #s-title .duel::after { left: 52%; }
   #s-title .fgt.red { left: 22%; background-image: url(sprites2d/red_idle_guard.webp); }
-  #s-title .fgt.blue { left: 59%; transform: scaleX(-1); background-image: url(sprites2d/blue_idle_guard.webp); }
+  #s-title .fgt.blue { left: 59%; transform: scaleX(-1); filter: brightness(.78) contrast(1.06) drop-shadow(-1.5px -1px 0 rgba(236,240,255,.38)); background-image: url(sprites2d/blue_idle_guard.webp); }
   @keyframes drift { from { transform: scale(1.04) translate3d(-1.8%, 0, 0); } to { transform: scale(1.16) translate3d(1.8%, -1.2%, 0); } }
   #s-title .rays { position: absolute; inset: -20% -10% 20%; mix-blend-mode: screen; opacity: .55; pointer-events: none;
     background: conic-gradient(from 168deg at 70% -6%, transparent 0 4deg, rgba(228,228,232,.26) 6deg, transparent 12deg, rgba(228,228,232,.16) 17deg, transparent 22deg, rgba(228,228,232,.22) 27deg, transparent 33deg);
@@ -411,7 +413,7 @@
 <section class="screen" id="s-title">
   <div class="cam" aria-hidden="true">
     <picture class="wall"><source media="(orientation: landscape)" srcset="img/wall-l-1600.webp"><img src="img/wall-p-540.webp" srcset="img/wall-p-540.webp 540w, img/wall-p-900.webp 900w" sizes="100vw" alt="" decoding="async" draggable="false"></picture>
-    <div class="duel"><span class="fgt red" data-s="red"></span><span class="fgt blue" data-s="blue"></span></div>
+    <div class="duel"><span class="fgt red" data-s="red"></span><span class="fgt blue" data-s="blue"></span><span class="fog"></span></div>
   </div>
   <div class="rays" aria-hidden="true"></div>
   <div class="haze h1" aria-hidden="true"></div><div class="haze h2" aria-hidden="true"></div>

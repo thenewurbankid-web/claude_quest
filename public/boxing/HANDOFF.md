@@ -4,6 +4,12 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): ground the title fighters (BOX-38)
+
+- `index.html` only. Contact shadows under the feet are darker and tighter; a blurred cool haze strip (`.duel .fog`) sits at the feet; the wall is blurred 1.4px with a soft dark pool behind the fighters (`.wall::after`); each fighter gets a 1.5px cool rim on the side facing the upper-right ray light (`drop-shadow` on `.fgt`, sign flipped for the mirrored blue). Menu area unchanged.
+- Shots: `BOX=38 node scripts/title-shots.mjs before|after` -> `qa/box-38-{before,after}-{375,1440}.png`. `npm test` 335 pass, no console errors.
+- **Untested**: real phones/Safari (drop-shadow on masked sprite sheets), motion over time.
+
 ## Done (2026-10-04): tag wall readable behind the title (BOX-35)
 
 - The wall was ~25% bright in the file, then `brightness(.72)` and a heavy vignette took it to ~15%. Now `#s-title .wall img` is `brightness(1.7) contrast(1.06)` (upper two thirds read ~31-43% incl. logo; was 13-23%), the vignette is lighter (edges .5, top .18) and the dark gradient only starts at 36% and is solid behind the menu. Fighters are brighter (.78) and have blurred contact-shadow ellipses at their feet (`.duel::before/::after`). All in `index.html`; the wall files are unchanged (the source photo is not in the repo, so no regrade).
