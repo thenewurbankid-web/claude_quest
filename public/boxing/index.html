@@ -141,6 +141,13 @@
   .mini .bar, .urow .bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; position: relative; }
   .mini .bar i, .urow .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
   .urow .bar b { position: absolute; inset: 0 auto 0 0; background: var(--ok); opacity: .6; border-radius: 4px; }
+  .mini.src { display: block; margin: -2px 0 8px 70px; color: var(--muted); font-size: 12px; }
+  .iq p { margin: 0 0 8px; font-size: 14px; line-height: 1.35; }
+  .iq h4 { margin: 12px 0 6px; font: 400 13px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .iq .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .iq.pop { animation: iqin .4s ease-out; }
+  @keyframes iqin { from { opacity: 0; transform: translateY(8px); } }
+  @media (prefers-reduced-motion: reduce) { .iq.pop { animation: none; } }
   .mini .val { text-align: right; font-variant-numeric: tabular-nums; }
 
   /* ── Upgrade ── */
@@ -446,6 +453,7 @@
       <div id="f-stats"></div>
       <button class="big" id="f-train" data-go="train" style="width:100%;margin-top:8px"></button>
     </div>
+    <div class="card iq" id="f-iq"><h3>Fight IQ</h3><div id="f-iq-body"></div></div>
   </div>
   <footer class="bottom"><button class="big primary" data-go="fight" id="f-next">Pick opponent</button></footer>
 </section>
@@ -544,6 +552,7 @@ import { profileOf, receivedProfile } from './profile.js';
 import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, aiPlan, emptyDamage, recordDamage, zoneHeat, DAMAGE_ZONES, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
 import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, markerAt, drillResult, applyDrill, trainerTip } from './career.js';
 import { createSfx } from './sfx.js';
+import { statSources, tendencies, learnedFromLog, learnedLines } from './fightiq.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -791,12 +800,14 @@ function renderFighterScreen() {
   $('fighter-name').value = state.fighter.name;
   $('f-record').textContent = recordText(state.fighter.record);
   renderLook();
-  const s = state.fighter.stats;
+  const s = state.fighter.stats, src = statSources(s, state.fighter.career);
   $('f-stats').replaceChildren(...STAT_KEYS.map((k) => {
     const bar = el('div', { className: 'bar' }, el('i'));
     bar.firstChild.style.width = `${s[k]}%`;
-    return el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[k] }), bar, el('span', { className: 'val', textContent: s[k] }));
+    return el('div', {}, el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[k] }), bar, el('span', { className: 'val', textContent: s[k] })),
+      el('div', { className: 'mini src', textContent: src[k].text }));
   }));
+  renderIq();
   $('f-next').textContent = state.fromCareer ? 'Back to career' : 'Pick opponent';
   $('f-next').dataset.go = state.fromCareer ? 'back' : 'fight';
   $('f-train').textContent = state.fighter.points > 0 ? `Train · ${state.fighter.points} points` : 'Train';
@@ -806,6 +817,20 @@ function renderFighterScreen() {
       .then((p) => { preview = p; $('look-preview-msg')?.remove(); })
       .catch((err) => { previewStarting = false; $('look-preview-msg').textContent = `Preview unavailable: ${err.message}`; console.warn(err); });
   }
+}
+
+/** The Fight IQ card: tendencies from the stats, plus counts from this device's fight log. No model is involved. */
+async function renderIq() {
+  const body = $('f-iq-body'), card = $('f-iq');
+  const t = tendencies(state.fighter.stats);
+  const rows = await db.fight_logs.toArray().catch(() => []);
+  if (state.screen !== 'fighter') return;
+  const learned = learnedLines(learnedFromLog(rows));
+  body.replaceChildren(
+    el('h4', { textContent: 'How you fight' }), ...t.lines.map((x) => el('p', { textContent: x })), el('p', { textContent: `${t.style} ${t.reaction}.` }),
+    el('h4', { textContent: 'Learned from your fights' }), ...learned.map((x) => el('p', { textContent: x })),
+    el('p', { className: 'note', textContent: 'Worked out from your stats and the rounds saved on this device. It counts and looks things up; it is not a trained model.' }));
+  card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop');
 }
 
 // ─── Upgrade screen ─────────────────────────────────────────────────────────
@@ -840,6 +865,7 @@ function renderUpgrade() {
       el('div', { className: 'nm' }, STAT_LABEL[k], el('span', { textContent: cur[k] })),
       bar,
       el('div', { className: 'fx', textContent: `${fighterFx(k, cur)} · next +1 costs ${statCost(cur[k])}` }),
+      el('div', { className: 'fx', textContent: statSources(cur, state.fighter.career)[k].text + (state.pending && cur[k] > base[k] ? ` (+${cur[k] - base[k]} unsaved)` : '') }),
       el('div', { className: 'btns' }, minus, plus));
   }));
   $('points').textContent = pointsLeft();
@@ -1022,7 +1048,8 @@ function beginRound(actions) {
   sfx.bell(1);
   const mine = state.match.myCorner;
   $('round-lbl').textContent = `ROUND ${sim.roundIndex} / ${sim.totalRounds}`;
-  $('tactic-chip').textContent = TACTICS[actions[mine]].label;
+  const them = mine === 'red' ? 'blue' : 'red';
+  $('tactic-chip').textContent = `PLAN · ${TACTICS[actions[mine]].label} · vs ${TACTICS[actions[them]].label}`;
   addFeed(el('li', { className: 'round', textContent: `── Round ${sim.roundIndex} · red ${actions.red} · blue ${actions.blue}` }));
   if ($('speed-override').value === 'instant') sim.runRoundToEnd();
 }

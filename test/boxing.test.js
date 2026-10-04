@@ -607,3 +607,24 @@ test('the AI corner plan follows its fixed rules and says why', () => {
   assert.ok(even.reason.length > 10);
   assert.equal(aiPlan(me(), me(), 2, 1).tactic, even.tactic, 'deterministic');
 });
+
+test('fight IQ: stat sources split camp from gym, tendencies and the log summary are plain counts', async () => {
+  const { statSources, tendencies, learnedFromLog, learnedLines, opponentKind } = await import('../public/boxing/fightiq.js');
+  const src = statSources({ speed: 58, power: 50, stamina: 47, ringIQ: 52 }, { trained: { speed: { gain: 3, sessions: 2 } } });
+  assert.equal(src.speed.gym, 3); assert.equal(src.speed.camp, 5);
+  assert.match(src.speed.text, /\+5 training camp · \+3 gym \(2 sessions\)/);
+  assert.match(src.stamina.text, /−3 below start/);
+  assert.equal(statSources({ speed: 50, power: 50, stamina: 50, ringIQ: 50 }).power.text, 'Start 50');
+  const t = tendencies({ speed: 80, power: 30, stamina: 50, ringIQ: 50 });
+  assert.match(t.lines[0], /^Fast hands/); assert.match(t.lines[1], /^Light hitter/); assert.match(t.style, /Box outside/);
+  assert.equal(opponentKind({ speed: 38, power: 82, stamina: 55, ringIQ: 42 }), 'puncher');
+  assert.equal(opponentKind(AVG), 'balanced');
+  assert.match(learnedLines(learnedFromLog([]))[0], /No rounds logged/);
+  const sim = fight(7, AVG, { speed: 38, power: 82, stamina: 55, ringIQ: 42 });
+  const rows = sim.rounds.map((r) => buildFightLogRow(r, { mode: 'single', seed: 7, fighters: { red: AVG, blue: { speed: 38, power: 82, stamina: 55, ringIQ: 42 } }, managerCorner: 'red' }));
+  const learned = learnedFromLog(rows);
+  assert.equal(learned.rounds, rows.length);
+  assert.equal(learned.tactics.reduce((n, x) => n + x.rounds, 0), rows.length);
+  assert.equal(learned.kinds[0].kind, 'puncher');
+  assert.ok(learnedLines(learned).some((l) => /Against heavy hitters/.test(l)));
+});
