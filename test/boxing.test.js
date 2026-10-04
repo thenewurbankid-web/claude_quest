@@ -667,3 +667,69 @@ test('fighterSummary and changeLines: plain counts', async () => {
   assert.match(ch[0], /1-0-0 → 2-0-0 \(win added\)/);
   assert.match(ch[2], /Unlocked: Varsity/);
 });
+
+// ─── BOX-17: 2D clip mapping (render-only) ───
+import { CLIPS, ATTACK_CLIP, reactionClip, clipRate, planImpact, ShotDirector, postProfile, timecode } from '../public/boxing/clips2d.js';
+
+test('2D: every punch type has an attack clip, every clip a sane definition, and reactions exist', () => {
+  for (const t of Object.keys(PUNCHES)) assert.ok(CLIPS[ATTACK_CLIP[t]], t);
+  for (const [id, c] of Object.entries(CLIPS)) {
+    assert.ok(c.frames > 0 && c.fps > 0, id);
+    if (c.impact != null) assert.ok(c.impact < c.frames, id);
+  }
+  const recs = [];
+  for (const seed of [3, 11, 21]) {
+    const sim = new CombatSimulation({ seed, rounds: 3, red: fighter('red'), blue: fighter('blue', { speed: 40, power: 80, stamina: 50, ringIQ: 40 }) });
+    sim.on('impact', (r) => recs.push(r));
+    while (sim.phase !== 'fight_over') { sim.startRound({ red: 'pressure', blue: 'body_attack' }); sim.runRoundToEnd(); }
+  }
+  assert.ok(recs.length > 50);
+  const seen = new Set();
+  for (const r of recs) {
+    const plan = planImpact(r), c = reactionClip(r);
+    assert.ok(CLIPS[c] && CLIPS[plan.attacker.clip], c);
+    assert.equal(plan.defender.clip, c);
+    seen.add(c);
+    if (r.outcome === 'slipped') assert.equal(c, 'slip');
+    if (r.outcome === 'blocked') assert.equal(c, 'block');
+    if (r.outcome === 'landed') assert.ok(['hit_head', 'hit_body', 'stagger', 'ko'].includes(c));
+    const rate = clipRate(plan.attacker.clip, r.launchTick, r.arriveTick);
+    assert.ok(rate > 0 && Number.isFinite(rate));
+  }
+  for (const c of ['slip', 'block', 'hit_head']) assert.ok(seen.has(c), c);
+});
+
+test('2D: reactions by energy, KO and punch target; clip rate puts the impact frame on the arrival tick', () => {
+  const base = { outcome: 'landed', target: 'head', energy01: 0.3, knockout: false };
+  assert.equal(reactionClip(base), 'hit_head');
+  assert.equal(reactionClip({ ...base, target: 'body' }), 'hit_body');
+  assert.equal(reactionClip({ ...base, energy01: 0.9 }), 'stagger');
+  assert.equal(reactionClip({ ...base, knockout: true }), 'ko');
+  const c = CLIPS.atk_cross, simSec = 0.25, ticks = Math.round(simSec * 240);
+  assert.ok(Math.abs((c.impact / c.fps) / clipRate('atk_cross', 100, 100 + ticks) - simSec) < 0.01);
+  assert.equal(clipRate('idle_guard', 0, 50), 1);
+});
+
+test('2D: shot director cuts on heavy hits, holds 0.5-1.5 s, returns to medium, rate-limits, always cuts for KO', () => {
+  const d = new ShotDirector();
+  const hit = (e, o = {}) => ({ outcome: 'landed', target: 'head', attacker: 'red', defender: 'blue', type: 'cross', energy01: e, knockout: false, ...o });
+  assert.equal(d.onImpact(hit(0.3), 1000), 'medium');
+  assert.equal(d.onImpact(hit(1.0), 2000), 'close_red');
+  assert.equal(d.update(2400), 'close_red');
+  assert.equal(d.update(3600), 'medium');
+  d.onImpact(hit(0.8, { attacker: 'blue' }), 3700);
+  assert.equal(d.shot, 'medium', 'cooldown');
+  assert.equal(d.onImpact(hit(0.1, { knockout: true }), 3800), 'ko_close');
+  const soft = new ShotDirector(); soft.onImpact(hit(0.61), 0);
+  assert.ok(soft.until >= 500 && soft.until <= 600);
+});
+
+test('2D: looks and post profile: filmic default, camcorder for replay/intro, low-end drops costly passes', () => {
+  assert.equal(postProfile().look, 'filmic');
+  assert.equal(postProfile('nonsense').look, 'filmic');
+  assert.equal(postProfile('filmic', { replay: true }).look, 'camcorder');
+  assert.equal(postProfile('filmic', { intro: true }).stamp, true);
+  const low = postProfile('camcorder', { lowEnd: true });
+  assert.deepEqual([low.bloom, low.grain, low.dof, low.wobble], [0, 0, false, 0]);
+  assert.deepEqual(timecode('1994-07-04', 3, 75400), { date: '1994-07-04', clock: 'R3 01:15' });
+});

@@ -294,9 +294,38 @@ User: the fighters "look weak and crooked" (BOX-14). Before shots showed the Qua
 - **Street moves are blocked on BOX-22** (Sim Dev; the sim has no haymaker, overhand, feint, clinch, shove or taunt yet). Animate them after it lands.
 - Still open in BOX-18: CMU mocap footwork, before/after clip, phone frame time.
 
+## BOX-17 plan: photoreal 2D projection (written 2026-10-04, before any rendering)
+
+Nothing is rendered yet. Built so far: `clips2d.js` (pure, render-only: clip catalogue, `reactionClip`, `clipRate` that lands a clip's impact frame on the sim's arrival tick, `planImpact`, `ShotDirector`, `LOOKS`/`postProfile`, `timecode`) and 4 tests (281 pass). The sim is unchanged; the 3D view stays as the fallback until 2D is better. All sizes below are estimates, not measurements.
+
+**Camera and shots (user: tighter, more close shots).** Few fixed camera setups, each plate and clip set rendered once per angle; every push, shake and whip is a 2D move on the same plate.
+- `medium`: both fighters knees-up filling the phone portrait frame, heads about 1/6 from the top, court and crowd soft behind. The readable default. `push` is a 1.18x 2D punch-in on it for hits.
+- Close angles (own renders): `close_red` / `close_blue` over-the-shoulder past the defender (85 mm look), `ko_close`, `replay_close`. 3 close angles plus medium = 4 setups; replays reuse `replay_close` with the camcorder look.
+- Edit rhythm (`ShotDirector`): cut on a heavy hit (energy01 >= 0.6) to the attacker's side, hold 0.5-1.5 s by hit strength, 2 s cooldown, then back to medium; a KO always cuts to `ko_close` (2.4 s, slow-mo 0.9 s, dutch).
+- Close-up library (inserts, 0.5-1.5 s, mostly pre-bell and finishers; picked by impact per KB): face/eyes before the bell, gloves tapping, jab in the face, body-shot impact, sweat spray, feet on canvas, corner and trainer, ref's count, slow-mo KO. Techniques: rack focus, speed ramp into impact, whip-pan cut, match cut between exchanges, foreground occlusion (ropes/gloves), slight handheld drift, all 2D post except the rack focus (two depth-layer blends).
+
+**Fighters.** Rendered in Blender/Cycles from the straightened MPFB person, same HDRI and key as the baked court (day and night). Motion blur baked into fast clips (Cycles, 180 deg shutter). Alpha film with soft AA edges plus a separate contact-shadow pass. Clips (`CLIPS` in `clips2d.js`): idle guard, step in/out, jab, cross, hook, uppercut, body, block, slip, hit head/body, stagger, knockdown, get up, KO, celebrate; red faces right, blue is the mirrored render, so one render serves both corners.
+- **Looks: a curated outfit set plus a runtime mask recolour.** Each frame ships as colour RGBA plus a small mask (R top, G bottoms, B shoes/wraps) that a shader recolours; skin tone is 3 pre-rendered sets later (the prototype ships one). Full per-garment layer passes cost 6x and aren't worth it on a phone. Cap, chain and wraps are baked.
+- Size per angle, 384x512 px WebP frames at ~18 KB colour + ~5 KB mask: about 224 frames x 23 KB = ~5 MB for medium; close angles at 768x1024 for ~8 clips = ~3 MB each. First load target (under 15 MB): medium core clips (idle, 5 punches, block, slip, hit x2, ko = ~3 MB) + day plate + crowd far layer; the rest streams.
+
+**Scene (user: everything photoreal, "leaves, every single thing").** `scripts/bake-court.py` is rebuilt in Blender with CC0 PBR textures (Poly Haven, ambientCG) at real-world scale, weathering, grime, cracks, puddles, decals; a photoreal street car, real foliage with translucent leaves, grass through cracks, HDRI sky and clouds, power lines, litter, ring ropes and canvas, original spray-paint graffiti (no real artists or brands). Output: day and night plates per angle with a depth pass for the DoF, ~300-450 KB each as WebP. Ambient motion (leaves, flags, lamp flicker) as short looping layers. **Gate before calling it done: `qa/scene-inventory.md`, every object with its source and licence, each marked photoreal; nothing stylized left.** All sources in `models/CREDITS.md`. Before/after renders posted on the issue.
+
+**Crowd (user: small animations only; real stock footage where it beats a render).** Kept in the soft out-of-focus background of every shot, three layers (near: cropped by the frame edge and blurred; mid; far), faces small, turned or occluded by ropes, fence and fighters, so no lip sync. Each layer is a few short seamless loops (2-4 s, 12-15 fps) with random start offsets so they never sync, plus 1 s reaction loops (`cheer`, `wince`, `jump`, from `planImpact().crowd`) played on a few people at a time. Format, smallest per layer at equal quality: sprite-sheet WebP atlas on a canvas (best for reaction sync), animated WebP for far/mid groups, WebM VP9 alpha (HEVC-alpha .mov for iOS Safari) only for near layers; never .gif. Budget a few hundred KB per layer, ~1.5 MB for the crowd.
+- **Footage vs render**: crowd, street plate ambience (flicker, steam, rain, smoke, traffic glimpses) come from real stock video where a clip fits (Pexels, Pixabay, Mixkit, CC0; no logos, celebrities, watermarks, editorial-only; each clip's URL and licence in `models/CREDITS.md`; originals stay out of git, only processed loops are committed). Fighters, the car and props are renders unless footage fits. Grain, grade, blur and camera height are matched so the two read as one camera. The HANDOFF will list each element as footage or render with its size once built.
+
+**Finish (all a cheap 2D post-pass, toggleable, 60 fps; `postProfile`).**
+- Clean filmic (default): LUT grade, light grain, subtle vignette, gentle bloom on highlights, DoF from the depth pass, crossfades between clips with matched boundary poses (every clip starts and ends in the idle guard pose), impact accents (radial/directional blur, slight chromatic aberration, shake, slow-mo with blur trails on knockdowns).
+- Camcorder (setting: Clean filmic / Camcorder; also forced for replays and intro/walk-out): soft image, chroma bleed, scanlines, tape noise, rare tracking wobble, warm washed grade, rounded vignette, REC dot and a date plus round-clock stamp (`timecode`), stronger glitch/roll on knockdowns and between rounds.
+- `lowEnd` drops bloom, DoF, grain, chroma and wobble and keeps the grade. Detecting low-end (frame-time probe over the first 2 s) is not built.
+
+**Pipeline and build order.** `scripts/render-fighters.py` (Blender, headless, poses `person.glb` with the existing `anims.glb` clips straightened as in `boxer-model.js`) then `scripts/pack-sprites.mjs` (sharp: crop, WebP, atlas JSON, mask pass) then `arena-2d.js` (canvas compositor: plate, depth-sorted fighters, shadows, crowd layers, post-pass, driven by `clips2d.js`). Slices, each shipped when green: (1) this plan + mapping (done); (2) render the medium angle, day, 6-8 actions for one round and the 2D arena behind a View option ("2D photoreal (beta)") with the 3D view as default; (3) post-pass and looks; (4) close angles and shot director live; (5) crowd loops; (6) scene rebuild and the inventory gate; (7) the full clip set and night.
+**Tooling gaps found**: `ffmpeg` and `cwebp` are not installed (sharp can write animated WebP, but WebM VP9-alpha and HEVC-alpha need ffmpeg, and stock footage needs it for keying and loops). Installing it (`brew install ffmpeg`) changes the machine, so I'm asking before doing it.
+
 ## Next jobs
 
-0. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
+0. **BOX-17 slice 2**: render the medium-angle fighter clips and the compositor (needs ffmpeg for footage later, not for this slice).
+
+0b. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
 
 1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
 
