@@ -177,3 +177,20 @@ No. It throws about a third of the punches outbox does and still lands 0.66 of t
 
 ### Untested
 Browser; other stat mixes; sanctioned ruleset. Not changed: `defendMs` doc comment (wrong sign wording).
+
+## BOX-37: recover no longer wins by countering (2026-10-04)
+`physics-engine.js` only: `TACTICS.recover.counter` 0.5 -> 0.03. 335 tests pass (no pin changes). Deterministic.
+
+### Why recover won (.03 -> .37)
+Not gas, composure, scoring or the divisor. `counter` is rolled **every tick** while a counter window is open (`rng() < t.counter`, ~16-40 ticks), so any value >= ~0.1 is a near-certain counter, and 0.5 vs 0.3 vs 0.15 behave the same (recover .37/.36/.35). Recover stands at 1.45 m, slips, and counters every slip with a short wind-up: outbox v recover recover landed 38.5 at .66 vs outbox 10.5 at .12, and recover beat outbox 100 % and counter 85 %. `counter: 0` kills it (.07), gasRegen 1.0-1.7, aggression 0.4, shell rate and counter 0.3 did nothing or too little; rangeM 1.3 raised it (.47).
+Side effect to know: every tactic's `counter` value is effectively binary (brawl 0.1, pressure 0.2 included). Making it a once-per-window roll would be a sim change for the user to decide.
+
+### Numbers (3 x 35 s, stats 50, n=120/pair, mean win share; KO overall)
+| | pressure | outbox | counter | body_attack | recover | brawl | dirty | KO |
+|---|---|---|---|---|---|---|---|---|
+| before | .69 | .41 | .53 | .41 | .37 | .45 | .66 | .18 |
+| after | .69 | .41 | .58 | .42 | .28 | .46 | .66 | .17 |
+Tried at n=60: counter 0.02 -> recover .24, 0.05 -> .31, 0.1 -> .35. Counter-punch gained the share recover lost (.53 -> .58, in band).
+
+### Not done / untested
+Not pushed or synced (agent rules forbid pushing; branch `worktree-boxing-balance` holds the commit). Browser untested (no rendering change). Other stat mixes, sanctioned ruleset untested.
