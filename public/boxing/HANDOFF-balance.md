@@ -72,3 +72,29 @@ Tests (`npm test`: 105 pass, was 101): impact events carry contact/energy/knocko
 Not covered here (Boxing Dev, after BOX-14): all rendering of contact, reactions, falls and footwork; "contact timing matches sim events within a frame" can only be tested once the renderer reads `contact`. Untested in the browser: nothing was changed in rendering. Open question for the visual side: the sim has no get-up and no knockdown short of KO, so "get up or stay down" would need a sim design decision (user's call).
 
 - 2026-10-04 (BOX-15, user): fights move to photoreal 2D projection. The sim-side events (contact point and region, `energy01`, `knockout`, ring bounds, body distance) stay and now drive which rendered clip plays and when. The 3D visual items (contact, reactions, falls, footwork, fatigue) become clip selection and timing in the 2D renderer, owned by Boxing Dev under a new issue. Suggested mapping for that renderer: `contact.region` picks the clip family (head / body / guard / air), `energy01` picks light vs heavy, `contact.dir*` picks the facing, `knockout` picks the fall, and `arriveTick` is the timing anchor.
+
+## BOX-22: street-fight moveset in the sim (2026-10-04)
+Commit ff459d4 on `worktree-boxing-balance`. Files: `physics-engine.js`, `scripts/boxing-balance.mjs`, `test/boxing.test.js` (122 pass, was 105). All deterministic (same rng, +-*/ and sqrt only); no rendering touched.
+
+### What exists
+- **Strikes** (`PUNCHES`): haymaker, overhand, hook_body, shovel, short_upper, check_hook (counter-only, thrown off a slip), cheap_shot (only after a clinch break, foul, x1.5 damage). `double_jab` and `flurry` (2-4 chained punches) are weight keys, not PUNCHES entries.
+- **Dirty boxing / defence / movement** as `action` events: circle_off, shove, clinch, forearm_frame, push_off (street, then a queued punch), ref_break (sanctioned), shell, pivot, feint (type shoulder|step), taunt, foul. Slip, roll, pull_back, parry, block and shell are the `defense` label on impacts.
+- **Rulesets** (`RULESETS`, constructor option `ruleset`, default `street`, unknown names fall back to street): street = 1.4 s clinch, shoves and full cheap shots, no ref; sanctioned = 0.7 s clinch ended by the ref, no shoves, cheap shots x0.25 as often, each foul costs 1 card point (`summarizeRound.fouls`).
+- **Tactics**: new `brawl` and `dirty_boxing`; the four old tactics got move rates, `defendMs` and per-style counter weights.
+- **Composure**: taunt drains it, the victim reads slower; taunter is exposed (+45 ms window). Feints widen the next punch's window (less for high Ring IQ). Shell halves landed damage.
+
+### Event contract (for BOX-17 / BOX-18)
+- `impact` (unchanged shape) gains `move`, `hand` (lead|rear), `combo {id,index,length}` (id unique per fight), `defense`, `foul`. `type` stays the legacy family (jab/cross/hook/uppercut/body) so `PUNCH_CLIP[type]` and `HAND` keep working; use `move`+`hand` for the specific clip.
+- `action`: `{kind, type, corner, against, hand (lead|rear|both), target, energy01, dir, contact:{region,x,y,heightM,dirX,dirY}, round, tick, startTick, endTick}` plus `points` on foul. Tick resets each round.
+- `snapshot()` adds `ruleset` and per fighter `composure`, `action`, `clinch`, `shell`.
+
+### Numbers
+- `damageDivisorFor(roundSeconds)`: linear 54 at <=35 s to 475 at 180 s (replaces `DAMAGE_DIVISOR`). 35 s x 3 rounds: overall KO rate 0.16 (band 0.10-0.25), mean win share pressure .67, outbox .59, counter .56, body_attack .55, dirty_boxing .61, brawl .39, recover .05 (n=20). Old 180 s x 6 default (n=10): KO 0.25, counter .75, dirty .70, brawl .18, pressure .37.
+- Pairwise results are still rock-paper-scissors with extremes (reaction-window model makes close range decisive). Recover almost never wins. Check hook is rare (about 0.04 a fight), cheap shot about 0.3 a fight.
+- Pin test re-pinned (seed 11) since the sim changed; it now also mutates `action` events to prove they are read-only.
+- Batch: `node scripts/boxing-balance.mjs --n 40 --rounds 3 --seconds 35 --moves [--ruleset sanctioned] [--set a.b.c=v]`.
+
+### Open / for others
+- `index.html` has no venue concept and builds the sim without `ruleset` or `roundSeconds`; both peers must send and use the same `ruleset` in the P2P `start` message (normalize it against `RULESETS`). Default is street.
+- Untested: anything in the browser (no renderer reads `action` events or `move` yet), other stat mixes, per-round tactic changes, `--ruleset sanctioned` balance (only unit-tested).
+- Tactic rebalance beyond the KO band and 0.37-0.66 mean shares is not attempted; user call if pairwise extremes matter.
