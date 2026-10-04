@@ -324,7 +324,7 @@ test('pressure crowds a defender, but not one who is also on pressure', () => {
 });
 
 // ─── Game flow (flow.js): screens, progression, unlocks, scorecards, corner tips, settings ───
-import { SCREENS, navigate, eventsFrom, statCost, REWARDS, outcomeOf, UNLOCKS, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, emptyDamage, recordDamage, zoneOf, zoneHeat, DAMAGE_ZONES, cornerTip, normalizeSettings, DEFAULT_SETTINGS } from '../public/boxing/flow.js';
+import { SCREENS, navigate, eventsFrom, statCost, REWARDS, outcomeOf, UNLOCKS, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, emptyDamage, recordDamage, zoneOf, zoneHeat, DAMAGE_ZONES, cornerTip, normalizeSettings, DEFAULT_SETTINGS } from '../public/boxing/flow.js';
 
 test('screen flow: Title to Fighter to Opponent to Fight to Result and back', () => {
   let s = 'title';
@@ -578,4 +578,17 @@ test('damage by zone adds up the sim impacts per defender', () => {
   assert.equal(zoneOf({ outcome: 'slipped', target: 'head' }), null);
   assert.equal(zoneHeat(0), 0);
   assert.ok(zoneHeat(0.1) >= 0.25 && zoneHeat(500) === 1);
+});
+
+test('punch breakdown by type and round matches the round totals', () => {
+  const sim = fight(11);
+  const b = punchBreakdown(sim.rounds);
+  assert.equal(b.perRound.length, sim.rounds.length);
+  for (const c of ['red', 'blue']) {
+    const thrown = PUNCH_TYPES.reduce((s, t) => s + b.byType[c][t].thrown, 0);
+    const landed = PUNCH_TYPES.reduce((s, t) => s + b.byType[c][t].landed, 0);
+    assert.equal(thrown, fightStats(sim.rounds)[c].thrown);
+    assert.equal(landed, fightStats(sim.rounds)[c].landed);
+    assert.equal(b.perRound.reduce((s, r) => s + r[c].landed, 0), landed);
+  }
 });
