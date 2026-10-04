@@ -4,6 +4,12 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): bell waits for the scene (BOX-8)
+
+- BOX-8's three items were written for the pre-BOX-13 screen. The "Start round" button before a fight and the "Pick a mode on the right" copy no longer exist (the fight now always starts from the corner panel). The surviving bug was item 2: the corner's **Ring the bell** was live while the 3D or 2D photoreal scene was still loading behind the card. Now `startMatch` sets `state.arenaPending` for the 3d and photo2d views; `awaitCorner` shows a disabled "Setting up the fight…" button until `createArena3D`/`createArena2D` settle (success or failure), then `sceneReady()` enables it. 2D top-down and headless are unaffected. Loading spinner is white (was the old red accent).
+- Files: `index.html`, `arena-babylon.js`. `npm test` 335 pass; `scripts/demo-e2e.mjs` (375 px, day and night, full fight to result) passes with no console errors.
+- **Untested**: the disabled state by eye (the e2e click auto-waits, so it proves the bell becomes enabled, not the label's look), the P2P path with a slow scene.
+
 ## Done (2026-10-04): swag for the 3D fighters (BOX-28 follow-up)
 
 - **`swag.js`** (new, pure maths, render-only): `STYLES` per sim tactic (pressure and body attack crouch low and lean in; outbox rises on its toes with a looser, lower, wider lead hand; counter gets a Philly-shell lean back; brawl is square with rolling shoulders and chin up; dirty boxing leans close), blended slowly when the corner changes tactic. `Swag` (seeded per fighter) holds the beats and a lopsided guard (one hand a bit lower and wider, constant per fighter).

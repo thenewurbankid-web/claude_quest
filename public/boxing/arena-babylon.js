@@ -1320,7 +1320,7 @@ function makeOverlay(parent) {
       .bm3d-loading { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
         background:#0c0f16; font: 600 13px/1.4 system-ui; letter-spacing:.12em; text-transform:uppercase; transition: opacity .4s; text-align:center; padding:0 16px; }
       .bm3d-loading.off { opacity:0; }
-      .bm3d-loading i { width:30px; height:30px; border:3px solid rgba(255,255,255,.2); border-top-color:#e5484d; border-radius:50%; animation: bm3dspin .8s linear infinite; }
+      .bm3d-loading i { width:30px; height:30px; border:3px solid rgba(255,255,255,.2); border-top-color:#fff; border-radius:50%; animation: bm3dspin .8s linear infinite; }
       .bm3d-loading small { font-weight:400; letter-spacing:.06em; text-transform:none; opacity:.6; }
       @keyframes bm3dspin { to { transform:rotate(360deg); } }
     </style>

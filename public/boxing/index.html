@@ -1064,6 +1064,7 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner, career =
     blue: new FighterModel({ corner: 'blue', name: blue.name, stats: blue.stats }),
   });
   state.sim = sim;
+  state.arenaPending = ['3d', 'photo2d'].includes($('view').value);   // the bell waits for the scene (night shaders take a while)
   state.match = { mode, seed, matchId, myCorner, career, fighters: { red: red.stats, blue: blue.stats }, names: { red: red.name, blue: blue.name } };
   state.corners = {};           // corner calls received for the next round (P2P)
   state.result = null;
@@ -1085,11 +1086,13 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner, career =
     createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name }, looks: { red: red.look, blue: blue.look },
       physiques: { red: physiqueOf(red.stats), blue: physiqueOf(blue.stats) }, sanctioned: isSanctioned(career), timeOfDay: state.settings.time })
       .then((arena) => { if (state.sim === sim) state.arena = arena; else arena.destroy(); })
-      .catch((err) => { toast(`3D view failed to load: ${err.message}`); console.warn(err); });
+      .catch((err) => { toast(`3D view failed to load: ${err.message}`); console.warn(err); })
+      .finally(() => sceneReady(sim));
   } else if (view === 'photo2d') {
     createArena2D({ parent: $('ring'), sim, timeOfDay: state.settings.time })
       .then((arena) => { if (state.sim === sim) state.arena = arena; else arena.destroy(); })
-      .catch((err) => { toast(`2D photoreal view failed to load: ${err.message}`); console.warn(err); });
+      .catch((err) => { toast(`2D photoreal view failed to load: ${err.message}`); console.warn(err); })
+      .finally(() => sceneReady(sim));
   }
 
   $('red-name').textContent = red.name;
@@ -1101,6 +1104,14 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner, career =
   $('tactic-chip').textContent = '';
   $('speed-btn').textContent = `${speedValue() === 1 && $('speed-override').value === 'instant' ? '∞' : speedValue()}×`;
   awaitCorner();
+}
+
+function bellLabel() { return state.sim?.roundIndex === 0 ? 'Ring the bell' : 'Next round'; }
+function sceneReady(sim) {
+  if (state.sim !== sim) return;
+  state.arenaPending = false;
+  const b = $('start-round');
+  if (b.dataset.wait) { delete b.dataset.wait; b.disabled = false; b.textContent = bellLabel(); }
 }
 
 function stopMatch() {
@@ -1127,8 +1138,10 @@ async function awaitCorner() {
   $('c-title').textContent = `Round ${sim.roundIndex + 1} of ${sim.totalRounds}`;
   $('c-last').textContent = last ? `Round ${last.round_index}: you ${last.cards[mine]}, ${m.names[theirs]} ${last.cards[theirs]}` : 'Pick a plan and ring the bell.';
   $('c-tip').textContent = `Coach: ${tip}`;
-  $('start-round').disabled = false;
-  $('start-round').textContent = sim.roundIndex === 0 ? 'Ring the bell' : 'Next round';
+  const wait = state.arenaPending;
+  $('start-round').disabled = wait;
+  $('start-round').textContent = wait ? 'Setting up the fight…' : bellLabel();
+  if (wait) $('start-round').dataset.wait = '1'; else delete $('start-round').dataset.wait;
   setStatus($('corner-status'), m.mode === 'p2p' ? 'The round starts when both corners have called.' : '');
   renderTactics(tactic);
   state.cornerNote = null;
