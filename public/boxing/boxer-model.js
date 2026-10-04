@@ -8,7 +8,7 @@
  * body shot), since the free clips have no boxing guard, uppercut or body shot.
  */
 import { v, add, sub, mul, dot, len, norm, clamp, solveTwoBone } from './pose-math.js';
-import { Footwork } from './footwork.js';
+import { Footwork, Smoother, Drift, Spring } from './footwork.js';
 
 const LOADER_SRC = 'https://cdn.jsdelivr.net/npm/babylonjs-loaders@7.54.3/babylon.glTF2FileLoader.min.js';
 let loaderPromise = null;
@@ -187,6 +187,13 @@ export class ModelRig {
     this.lift = -(ballY() + sole);
   }
 
+  /** Lowers the whole body by `dy` m (the clips have already been applied). */
+  drop(dy) {
+    this.holder.position.y -= dy;
+    this.root.computeWorldMatrix(true);
+    for (const n of Object.values(this.bones)) n.computeWorldMatrix(true);
+  }
+
   /** World position of a bone as {x,y,z}. */
   pos(name) { const p = this.bones[name].getAbsolutePosition(); return v(p.x, p.y, p.z); }
 
@@ -200,11 +207,16 @@ export class ModelRig {
     const s = node.getAbsolutePosition(), c = child.getAbsolutePosition();
     const d0 = c.subtract(s).normalize(), d1 = new B.Vector3(target.x - s.x, target.y - s.y, target.z - s.z).normalize();
     if (B.Vector3.Dot(d0, d1) > 0.99999) return;
-    const delta = new B.Matrix();
     const dq = new B.Quaternion();
     B.Quaternion.FromUnitVectorsToRef(d0, d1, dq);
+    this.turn(node, dq);
+  }
+
+  /** Turns `node` by the world-space rotation `dq` about its own position, keeping its local translation and scale. */
+  turn(node, dq) {
+    const B = this.B, delta = new B.Matrix();
     B.Matrix.FromQuaternionToRef(dq, delta);
-    // world' = world · delta (row vectors). local' = world' · parentWorld⁻¹. Keep the local translation and scale.
+    // world' = world · delta (row vectors). local' = world' · parentWorld⁻¹.
     const world = node.getWorldMatrix().clone();
     const t = world.getTranslation();
     world.setTranslationFromFloats(0, 0, 0);
@@ -219,19 +231,27 @@ export class ModelRig {
     for (const n of node.getDescendants(false)) n.computeWorldMatrix?.(true);
   }
 
+  /** Twists `name` about the line toward `childName` by `angle` rad (right-handed about that line). */
+  twist(name, childName, angle) {
+    const B = this.B, a = this.pos(name), c = this.pos(childName), d = norm(sub(c, a));
+    this.turn(this.bones[name], B.Quaternion.RotationAxis(new B.Vector3(d.x, d.y, d.z), angle));
+  }
+
   /**
    * The clips' torsos are hunched (the jab frame bends the upper spine ~30 deg forward over a back-leaning lower spine).
    * Turns each spine/neck segment toward an upright boxer's lean (`lean` rad forward from vertical, per segment) by
    * `w`, keeping each segment's own twist, so the guard and the punches stand straight. `f` is the boxer's forward.
    */
-  straighten(f, w = 1, lean = SPINE_LEAN) {
+  straighten(f, w = 1, lean = SPINE_LEAN, loose = null) {
     if (w <= 0) return;
     const chain = ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head'];
     for (let i = 0; i < chain.length - 1; i++) {
       const a = chain[i], b = chain[i + 1];
       if (!this.bones[a] || !this.bones[b]) continue;
       const s = this.pos(a), c = this.pos(b), d = sub(c, s), l = len(d);
-      const want = norm(add(mul(UPV, Math.cos(lean[i])), mul(f, Math.sin(lean[i]))));
+      let want = norm(add(mul(UPV, Math.cos(lean[i])), mul(f, Math.sin(lean[i]))));
+      // Loose torso: slow side lean and fore-aft rock per segment (rad), each lagging the one below it.
+      if (loose) want = norm(add(want, add(mul(f, loose.fore[i] ?? 0), mul(v(f.z, 0, -f.x), loose.side[i] ?? 0))));
       const dir = norm(add(mul(norm(d), 1 - w), mul(want, w)));
       this.aim(a, b, add(s, mul(dir, l)));
     }
@@ -609,11 +629,20 @@ export class ModelBoxer {
   }
 
   /** Locks planted feet to their world points with leg IK; `footSlip` is how far each planted ankle moved this frame. */
-  plantFeet(body, f, me, w, dt, pivot = null) {
+  plantFeet(body, f, me, w, dt, pivot = null, still = 0) {
     const rig = this.rig, r = v(f.z, 0, -f.x);
-    const st = this.fw.update({ x: body.x, z: body.z }, { x: f.x, z: f.z }, { x: me.vx, z: me.vy }, dt);
+    const st = this.fw.update({ x: body.x, z: body.z }, { x: f.x, z: f.z }, { x: me.vx, z: me.vy }, dt, { still });
     this.fwStepping = !st.l.planted || !st.r.planted;
     this.footSlip = { l: 0, r: 0 };
+    // Feet hold longer than the stance has slack for, so when the hips drift from them the knees bend (the hips sink) until
+    // both legs reach: the body absorbs the drift instead of a foot slipping or stepping early.
+    let need = 0;
+    for (const [s, side] of [['l', -1], ['r', 1]]) {
+      const L = LEG[side], hip = rig.pos(L.upper), R = len(sub(hip, rig.pos(L.lower))) + len(sub(rig.pos(L.lower), rig.pos(L.foot)));
+      const F = st[s], dh = Math.hypot(hip.x - F.x, hip.z - F.z), up = hip.y - (this.fwAnkleY[s] + F.lift);
+      need = Math.max(need, up - Math.sqrt(Math.max(0, (0.96 * R) ** 2 - dh * dh)));
+    }
+    if (need > 0) rig.drop(Math.min(0.22, need));
     for (const [s, side] of [['l', -1], ['r', 1]]) {
       const F = st[s], yaw = F.yaw + (pivot && pivot.foot === s ? pivot.yaw : 0), ff = v(Math.sin(yaw), 0, Math.cos(yaw)), fr = v(ff.z, 0, -ff.x), t = this.fwToes[s];
       const ankle = v(F.x, this.fwAnkleY[s] + F.lift, F.z);
@@ -636,10 +665,16 @@ export class ModelBoxer {
 
   pose(me, opp, tick, now, dt, time) {
     const B = this.B, rig = this.rig;
-    const root = v(me.x, 0, me.y), oppRoot = v(opp.x, 0, opp.y);
-    const f = norm(v(opp.x - me.x, 0, opp.y - me.y));
+    // The sim's position is a bang-bang controller's output (it flips between radial and lateral every few ticks), so
+    // nothing the body or feet do reads it raw: a critically damped low-pass, lag taken back out, drives them.
+    const sm = (this.sm ??= new Smoother(12)).update({ x: me.x, z: me.y }, dt), mv = this.sm.v;
+    const osm = (this.osm ??= new Smoother(12)).update({ x: opp.x, z: opp.y }, dt);
+    const root = v(sm.x, 0, sm.z), oppRoot = v(osm.x, 0, osm.z);
+    const f = norm(v(osm.x - sm.x, 0, osm.z - sm.z));
     const r = v(f.z, 0, -f.x);
-    const gap = Math.hypot(opp.x - me.x, opp.y - me.y);
+    const gap = Math.hypot(osm.x - sm.x, osm.z - sm.z);
+    const drift = (this.drift ??= new Drift(this.corner === 'red' ? 7 : 19));
+    const D = (name, rate, lag = 0) => drift.at(name, time - lag, rate);
     const tired = 1 - me.gasRatio;
     const nowS = performance.now() / 1000;
 
@@ -670,7 +705,7 @@ export class ModelBoxer {
 
     // ── clip layers ──
     const layers = [{ ...STANCE, w: 1 }];
-    const speed = Math.hypot(me.vx, me.vy);
+    const speed = Math.hypot(mv.x, mv.z);
     let lunge = 0;
     const pc = punch && PUNCH_CLIP[punch.type];
     if (pc) {
@@ -711,23 +746,45 @@ export class ModelBoxer {
     const pe = pc ? (punch.back > 0 ? 1 - punch.back : smooth(punch.k)) : 0;
     const pivot = pc && pc.as !== 'jab' ? { foot: pc.side > 0 ? 'r' : 'l', yaw: -pc.side * 0.7 * (pc.big ?? 1) * pe } : null;
     const rock = pc ? mul(r, -0.012 * pe * (pc.side > 0 ? 1 : -1)) : v(0, 0, 0);
-    // Street looseness: the upper body sways and the guard bobs, wider as the boxer tires.
-    const loose = 1 + 1.5 * tired, calm = 1 - clamp(speed / 1.2, 0, 1);
-    const sway = add(mul(r, 0.016 * loose * calm * Math.sin(time * 2.1)), mul(f, 0.01 * loose * calm * Math.sin(time * 1.6 + 1)));
-    // On the balls of the feet: a small bounce in the guard, a dip as each step lands. Render-only.
-    const bob = -KNEE_BEND + (1 - clamp(speed / 1.2, 0, 1)) * 0.011 * Math.sin(time * 15) * (1 - 0.6 * tired) + (this.fwStepping ? -0.012 : 0)
+    // Loose and alive, never twitchy: everything below is a slow, wide curve (under ~2 Hz). The hips lead, and each
+    // segment above them lags the one below, so the shoulders and head follow and the gloves trail.
+    const idle = 1 - clamp(pe * 1.4 + aw.shell + aw.clinch, 0, 1);
+    const loose = 1 + 1.2 * tired, calm = 1 - 0.6 * clamp(speed / 1.2, 0, 1);
+    const sway = add(mul(r, 0.022 * loose * calm * D('sx', 1.4)), mul(f, 0.014 * loose * calm * D('sf', 1.1)));
+    // Weight transfer: onto the back foot while loading a punch or defending, onto the front foot as it lands, then an
+    // overshoot back to guard from the spring.
+    const k0 = punch ? (punch.back > 0 ? 1 : punch.k) : 0, antic = pc && k0 < 0.5 ? Math.sin(Math.PI * k0 / 0.5) : 0;
+    this.shift ??= new Spring(0);
+    const shiftNow = this.shift.update(0.035 * pe * (pc?.big ?? 1) - 0.02 * antic - 0.03 * guardUp - 0.025 * slip, dt, 18, 0.5);
+    // Soft knees: the hips rise and fall with a slow bounce (~1.7 Hz) and dip as a step lands (eased, not toggled).
+    this.dip ??= new Spring(0);
+    const dip = this.dip.update(this.fwStepping ? 1 : 0, dt, 12, 1);
+    const bob = -KNEE_BEND - 0.012 * dip + (0.011 * Math.sin(time * 10.7 + (this.corner === 'red' ? 0 : 2.1)) + 0.007 * D('by', 0.8)) * calm * idle * (1 - 0.5 * tired)
       - (pc?.as === 'body' ? 0.05 * pe : 0) - 0.05 * aw.shell - 0.02 * aw.taunt;
     // Start/stop/turn: the body leans into a change of velocity (smoothed acceleration), so a start drives forward and a stop rocks back.
-    const lv = this.lastVel ?? { x: me.vx, z: me.vy };
-    const k = 1 - Math.exp(-dt * 8), ax = (me.vx - lv.x) / Math.max(dt, 1e-3), az = (me.vy - lv.z) / Math.max(dt, 1e-3);
-    this.lastVel = { x: lv.x + (me.vx - lv.x) * k, z: lv.z + (me.vy - lv.z) * k };
+    const lv = this.lastVel ?? { x: mv.x, z: mv.z };
+    const k = 1 - Math.exp(-dt * 8), ax = (mv.x - lv.x) / Math.max(dt, 1e-3), az = (mv.z - lv.z) / Math.max(dt, 1e-3);
+    this.lastVel = { x: lv.x + (mv.x - lv.x) * k, z: lv.z + (mv.z - lv.z) * k };
     const acc = this.accLean ?? { x: 0, z: 0 };
     acc.x += (clamp(ax, -6, 6) - acc.x) * k; acc.z += (clamp(az, -6, 6) - acc.z) * k; this.accLean = acc;
     const leanOff = v(clamp(acc.x * 0.006, -0.03, 0.03), 0, clamp(acc.z * 0.006, -0.03, 0.03));
-    rig.place(add(add(add(add(body, rock), sway), leanOff), v(0, bob, 0)), f);
+    rig.place(add(add(add(add(add(body, rock), sway), leanOff), mul(f, shiftNow)), v(0, bob, 0)), f);
     rig.applyLayers(layers);
-    rig.straighten(f, STRAIGHT * (1 - 0.7 * koW));
-    this.plantFeet(body, f, me, 1 - (this.fall > 0 || this.knocked ? 1 : 0), dt, pivot);
+    // Torso: slow roll and rock per segment (each lagging the one below), the chin tucked, then shoulders rolling and the
+    // hips leading the punch twist with the shoulders a beat behind.
+    const L = idle * loose * (1 - 0.7 * koW), lag = (i) => 0.17 * i;
+    const torso = {
+      side: [0.012, 0.022, 0.03, 0.034, 0.04].map((a, i) => a * L * D('roll', 1.1, lag(i))),
+      fore: [0.01, 0.015, 0.02, 0.025, 0.03].map((a, i) => a * L * D('rock', 0.9, lag(i))).map((x, i) => x + (i === 4 ? 0.07 : i === 3 ? 0.03 : 0) * (1 - koW)),
+    };
+    rig.straighten(f, STRAIGHT * (1 - 0.7 * koW), SPINE_LEAN, torso);
+    this.shSpring ??= new Spring(0);
+    const pSh = this.shSpring.update(pe, dt, 14, 0.7);
+    const side = pc ? pc.side : 0;
+    const roll = 0.1 * L * D('twist', 1.0, 0.3) + 0.07 * L * D('shoulder', 1.6, 0.5);
+    rig.twist('pelvis', 'spine_01', -side * 0.2 * pe * (pc?.big ?? 1));
+    rig.twist('spine_02', 'spine_03', roll - side * 0.22 * pSh * (pc?.big ?? 1));
+    this.plantFeet(body, f, { vx: mv.x, vy: mv.z }, 1 - (this.fall > 0 || this.knocked ? 1 : 0), dt, pivot, pc ? 1 : Math.max(aw.shell, aw.clinch, aw.taunt));
 
     // ── arm IK on top of the clips ──
     const ikW = 1 - koW;
@@ -737,11 +794,14 @@ export class ModelBoxer {
       const pole = (side) => add(add(mul(UPV, -1), mul(r, side * 0.5)), mul(f, -0.2));
       for (const side of [-1, 1]) {
         const g = GUARD[side];
-        const guard = local({
-          x: g.x * (1 - 0.5 * guardUp) + slipSide * slip * 0.14,
-          y: g.y + 0.06 * guardUp - 0.12 * tired,
-          z: (g.z - 0.06 * guardUp) * (0.55 + 0.45 * clamp((gap - 0.55) / 0.5, 0, 1)),
+        const gl = local({
+          x: g.x * (1 - 0.5 * guardUp) + slipSide * slip * 0.14 + 0.014 * L * D('gx' + side, 1.5, 0.35),
+          y: g.y + 0.06 * guardUp - 0.12 * tired + 0.014 * L * D('gy' + side, 1.9, 0.35),
+          z: (g.z - 0.06 * guardUp) * (0.55 + 0.45 * clamp((gap - 0.55) / 0.5, 0, 1)) + 0.012 * L * D('gz' + side, 1.3, 0.35),
         });
+        // The gloves trail the head a little and overshoot when they come back to guard.
+        const gs = (this.gSpring ??= {})[side] ??= [new Spring(gl.x), new Spring(gl.y), new Spring(gl.z)];
+        const guard = v(gs[0].update(gl.x, dt, 15, 0.65), gs[1].update(gl.y, dt, 15, 0.65), gs[2].update(gl.z, dt, 15, 0.65));
         let target = guard, w = (1 - 0.6 * hitW) * ikW;
         if (!pc) {
           const chest = add(add(oppRoot, mul(UPV, 1.3)), mul(f, -0.2));

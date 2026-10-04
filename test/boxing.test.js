@@ -319,8 +319,9 @@ test('planted feet do not slip at walk, shuffle and pivot speeds, and the feet d
   // [speed m/s, direction angle, turn rate rad/s] over 3 s each: forward walk, fast shuffle, side step, pivot around the opponent.
   for (const [speed, dir, turn] of [[0.6, 0, 0], [1.2, 0, 0], [1.8, Math.PI / 2, 0], [0.9, Math.PI / 2, 1.2], [0, 0, 0]]) {
     const before = boxer.fw?.steps ?? 0;
-    let x = 0, y = 0, a = 0, worst = 0;
+    let x = 0, y = 0, a = 0, worst = 0, late = 0;
     for (let i = 0; i < 180; i++) {
+      if (i === 90) late = boxer.fw.steps;
       a += turn * dt;
       const vx = Math.sin(a + dir) * speed, vy = Math.cos(a + dir) * speed;
       x += vx * dt; y += vy * dt;
@@ -331,7 +332,7 @@ test('planted feet do not slip at walk, shuffle and pivot speeds, and the feet d
     const steps = boxer.fw.steps - before;
     assert.ok(worst < 0.0005, `speed ${speed} dir ${dir} turn ${turn}: a planted foot slipped ${(worst * 100).toFixed(2)} cm in one frame`);
     if (speed > 0.5) assert.ok(steps >= 3, `speed ${speed}: only ${steps} steps in 3 s`);
-    if (speed === 0) assert.ok(steps <= 2, `standing still took ${steps} steps`);
+    if (speed === 0) assert.ok(boxer.fw.steps - late === 0, `still stepping in place: ${boxer.fw.steps - late} steps in the last 1.5 s`);
   }
 });
 
@@ -1173,4 +1174,19 @@ test('level cards are settled by the clearly better fighter, and KO rates stay i
     assert.ok(ko / n >= lo && ko / n <= hi, `${rounds} rounds: KO rate ${ko / n}`);
     assert.ok(draws / n <= 0.2, `${rounds} rounds: draw rate ${draws / n}`);
   }
+});
+
+test('fighters are calm: no shiver from sim noise, fewer steps in a real round, (BOX-28)', async () => {
+  const { loadPerson, measureIdle, measureRound } = await import('../scripts/motion-metrics.mjs');
+  const world = await loadPerson();
+  // Idle with deliberate per-tick noise in the sim's position and velocity: the feet stay put, hips and head barely reverse.
+  const idle = await measureIdle({ seconds: 10, noise: 0.5, world });
+  for (const c of ['red', 'blue']) {
+    assert.equal(idle[c].stepsPerSec, 0, `${c} stepped while standing`);
+    assert.equal(idle[c].footReversalsPerSec, 0, `${c} feet reversed`);
+    assert.ok(idle[c].hipHeadReversalsPerSec <= 1.5, `${c} hips/head reverse ${idle[c].hipHeadReversalsPerSec}/s`);
+  }
+  // A real round was 7-10 steps/s per fighter before; it must stay well under that.
+  const round = await measureRound({ seed: 11, world });
+  for (const c of ['red', 'blue']) assert.ok(round[c].stepsPerSec <= 5, `${c} ${round[c].stepsPerSec} steps/s`);
 });

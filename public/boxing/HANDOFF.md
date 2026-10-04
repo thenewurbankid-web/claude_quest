@@ -4,6 +4,15 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): calm, loose fighters: less stepping, no shiver (BOX-28)
+
+- **Footwork** (`footwork.js`): the sim position is low-passed (`Smoother`, 12 rad/s, lag taken back out) before it drives feet, root and hips. A foot lifts only at ~75% (lead) / 85% (trail) of stance width of lag (hysteresis via a 0.3 s per-foot cooldown), steps are cadence-capped (0.42 s between step groups), land past their spot (one step = a long hold), and the back foot follows (step-drag). A `still` hold (punching, clinch, shell, taunt) raises the threshold; only an emergency lag (1.1x stance) steps through it. Hips drop so both legs always reach (planted feet still do not slip).
+- **Shiver**: the cause was per-tick sim noise (position and velocity) reaching hips/feet, plus a fast bounce. Now filtered at the source, bounce slowed to ~1.7 Hz and small. Idle with 0.5x injected noise: hip/head reversals 27/s -> ~1/s, foot reversals 0, steps 0.
+- **Looseness** (`boxer-model.js`): seeded per-fighter `Drift` sway, head bob and weave, shoulder roll, chin tuck, hands drifting in the guard (springs), soft knees on the bounce, hips-lead/shoulders-follow twist on punches with lagged torso, weight shift (front foot on punches, back on defence). `Spring` gives overshoot and settle. `arena-2d.js`: 110 ms clip crossfade, smoothed gap shift, procedural sway and lean on top of the clips.
+- **Numbers** (`node scripts/motion-metrics.mjs [seed]`, seed 11, 35 s round, pressure vs outbox): foot steps/s red 7.1 -> 3.65, blue 9.84 -> 4.04. Not the 1.5-2/s asked for: **the sim itself keeps both fighters moving (avg 0.7 m/s, mostly radial in/out, not oscillation); smoothing harder did not shorten the path.** Getting to <=2/s needs the sim's constant locomotion reduced, which is a sim change (pinned hash), not mine. Decision for you.
+- **Tests**: 332 pass (new: idle-noise and real-round cadence test using `scripts/motion-metrics.mjs`; standing-still step test now asserts no steps in the last 1.5 s). `measure-boxing.mjs`: 5.7 ms CPU/frame at 400x760 headless, no errors; `shot-arena2d.mjs` no console errors.
+- **Untested**: how it looks (sway, twist, hands, hip drop, 2D crossfade and sway) in a real browser, a real phone's frame time, and no before/after clip or frame strip (I can't open a browser; check at http://localhost:4792/boxing/ via `npm run static -- 4792`). Not pushed or synced: AGENTS.md says never push, the issue says push main and sync bring-the-ruckus; waiting on you.
+
 ## Done (2026-10-04): BOX-29 logo with flow, then the UI system pass
 
 - **Logo redone with flow** (commit 725997e): `scripts/build-logo.mjs` no longer uses a font. Every letter is a pen path (marker handstyle: one slant, a rising baseline, N-G and similar letters joined in one stroke, chisel-nib width with thicker downstrokes and tapered entries and exits, translucent ink that builds where strokes cross, bleed into the CC0 brick photo, an underline swash out of the final S, drips). Two lines: BRING THE / RUCKUS. 107 KB (640 px), 237 KB (1100 px). Sedgwick TTF removed from the repo; `fonts/CREDITS.md` updated.
@@ -361,6 +370,8 @@ BOX-22 landed. `boxer-model.js`: the seven new punches borrow a base punch's cli
 - Still open in BOX-18: CMU mocap, before/after clip, phone frame time.
 
 ## Next jobs
+
+0a. **BOX-28 follow-ups**: watch the fighters in a browser (stepping, sway, hands) and tell me what's off; decide whether the sim's constant locomotion (0.7 m/s average) should be reduced so steps reach <=2/s (sim change, Sim Dev); and say whether I may push main and sync bring-the-ruckus.
 
 0. **BOX-17 slice 3**: post-pass and looks (see the plan above). Check slice 2 in the browser first: View, "2D photoreal (beta)".
 
