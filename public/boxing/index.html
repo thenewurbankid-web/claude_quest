@@ -196,6 +196,9 @@
   .dmg-list b { font: 700 20px/1 var(--body); color: var(--accent); margin-right: 4px; }
   .dmg-list span { display: block; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .dmg-note { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); }
+  .tl { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid rgba(255,255,255,.08); font-size: 13px; }
+  .tl-r { font: 400 15px var(--display); color: var(--accent); width: 26px; flex: none; }
+  .tl-why { font-size: 12px; color: var(--muted); }
   .stbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   .stbl th { font: 400 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 4px 2px; }
   .stbl td { padding: 5px 2px; text-align: center; border-top: 1px solid rgba(255,255,255,.08); }
@@ -538,7 +541,7 @@ import { createArena3D } from './arena-babylon.js';
 import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
 import { profileOf, receivedProfile } from './profile.js';
-import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, emptyDamage, recordDamage, zoneHeat, DAMAGE_ZONES, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
+import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, aiPlan, emptyDamage, recordDamage, zoneHeat, DAMAGE_ZONES, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
 import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, markerAt, drillResult, applyDrill, trainerTip } from './career.js';
 import { createSfx } from './sfx.js';
 
@@ -891,13 +894,8 @@ $('o-fight').onclick = () => { sfx.click(); startSingle(); };
 
 /** The automated corner: reads gas, health and the score, and picks a tactic. */
 function aiCorner(sim, corner) {
-  const me = sim.fighters[corner], opp = sim.fighters[corner === 'red' ? 'blue' : 'red'];
-  if (me.gasRatio < 0.35) return 'recover';
-  if (opp.gasRatio < 0.45 || opp.health < me.health - 25) return 'pressure';
-  if (opp.stats.power > me.stats.power + 15) return me.stats.ringIQ >= 55 ? 'counter' : 'outbox';
-  if (opp.stats.stamina < me.stats.stamina - 10) return 'body_attack';
-  if (me.stats.speed > opp.stats.speed + 10) return 'outbox';
-  return ['pressure', 'outbox', 'counter', 'body_attack'][(sim.roundIndex + sim.seed) % 4];
+  const f = (c) => ({ health: sim.fighters[c].health, gasRatio: sim.fighters[c].gasRatio, stats: sim.fighters[c].stats });
+  return aiPlan(f(corner), f(corner === 'red' ? 'blue' : 'red'), sim.roundIndex, sim.seed);
 }
 
 // ─── Fight lifecycle ────────────────────────────────────────────────────────
@@ -929,6 +927,8 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner, career =
   state.corners = {};           // corner calls received for the next round (P2P)
   state.result = null;
   state.damage = emptyDamage();
+  state.timeline = [];
+  state.intel = null;
   for (const c of ['red', 'blue']) paintSilhouette(hudSil[c], state.damage[c]);
 
   sim.on('exchange', onExchange);
@@ -975,6 +975,7 @@ async function awaitCorner() {
     { health: sim.fighters[theirs].health, gasRatio: sim.fighters[theirs].gasRatio, stats: sim.fighters[theirs].stats },
     top ? { tactic: top.tactic, label: TACTICS[top.tactic]?.label ?? top.tactic } : null);
   state.tactic = tactic;
+  state.intel = { precedents: picks.length, rows: await db.fight_logs.count().catch(() => 0) };
   const last = sim.rounds.at(-1);
   $('c-title').textContent = `Round ${sim.roundIndex + 1} of ${sim.totalRounds}`;
   $('c-last').textContent = last ? `Round ${last.round_index}: you ${last.cards[mine]}, ${m.names[theirs]} ${last.cards[theirs]}` : 'Pick a plan and ring the bell.';
@@ -1002,7 +1003,9 @@ function lockCorner() {
   $('start-round').disabled = true;
   if (state.match.mode === 'single') {
     $('corner').hidden = true;
-    beginRound({ [mine]: state.tactic, [theirs]: aiCorner(sim, theirs) });
+    const plan = aiCorner(sim, theirs);
+    state.timeline.push({ round: sim.roundIndex + 1, mine: state.tactic, theirs: plan.tactic, reason: plan.reason });
+    beginRound({ [mine]: state.tactic, [theirs]: plan.tactic });
   } else {
     state.corners[mine] = state.tactic;
     state.peer.send({ type: 'corner', round: sim.roundIndex + 1, tactic: state.tactic });
@@ -1096,7 +1099,7 @@ async function onFightEnd(result) {
   state.hasSaved = true;
   state.result = {
     outcome, method: result.method, ko, names: m.names, myCorner: m.myCorner, mode: m.mode,
-    card: scorecard(sim.rounds), stats: fightStats(sim.rounds), damage: structuredClone(state.damage), rounds: sim.rounds, cards: result.cards,
+    card: scorecard(sim.rounds), stats: fightStats(sim.rounds), damage: structuredClone(state.damage), rounds: sim.rounds, timeline: state.timeline, intel: state.intel, cards: result.cards,
     before, after: { ...state.fighter.record }, gained: REWARDS[outcome], pointsAfter: state.fighter.points, pointsBefore,
     unlocked: newUnlocks(before.w, state.fighter.record.w), career: careerResult,
   };
@@ -1140,7 +1143,7 @@ function renderResult() {
       ...pair('accuracy', `${acc(mine)}%`, `${acc(theirs)}%`),
       ...pair('power', `${s[mine].joules.toFixed(0)} J`, `${s[theirs].joules.toFixed(0)} J`))),
     damageCard(r),
-    ...statCards(r.rounds, r.names, mine, null),
+    ...statCards(r.rounds, r.names, mine, null, r.mode === 'single' ? { timeline: r.timeline, intel: r.intel } : null),
     el('div', { className: 'card reward' },
       el('div', {}, el('b', { textContent: `+${r.gained}` }), el('span', { textContent: 'XP · training points' })),
       el('div', {}, el('b', { textContent: `${rec('w')}-${rec('l')}-${rec('d')}` }), el('span', { textContent: `record (${recChanged === 'w' ? 'win' : recChanged === 'l' ? 'loss' : 'draw'} added)` })),
@@ -1157,7 +1160,7 @@ function renderResult() {
   setTimeout(() => { if (state.screen === 'result') (r.outcome === 'w' ? sfx.win() : r.outcome === 'l' ? sfx.lose() : sfx.click()); }, verdictAt * 1000);
 }
 
-function statCards(rounds, names, mine, damage) {
+function statCards(rounds, names, mine, damage, corner = null) {
   const theirs = mine === 'red' ? 'blue' : 'red';
   const b = punchBreakdown(rounds), s = fightStats(rounds);
   const pct = (a, t) => (t ? `${Math.round((100 * a) / t)}%` : '–');
@@ -1172,12 +1175,25 @@ function statCards(rounds, names, mine, damage) {
     el('td', { textContent: `${r[theirs].landed}/${r[theirs].thrown} · ${r[theirs].dealt.toFixed(1)}` })));
   return [
     damage ? damageCard({ myCorner: mine, names, damage }) : null,
+    corner ? cornerCard(corner, names, mine) : null,
     el('div', { className: 'card' }, el('h3', { textContent: 'Punches landed / thrown' }),
       el('table', { className: 'stbl' }, el('tr', {}, el('th'), head(mine), head(theirs)), ...typeRows)),
     el('div', { className: 'card' }, el('h3', { textContent: 'Round by round' }),
       el('table', { className: 'stbl' }, el('tr', {}, el('th'), head(mine), head(theirs)), ...roundRows),
       el('p', { className: 'dmg-note', textContent: 'Each cell: landed/thrown · health points of damage dealt.' })),
   ].filter(Boolean);
+}
+
+function cornerCard({ timeline, intel }, names, mine) {
+  const theirs = mine === 'red' ? 'blue' : 'red';
+  if (!timeline.length) return null;
+  const label = (k) => TACTICS[k]?.label ?? k;
+  return el('div', { className: 'card' }, el('h3', { textContent: `${names[theirs]}'s corner` }),
+    ...timeline.map((t) => el('div', { className: 'tl' },
+      el('div', { className: 'tl-r', textContent: `R${t.round}` }),
+      el('div', {}, el('div', { textContent: `${label(t.theirs)} vs your ${label(t.mine)}` }), el('div', { className: 'tl-why', textContent: t.reason })))),
+    el('p', { className: 'dmg-note', textContent: 'The opponent picks by a fixed rule on stamina, health and the stat matchup. It does not read your tactic and does not use the fight log.' }),
+    ...(intel ? [el('p', { className: 'dmg-note', textContent: `Your coach's intel: ${intel.precedents} precedent${intel.precedents === 1 ? '' : 's'} retrieved from ${intel.rows} logged round${intel.rows === 1 ? '' : 's'} of past fights. That retrieval feeds your coach's tip, not the opponent.` })] : []));
 }
 
 const ZONE_LABEL = { head: 'Head', body: 'Body', guard: 'Blocked (arms)' };
@@ -1402,7 +1418,7 @@ requestAnimationFrame(hud);
 $('stats-btn').onclick = () => {
   const m = state.match;
   $('stats-body').replaceChildren(el('h3', { className: 'stats-h', style: 'font:400 32px var(--display);margin:0 0 10px;text-align:center', textContent: 'Fight stats' }),
-    ...(state.sim.rounds.length ? statCards(state.sim.rounds, m.names, m.myCorner, state.damage) : [el('p', { className: 'muted', textContent: 'No finished rounds yet.' })]));
+    ...(state.sim.rounds.length ? statCards(state.sim.rounds, m.names, m.myCorner, state.damage, m.mode === 'single' ? { timeline: state.timeline, intel: state.intel } : null) : [el('p', { className: 'muted', textContent: 'No finished rounds yet.' })]));
   $('stats-ov').hidden = false; sfx.click();
 };
 $('stats-close').onclick = () => { $('stats-ov').hidden = true; sfx.click(); };

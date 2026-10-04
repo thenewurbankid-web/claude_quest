@@ -324,7 +324,7 @@ test('pressure crowds a defender, but not one who is also on pressure', () => {
 });
 
 // ─── Game flow (flow.js): screens, progression, unlocks, scorecards, corner tips, settings ───
-import { SCREENS, navigate, eventsFrom, statCost, REWARDS, outcomeOf, UNLOCKS, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, emptyDamage, recordDamage, zoneOf, zoneHeat, DAMAGE_ZONES, cornerTip, normalizeSettings, DEFAULT_SETTINGS } from '../public/boxing/flow.js';
+import { SCREENS, navigate, eventsFrom, statCost, REWARDS, outcomeOf, UNLOCKS, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, aiPlan, emptyDamage, recordDamage, zoneOf, zoneHeat, DAMAGE_ZONES, cornerTip, normalizeSettings, DEFAULT_SETTINGS } from '../public/boxing/flow.js';
 
 test('screen flow: Title to Fighter to Opponent to Fight to Result and back', () => {
   let s = 'title';
@@ -591,4 +591,19 @@ test('punch breakdown by type and round matches the round totals', () => {
     assert.equal(landed, fightStats(sim.rounds)[c].landed);
     assert.equal(b.perRound.reduce((s, r) => s + r[c].landed, 0), landed);
   }
+});
+
+test('the AI corner plan follows its fixed rules and says why', () => {
+  const st = (o = {}) => ({ speed: 50, power: 50, stamina: 50, ringIQ: 50, ...o });
+  const me = (o = {}, f = {}) => ({ health: 100, gasRatio: 1, stats: st(o), ...f });
+  assert.equal(aiPlan(me({}, { gasRatio: 0.2 }), me(), 0, 1).tactic, 'recover');
+  assert.equal(aiPlan(me(), me({}, { gasRatio: 0.3 }), 0, 1).tactic, 'pressure');
+  assert.equal(aiPlan(me({ ringIQ: 70 }), me({ power: 70 }), 0, 1).tactic, 'counter');
+  assert.equal(aiPlan(me({ ringIQ: 40 }), me({ power: 70 }), 0, 1).tactic, 'outbox');
+  assert.equal(aiPlan(me(), me({ stamina: 30 }), 0, 1).tactic, 'body_attack');
+  assert.equal(aiPlan(me({ speed: 70 }), me(), 0, 1).tactic, 'outbox');
+  const even = aiPlan(me(), me(), 2, 1);
+  assert.ok(['pressure', 'outbox', 'counter', 'body_attack'].includes(even.tactic));
+  assert.ok(even.reason.length > 10);
+  assert.equal(aiPlan(me(), me(), 2, 1).tactic, even.tactic, 'deterministic');
 });
