@@ -299,7 +299,6 @@ User: the fighters "look weak and crooked" (BOX-14). Before shots showed the Qua
 ## Done (2026-10-04): BOX-18 slice 3, lean into starts, stops and turns (shipped live)
 
 `boxer-model.js` `pose()`: smoothed acceleration of the sim velocity shifts the body up to 3 cm along it (a start drives forward, a stop rocks back, a turn leans into the curve); render-only, feet stay planted. `npm test` 274 pass; `demo-e2e.mjs` clean locally and live. Shipped: claude-quest main 9908bb7, bring-the-ruckus 39c7d47. **Untested by eye**; the 3 cm cap and 8 Hz smoothing are guesses.
-- **Street moves are blocked on BOX-22** (Sim Dev; the sim has no haymaker, overhand, feint, clinch, shove or taunt yet). Animate them after it lands.
 - Still open in BOX-18: CMU mocap footwork, before/after clip, phone frame time.
 
 ## Done (2026-10-04): BOX-17 slice 2, medium-angle fighters and the 2D arena (beta)
@@ -338,6 +337,13 @@ Nothing is rendered yet. Built so far: `clips2d.js` (pure, render-only: clip cat
 
 **Pipeline and build order.** `scripts/render-fighters.py` (Blender, headless, poses `person.glb` with the existing `anims.glb` clips straightened as in `boxer-model.js`) then `scripts/pack-sprites.mjs` (sharp: crop, WebP, atlas JSON, mask pass) then `arena-2d.js` (canvas compositor: plate, depth-sorted fighters, shadows, crowd layers, post-pass, driven by `clips2d.js`). Slices, each shipped when green: (1) this plan + mapping (done); (2) render the medium angle, day, 6-8 actions for one round and the 2D arena behind a View option ("2D photoreal (beta)") with the 3D view as default; (3) post-pass and looks; (4) close angles and shot director live; (5) crowd loops; (6) scene rebuild and the inventory gate; (7) the full clip set and night.
 **Tooling gaps found**: `ffmpeg` and `cwebp` are not installed (sharp can write animated WebP, but WebM VP9-alpha and HEVC-alpha need ffmpeg, and stock footage needs it for keying and loops). Installing it (`brew install ffmpeg`) changes the machine, so I'm asking before doing it.
+
+## Done (2026-10-04): BOX-18 slice 4, street moveset animated (shipped live)
+
+BOX-22 landed. `boxer-model.js`: the seven new punches borrow a base punch's clip and IK path (`PUNCH_CLIP[...].as`; `big` widens the swing and foot pivot: haymaker 1.6, overhand 1.25, check hook/short upper 0.7, cheap shot 0.6; side from the sim's hand). Before this, a slipped street punch from the opponent would have thrown in `pose()` (`PUNCH_CLIP[type].side` of undefined); now guarded. Non-punch moves read from `snapshot()` (`action`, `shell`, `clinch`, composure unused): shell (hands up tight, knees dip), clinch (hands over the opponent's shoulders, leans in), shove/push_off (both hands to the chest, step in), feint (lead hand twitch and dip), taunt (arms open, rises). Pivot has no pose of its own (the sim moves the body and the footwork steps). Test: every punch type (also as the opponent slipping it) and every action poses finite bones with planted feet under 0.5 mm per frame. Shipped: claude-quest main a91ec1e, bring-the-ruckus 4a3702f; `demo-e2e.mjs` clean locally and live.
+- **`npm test` has 1 failure on main that isn't from this change**: `test/corner-ai.test.js` "the schema lists exactly the sim tactics" is missing `brawl` and `dirty_boxing` from BOX-22. Its owner needs to add them to the schema.
+- **Untested by eye**: all the poses (clinch hand reach and arms through the opponent's body, shove, shell, taunt), the street punches' windups (haymaker uses the hook clip, no real wind-up pose), and no combo/flurry-specific motion.
+- Still open in BOX-18: CMU mocap, before/after clip, phone frame time.
 
 ## Next jobs
 
