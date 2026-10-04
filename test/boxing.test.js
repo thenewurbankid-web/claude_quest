@@ -1275,3 +1275,24 @@ test('swagger (BOX-28): the 3D boxer shows beats and styles without shiver or si
   assert.ok(shimmy > calm + 0.04, `shimmy swing ${shimmy} vs idle ${calm}`);
   assert.equal(JSON.stringify([me, op]), frozen);
 });
+
+test('swagger in 2D (BOX-36): per-tactic pose differs, beats are slow, calm and quiet when busy', async () => {
+  const { Swag2D } = await import('../public/boxing/swag2d.js');
+  const run = (tactic, busy = false, mode = 'fight') => {
+    const s = new Swag2D(31); s.cue('shimmy', 0, true);
+    const out = []; for (let t = 0; t < 40; t += 1 / 60) out.push(s.update(t, 1 / 60, { busy, tactic, mode }));
+    return out;
+  };
+  const last = (a) => a[a.length - 1];
+  assert.ok(last(run('pressure')).squash < last(run('outbox')).squash, 'pressure crouches, outbox rises');
+  assert.ok(last(run('pressure')).lean > last(run('counter')).lean, 'pressure leans in, counter leans back');
+  assert.ok(last(run('brawl')).head < last(run('pressure')).head, 'brawl chin up');
+  const a = run('outbox');
+  assert.ok(a.some((p) => Math.abs(p.dx) > 0.02), 'the shimmy moves the body');
+  let rev = 0; for (let i = 2; i < a.length; i++) { const d1 = a[i - 1].head - a[i - 2].head, d2 = a[i].head - a[i - 1].head; if (d1 * d2 < 0 && Math.abs(d2) > 1e-6) rev++; }
+  assert.ok(rev / 40 < 3, `head reversals/s ${rev / 40}`);
+  for (const p of a) assert.ok(Math.abs(p.head) < 0.4 && Math.abs(p.lean) < 0.2 && p.squash > 0.85 && p.squash < 1.1);
+  assert.ok(last(run('outbox', false, 'bell')).dx < -0.4 && last(run('outbox', false, 'won')).dx < -0.8, 'corner walk and KO walk-off back away');
+  const busy = run('outbox', true);
+  assert.ok(busy.every((p) => Math.abs(p.head) < 0.2) && Math.max(...busy.map((p) => Math.abs(p.dx))) < 0.01, 'no beats mid-exchange');
+});

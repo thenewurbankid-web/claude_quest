@@ -4,6 +4,14 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): swag in the photoreal 2D fights (BOX-36)
+
+- **`swag2d.js`** (new, pure, render-only): wraps BOX-28's `Swag` (same styles, beats, quiet gaps, seeds 31/57) and returns a body pose about the feet (`squash`, `lean`, `roll`, `dx`, `dy`) plus a head pose about the neck (`head`, `headDy`). Per-style stance: pressure/body crouch and lean in, outbox rises on its toes, counter leans back (Philly), brawl square with chin up, dirty boxing leans close. Beats: nod / tilt / hand-low (head dip or chin up, no separate arm in a sprite), shrug (shoulders lift), shimmy and weight shift (slow side sway), neck roll, bell touch and round-1 shimmy, corner walk at the bell and KO walk-off (the sprite backs away). All under ~2 Hz, only when the clip is an idle loop (never mid-punch or reaction).
+- **`arena-2d.js`**: one `Swag2D` per corner, cues from `impact` (landed), `awaiting_corner` and `fight_end` KO; the transform stacks on the existing sway. The head and shoulders are the top 17% of the sprite drawn as a second slice rotated about the neck (2% overlap hides the seam), idle clips only; two `drawImage` calls instead of one. `scripts/shot-swag2d.mjs` makes frame strips; `qa/box-36-before.png` / `box-36-after.png` are 12-frame sheets at 375px (0.7 s apart).
+- 335 tests pass (1 new). Headless Chromium run: no console errors.
+- **Untested**: motion in a real browser (frames only; I can't judge the nod, shrug, shimmy, corner walk or KO walk-off by eye from stills), seam on the head slice at large tilts, phone frame time, the KO walk-off (dev page shows idle fights).
+- **Not shipped**: committed on `worktree-boxing-manager-ai` only. The issue says rebase onto origin/main, push main, sync bring-the-ruckus; my rules say never push/rebase/merge. Needs your go-ahead (origin/main is 14 commits ahead).
+
 ## Done (2026-10-04): ground the title fighters (BOX-38)
 
 - `index.html` only. Contact shadows under the feet are darker and tighter; a blurred cool haze strip (`.duel .fog`) sits at the feet; the wall is blurred 1.4px with a soft dark pool behind the fighters (`.wall::after`); each fighter gets a 1.5px cool rim on the side facing the upper-right ray light (`drop-shadow` on `.fgt`, sign flipped for the mirrored blue). Menu area unchanged.
