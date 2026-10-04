@@ -93,6 +93,40 @@ export class ModelRig {
     this.clipNames = Object.keys(this.clips);
     this._q = new B.Quaternion(); this._p = new B.Vector3();
     this.lift = 0;
+    this.initFists();
+  }
+
+  /**
+   * The person's hands are open, flat and spread. Finds, for each finger, the local axis that closes it toward the palm
+   * (the bone rolls differ, so each is tried) and keeps a curl rotation per bone that applyLayers adds, so both hands are fists.
+   */
+  initFists() {
+    const B = this.B;
+    this.curl = {};
+    this.root.computeWorldMatrix(true);
+    for (const n of Object.values(this.bones)) n.computeWorldMatrix(true);
+    const axes = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    for (const s of ['l', 'r']) {
+      const hand = this.bones[`hand_${s}`];
+      if (!hand) continue;
+      for (const [finger, bend] of [['index', [1.15, 1.5, 1.1]], ['middle', [1.15, 1.5, 1.1]], ['ring', [1.2, 1.5, 1.1]], ['pinky', [1.25, 1.5, 1.1]], ['thumb', [0.35, 0.55, 0.55]]]) {
+        const names = [1, 2, 3].map((i) => `${finger}_0${i}_${s}`);
+        if (!names.every((n) => this.bones[n])) continue;
+        const first = this.bones[names[0]], tip = this.bones[names[2]];
+        let best = null;
+        for (const ax of axes) {
+          const q = B.Quaternion.RotationAxis(new B.Vector3(...ax), 1);
+          const keep = first.rotationQuaternion.clone();
+          first.rotationQuaternion.copyFrom(keep.multiply(q));
+          first.computeWorldMatrix(true); for (const d of first.getDescendants(false)) d.computeWorldMatrix?.(true);
+          const dist = B.Vector3.Distance(tip.getAbsolutePosition(), hand.getAbsolutePosition());
+          first.rotationQuaternion.copyFrom(keep);
+          first.computeWorldMatrix(true); for (const d of first.getDescendants(false)) d.computeWorldMatrix?.(true);
+          if (!best || dist < best.dist) best = { ax, dist };
+        }
+        names.forEach((n, i) => { this.curl[n] = B.Quaternion.RotationAxis(new B.Vector3(...best.ax), bend[i]); });
+      }
+    }
   }
 
   /** Stands the rig at `pos` (ground point) facing unit `forward` (both {x,y,z}). */
@@ -125,6 +159,8 @@ export class ModelRig {
         }
       }
       node.rotationQuaternion.copyFrom(q ?? rest.q);
+      const curl = this.curl[name];
+      if (curl) node.rotationQuaternion.copyFrom((q ?? rest.q).multiply(curl));
       if (this.ownBones) {
         const cr = CLIP_REST[name];
         if (p && cr) node.position.set(rest.p.x + p.x - cr[0], rest.p.y + p.y - cr[1], rest.p.z + p.z - cr[2]);
@@ -181,6 +217,24 @@ export class ModelRig {
     node.rotationQuaternion.copyFrom(rq);
     node.computeWorldMatrix(true);
     for (const n of node.getDescendants(false)) n.computeWorldMatrix?.(true);
+  }
+
+  /**
+   * The clips' torsos are hunched (the jab frame bends the upper spine ~30 deg forward over a back-leaning lower spine).
+   * Turns each spine/neck segment toward an upright boxer's lean (`lean` rad forward from vertical, per segment) by
+   * `w`, keeping each segment's own twist, so the guard and the punches stand straight. `f` is the boxer's forward.
+   */
+  straighten(f, w = 1, lean = SPINE_LEAN) {
+    if (w <= 0) return;
+    const chain = ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head'];
+    for (let i = 0; i < chain.length - 1; i++) {
+      const a = chain[i], b = chain[i + 1];
+      if (!this.bones[a] || !this.bones[b]) continue;
+      const s = this.pos(a), c = this.pos(b), d = sub(c, s), l = len(d);
+      const want = norm(add(mul(UPV, Math.cos(lean[i])), mul(f, Math.sin(lean[i]))));
+      const dir = norm(add(mul(norm(d), 1 - w), mul(want, w)));
+      this.aim(a, b, add(s, mul(dir, l)));
+    }
   }
 
   /** Arm IK: puts the hand of `side` (−1 left, +1 right) at `target`, elbow bending toward `pole` (directions {x,y,z}). */
@@ -241,7 +295,7 @@ const PUNCH_CLIP = {
 const STANCE = { clip: 'Punch_Jab', t: 0 };                       // the jab's first frame is a good orthodox guard
 // Guard hand positions relative to the head bone, in the boxer's own frame (x right, y up, z forward), measured on the
 // stance frame. Relative to the head so the guard follows the body down when a clip crouches.
-const GUARD = { [-1]: { x: -0.13, y: -0.04, z: 0.26 }, [1]: { x: 0.18, y: -0.08, z: 0.1 } };
+const GUARD = { [-1]: { x: -0.11, y: -0.14, z: 0.24 }, [1]: { x: 0.13, y: -0.17, z: 0.08 } };
 // The free hook clip is a deep lunging melee swing; only part of it reads as a boxing hook.
 const CLIP_WEIGHT = { Melee_Hook: 0.5 };
 const HIT_CLIP = { head: 'Hit_Head', body: 'Hit_Chest', big: 'Hit_Knockback' };
@@ -504,7 +558,7 @@ export class ModelBoxer {
     const homes = {}, toes = {}, ankleY = {};
     for (const [s, side] of [['l', -1], ['r', 1]]) {
       const a = inFrame(rig.pos(LEG[side].foot)), b = inFrame(rig.pos(LEG[side].ball));
-      homes[s] = { x: a.x, z: a.z }; toes[s] = sub(b, a); ankleY[s] = a.y;
+      homes[s] = { x: a.x * STANCE_NARROW.x, z: a.z * STANCE_NARROW.z }; toes[s] = sub(b, a); ankleY[s] = a.y;
     }
     this.fw = new Footwork(homes); this.fwToes = toes; this.fwAnkleY = ankleY;
   }
@@ -611,6 +665,7 @@ export class ModelBoxer {
       - (punch?.type === 'body' ? 0.05 * pe : 0);
     rig.place(add(add(add(body, rock), sway), v(0, bob, 0)), f);
     rig.applyLayers(layers);
+    rig.straighten(f, STRAIGHT * (1 - 0.7 * koW));
     this.plantFeet(body, f, me, 1 - (this.fall > 0 || this.knocked ? 1 : 0), dt, pivot);
 
     // ── arm IK on top of the clips ──
@@ -712,9 +767,14 @@ export class ModelBoxer {
 
 const UPV = v(0, 1, 0);
 /** Hips drop this far below the clips' stance so planted legs have slack to reach and a step can land (m). */
-const KNEE_BEND = 0.05;
+const KNEE_BEND = 0.02;
+/** The clips' stance is a wide squat; feet come in toward the body by these factors (shoulder-width, knees only slightly bent). */
+const STANCE_NARROW = { x: 0.78, z: 0.82 };
+/** Forward lean from vertical of pelvis..neck_01 (rad) in the guard, and how fully the clips' torso is pulled to it. */
+const SPINE_LEAN = [0.06, 0.08, 0.1, 0.12, 0.12];
+const STRAIGHT = 1;
 /** Where the cap sits relative to the Head bone (metres along the head frame), tuned by eye. */
-const CAP = { up: 0.13, fwd: 0.01, brim: 0.13 };
+const CAP = { up: 0.105, fwd: 0.01, brim: 0.13 };
 const smooth = (t) => t * t * (3 - 2 * t);
 const lerpV = (a, b, t) => add(a, mul(sub(b, a), t));
 const bez2 = (a, b, c, t) => lerpV(lerpV(a, b, t), lerpV(b, c, t), t);

@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Stance check</title>
+<style>html,body{margin:0;background:#1b222c}canvas{width:100vw;height:100vh;display:block}</style>
+<canvas id="c"></canvas>
+<script type="module">
+// Fixed camera on one boxer in guard: ?cam=front|side|back|three&skin=light|medium|deep&punch=jab|cross|hook|uppercut|body&k=0..1
+import { loadBabylon } from './arena-babylon.js';
+import { loadBoxerAssets, loadGltfLoader, ModelBoxer, PHOTO_OUTFITS } from './boxer-model.js';
+const q = new URLSearchParams(location.search);
+const B = await loadBabylon();
+const engine = new B.Engine(document.getElementById('c'), true, { preserveDrawingBuffer: true }, true);
+const scene = new B.Scene(engine);
+scene.clearColor = new B.Color4(0.11, 0.14, 0.19, 1);
+const hemi = new B.HemisphericLight('fill', new B.Vector3(0, 1, 0), scene);
+hemi.intensity = 1.05; hemi.diffuse = new B.Color3(0.95, 0.97, 1); hemi.groundColor = new B.Color3(0.42, 0.42, 0.42); hemi.specular = new B.Color3(0.05, 0.05, 0.05);
+const key = new B.DirectionalLight('key', new B.Vector3(0.25, -1, 0.35), scene); key.intensity = 0.35;
+const ground = B.MeshBuilder.CreateDisc('g', { radius: 1.5, tessellation: 48 }, scene); ground.rotation.x = Math.PI / 2;
+ground.material = new B.StandardMaterial('gm', scene); ground.material.diffuseColor = new B.Color3(0.32, 0.33, 0.35); ground.material.specularColor = new B.Color3(0, 0, 0);
+const az = { front: Math.PI / 2, side: 0, back: -Math.PI / 2, three: Math.PI / 2 - 0.6 }[q.get('cam') || 'front'];
+// The boxer faces +z; the camera at azimuth PI/2 sits on +z looking back at his face.
+const cam = new B.ArcRotateCamera('cam', az, 1.5, 4.2, new B.Vector3(0, 0.95, 0), scene); cam.fov = 0.42; cam.minZ = 0.1;
+await loadGltfLoader(B);
+const assets = await loadBoxerAssets(B, scene);
+const outfit = { ...PHOTO_OUTFITS.red, skin: q.get('skin') || PHOTO_OUTFITS.red.skin };
+const boxer = new ModelBoxer(B, scene, assets, 'red', { addShadowCaster() {} }, { glove: outfit.wraps, trunks: '#9e1c24', wraps: true, outfit });
+const punch = q.get('punch');
+const ME = { x: 0, y: 0, vx: 0, vy: 0, gasRatio: 1, health: 100, activePunch: punch ? { type: punch, launchTick: 0, arriveTick: 100 } : null };
+const OPP = { x: 0, y: 1.2, vx: 0, vy: 0, gasRatio: 1, health: 100, activePunch: null };
+let n = 0;
+scene.onBeforeRenderObservable.add(() => {
+  boxer.pose(ME, OPP, punch ? Number(q.get('k') || 0.5) * 100 : 0, 0, 1 / 60, 0);
+  if (++n === 5) globalThis.__ready = true;
+});
+engine.runRenderLoop(() => scene.render());
+globalThis.__boxer = boxer; globalThis.__B = B;
+</script>

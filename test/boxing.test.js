@@ -227,6 +227,31 @@ test('the existing clips pose the person: finite bones, soles on the floor, head
   }
 });
 
+test('idle guard stands straight: spine, hips, shoulders and head within sensible angles, hands at the face', async () => {
+  const { ModelBoxer, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  const { B, scene, person } = await personWorld();
+  const boxer = new ModelBoxer(B, scene, person, 'red', SHADOW, { glove: '#c9343a', trunks: '#9e1c24', wraps: true, outfit: PHOTO_OUTFITS.red });
+  const me = { x: 0, y: 0, vx: 0, vy: 0, gasRatio: 1, activePunch: null }, opp = { x: 0, y: 1.2, activePunch: null };
+  for (const k of [0, 1, 2]) boxer.pose(me, opp, 0, 0, 1 / 60, k * 0.3);   // 0.9 s of standing sway
+  const P = (n) => boxer.rig.pos(n), deg = (r) => Math.abs(r * 180 / Math.PI);
+  const lean = (a, b) => { const d = { x: P(b).x - P(a).x, y: P(b).y - P(a).y, z: P(b).z - P(a).z }; return { side: deg(Math.atan2(d.x, d.y)), fore: deg(Math.atan2(d.z, d.y)) }; };
+  for (const [a, b] of [['pelvis', 'spine_01'], ['spine_01', 'spine_02'], ['spine_02', 'spine_03'], ['spine_03', 'neck_01'], ['neck_01', 'Head']]) {
+    const l = lean(a, b);
+    assert.ok(l.side < 10, `${a}->${b} leans ${l.side.toFixed(1)} deg sideways`);
+    assert.ok(l.fore < 25, `${a}->${b} leans ${l.fore.toFixed(1)} deg forward or back`);
+  }
+  const tilt = (l, r) => deg(Math.atan2(P(r).y - P(l).y, P(r).x - P(l).x));
+  assert.ok(tilt('thigh_l', 'thigh_r') < 6, 'hips level');
+  assert.ok(tilt('upperarm_l', 'upperarm_r') < 8, 'shoulders level');
+  // The head sits over the body, not thrown ahead of the feet, and the hands are up at the face (below the crown, above the chest).
+  const head = P('Head'), feet = { x: (P('foot_l').x + P('foot_r').x) / 2, z: (P('foot_l').z + P('foot_r').z) / 2 };
+  assert.ok(Math.hypot(head.x - feet.x, head.z - feet.z) < 0.25, 'head over the feet');
+  for (const h of ['hand_l', 'hand_r']) assert.ok(P(h).y < head.y && P(h).y > head.y - 0.35, `${h} at the face: ${(P(h).y - head.y).toFixed(2)}`);
+  // A straight punch keeps the spine from folding.
+  boxer.pose({ ...me, activePunch: { type: 'cross', launchTick: 0, arriveTick: 10 } }, opp, 9, 0, 1 / 60, 0);
+  assert.ok(lean('spine_01', 'neck_01').fore < 40, 'cross does not fold the torso');
+});
+
 test('planted feet do not slip at walk, shuffle and pivot speeds, and the feet do step', async () => {
   const { ModelBoxer, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
   const { B, scene, person } = await personWorld();
