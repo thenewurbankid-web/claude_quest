@@ -75,6 +75,24 @@ export function fightStats(rounds) {
   return out;
 }
 
+/**
+ * The AI corner's pick for a round, with the rule that fired. It is a fixed rule on stamina, health and the stat matchup:
+ * it does not read the other corner's tactic and does not query the fight log. `me`/`opp` are { health, gasRatio, stats }.
+ */
+export function aiPlan(me, opp, roundIndex, seed) {
+  if (me.gasRatio < 0.35) return { tactic: 'recover', reason: 'It was gassed, so it took the round to recover.' };
+  if (opp.gasRatio < 0.45) return { tactic: 'pressure', reason: 'You were tiring, so it pressed.' };
+  if (opp.health < me.health - 25) return { tactic: 'pressure', reason: 'You were hurt, so it pressed.' };
+  if (opp.stats.power > me.stats.power + 15) {
+    return me.stats.ringIQ >= 55
+      ? { tactic: 'counter', reason: 'You hit harder, and it reads well enough to counter.' }
+      : { tactic: 'outbox', reason: 'You hit harder, and it cannot read well enough to counter, so it kept range.' };
+  }
+  if (opp.stats.stamina < me.stats.stamina - 10) return { tactic: 'body_attack', reason: 'You have less stamina, so it went to the body.' };
+  if (me.stats.speed > opp.stats.speed + 10) return { tactic: 'outbox', reason: 'It is quicker, so it boxed from range.' };
+  return { tactic: ['pressure', 'outbox', 'counter', 'body_attack'][(roundIndex + seed) % 4], reason: 'An even matchup: it rotates its plan each round.' };
+}
+
 export const PUNCH_TYPES = ['jab', 'cross', 'hook', 'uppercut', 'body'];
 
 /** Thrown/landed per punch type and per round, from the sim's round summaries. */

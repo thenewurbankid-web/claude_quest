@@ -51,6 +51,8 @@ try {
     await page.click('#stats-btn');
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${QA}7c-stats-${time}.png` });
+    await page.evaluate(() => { document.getElementById('stats-body').scrollTop = 330; });
+    await page.screenshot({ path: `${QA}7d-stats-corner-${time}.png` });
     await page.click('#stats-close');
     await page.evaluate(() => { const s = document.getElementById('speed-override'); s.value = 'instant'; });   // later rounds run instantly
     for (let i = 0; i < 200 && !(await visible(page, '#s-result')); i++) {
