@@ -557,11 +557,11 @@
 import { FighterModel, CombatSimulation, createPhysicsGame, TACTICS, STAT_KEYS, TICK_MS, deriveAttributes, normalizeStats } from './physics-engine.js';
 import { GameDB, toLLMContext } from './game-db.js';
 import { createArena3D } from './arena-babylon.js';
-import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
+import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook, physiqueOf } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
 import { profileOf, receivedProfile } from './profile.js';
 import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, aiPlan, emptyDamage, recordDamage, zoneHeat, DAMAGE_ZONES, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
-import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, SPAR_CUES, markerAt, beatAt, sparPos, drillResult, applyDrill, trainerTip } from './career.js';
+import { ENERGY, TIERS, isSanctioned, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, SPAR_CUES, markerAt, beatAt, sparPos, drillResult, applyDrill, trainerTip } from './career.js';
 import { createSfx } from './sfx.js';
 import { statSources, tendencies, learnedFromLog, learnedLines, fighterSummary, changeLines } from './fightiq.js';
 
@@ -794,13 +794,15 @@ function renderLook() {
     ['Top', seg('topStyle', LOOK_OPTIONS.topStyle, l.topStyle, (k) => setLook({ topStyle: k }), 'Top style')],
     ['', swatches('top', LOOK_OPTIONS.top, 'Top colour')],
     ...(l.topStyle === 'varsity' ? [['Sleeves', swatches('sleeve', LOOK_OPTIONS.sleeve, 'Sleeve colour')]] : []),
-    ['Jeans', swatches('jeans', Object.keys(LOOK_OPTIONS.jeans), 'Jeans wash')],
+    ['Bottoms', seg(null, LOOK_OPTIONS.bottoms, l.bottoms, (k) => setLook({ bottoms: k }), 'Bottoms')],
+    ...(l.bottoms === 'trunks' ? [['Trunks', swatches('trunks', LOOK_OPTIONS.trunks, 'Trunks colour')]] : [['Jeans', swatches('jeans', Object.keys(LOOK_OPTIONS.jeans), 'Jeans wash')]]),
     ['Shoes', seg(null, LOOK_OPTIONS.boots, l.boots, (k) => setLook({ boots: k }), 'Shoes')],
     ['Cap', seg(null, { none: 'None', forward: 'Forward', backwards: 'Back' }, capMode(l), (k) =>
       setLook(k === 'none' ? { cap: null } : { cap: l.cap ?? LOOK_OPTIONS.cap[0], capBackwards: k === 'backwards' }), 'Cap')],
     ...(l.cap ? [['', swatches('cap', LOOK_OPTIONS.cap, 'Cap colour')]] : []),
     ['Chain', seg(null, { off: 'None', on: 'Gold chain' }, l.chain ? 'on' : 'off', (k) => setLook({ chain: k === 'on' }), 'Chain')],
-    ['Wraps', swatches('wraps', LOOK_OPTIONS.wraps, 'Wrap colour')],
+    ['Mouthguard', seg(null, { off: 'None', on: 'Mouthguard' }, l.mouthguard ? 'on' : 'off', (k) => setLook({ mouthguard: k === 'on' }), 'Mouthguard')],
+    ['Wraps', swatches('wraps', LOOK_OPTIONS.wraps, 'Wrap and glove colour')],
   ];
   $('look').replaceChildren(...rows.flatMap(([k, control]) => [el('span', { textContent: k }), control]));
 }
@@ -811,6 +813,7 @@ function renderFighterScreen() {
   $('fighter-name').value = state.fighter.name;
   $('f-record').textContent = recordText(state.fighter.record);
   renderLook();
+  preview?.setPhysique(physiqueOf(state.fighter.stats));
   const s = state.fighter.stats, src = statSources(s, state.fighter.career);
   $('f-stats').replaceChildren(...STAT_KEYS.map((k) => {
     const bar = el('div', { className: 'bar' }, el('i'));
@@ -824,7 +827,7 @@ function renderFighterScreen() {
   $('f-train').textContent = state.fighter.points > 0 ? `Train · ${state.fighter.points} points` : 'Train';
   if (!preview && !previewStarting) {
     previewStarting = true;
-    createLookPreview({ parent: $('look-preview'), look: state.fighter.look })
+    createLookPreview({ parent: $('look-preview'), look: state.fighter.look, physique: physiqueOf(state.fighter.stats) })
       .then((p) => { preview = p; $('look-preview-msg')?.remove(); })
       .catch((err) => { previewStarting = false; $('look-preview-msg').textContent = `Preview unavailable: ${err.message}`; console.warn(err); });
   }
@@ -979,7 +982,8 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner, career =
   const headless = view !== '2d';
   state.game = createPhysicsGame({ parent: headless ? document.createElement('div') : $('ring'), sim, headless, timeScale: speedValue() });
   if (view === '3d') {
-    createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name }, looks: { red: red.look, blue: blue.look }, timeOfDay: state.settings.time })
+    createArena3D({ parent: $('ring'), sim, names: { red: red.name, blue: blue.name }, looks: { red: red.look, blue: blue.look },
+      physiques: { red: physiqueOf(red.stats), blue: physiqueOf(blue.stats) }, sanctioned: isSanctioned(career), timeOfDay: state.settings.time })
       .then((arena) => { if (state.sim === sim) state.arena = arena; else arena.destroy(); })
       .catch((err) => { toast(`3D view failed to load: ${err.message}`); console.warn(err); });
   }

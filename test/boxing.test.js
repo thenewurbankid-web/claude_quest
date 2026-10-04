@@ -206,6 +206,65 @@ test('person looks: parts shown and tint colours follow the look; hair depends o
   assert.equal(personTint('shoes_timbs', PHOTO_OUTFITS.red), null);
 });
 
+test('physiqueOf: power against speed and stamina picks lean or heavy; even stats stay balanced; junk is safe', async () => {
+  const { physiqueOf } = await import('../public/boxing/boxer-model.js');
+  assert.deepEqual(physiqueOf({ speed: 50, power: 50, stamina: 50, ringIQ: 50 }), { lean: 0, heavy: 0 });
+  assert.deepEqual(physiqueOf({ speed: 70, power: 40, stamina: 70, ringIQ: 50 }), { lean: 1, heavy: 0 });
+  assert.deepEqual(physiqueOf({ speed: 40, power: 70, stamina: 40, ringIQ: 50 }), { lean: 0, heavy: 1 });
+  const half = physiqueOf({ speed: 50, power: 65, stamina: 50, ringIQ: 50 });
+  assert.equal(half.lean, 0); assert.ok(Math.abs(half.heavy - 0.5) < 1e-9);
+  assert.deepEqual(physiqueOf(null), { lean: 0, heavy: 0 });
+  assert.deepEqual(physiqueOf({ speed: 'x', power: 9999, stamina: -5 }), { lean: 0, heavy: 1 });
+});
+
+test('looks: bottoms, trunks colour and mouthguard are normalized, and trunks swap the jeans mesh', async () => {
+  const { normalizeLook, personParts, personTint, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  const l = normalizeLook({ bottoms: 'trunks', trunks: '#D9A12B', mouthguard: true });
+  assert.equal(l.bottoms, 'trunks'); assert.equal(l.trunks, '#d9a12b'); assert.equal(l.mouthguard, true);
+  const bad = normalizeLook({ bottoms: '<img src=x>', trunks: 'url(x)', mouthguard: 'yes' });
+  assert.equal(bad.bottoms, 'jeans'); assert.equal(bad.trunks, PHOTO_OUTFITS.red.trunks); assert.equal(bad.mouthguard, false);
+  assert.equal(normalizeLook(undefined, PHOTO_OUTFITS.blue).trunks, PHOTO_OUTFITS.blue.trunks);
+  assert.ok(personParts(l).includes('pants_trunks') && !personParts(l).includes('pants_jeans'));
+  assert.ok(personParts(PHOTO_OUTFITS.red).includes('pants_jeans') && !personParts(PHOTO_OUTFITS.red).includes('pants_trunks'));
+  assert.equal(personTint('pants_trunks', l), '#d9a12b');
+});
+
+test('isSanctioned: gloves from the second tier up, wraps for street and quick fights', async () => {
+  const { isSanctioned } = await import('../public/boxing/career.js');
+  assert.equal(isSanctioned(null), false); assert.equal(isSanctioned({ tier: 0 }), false);
+  assert.equal(isSanctioned({ tier: 1 }), true); assert.equal(isSanctioned({ tier: 3 }), true);
+});
+
+test('person.glb carries lean and heavy morph targets on every mesh; the blend moves the body, gear follows the mode', async () => {
+  const { ModelBoxer, PHOTO_OUTFITS, physiqueOf } = await import('../public/boxing/boxer-model.js');
+  const { B, scene, person } = await personWorld();
+  const make = (extra = {}, outfit = PHOTO_OUTFITS.red) => new ModelBoxer(B, scene, person, 'red', SHADOW, { glove: '#c9343a', trunks: '#9e1c24', wraps: true, outfit, ...extra });
+  const balanced = make();
+  const names = (m) => Array.from({ length: m.morphTargetManager.numTargets }, (_, i) => m.morphTargetManager.getTarget(i).name).sort();
+  for (const m of balanced.rig.meshes) assert.deepEqual(names(m), ['heavy', 'lean'], `${m.name} morph targets`);
+  const width = (boxer) => {
+    const skin = boxer.rig.meshes.find((m) => m.name === 'red:skin');
+    const p = skin.getVerticesData(B.VertexBuffer.PositionKind), mgr = skin.morphTargetManager;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < p.length; i += 3) {
+      if (p[i + 1] < 0.95 || p[i + 1] > 1.15) continue;      // the torso band: arms are out sideways in the T-pose, and don't change
+      let x = p[i];
+      for (let t = 0; t < mgr.numTargets; t++) { const tg = mgr.getTarget(t); x += tg.influence * (tg.getPositions()[i] - p[i]); }
+      lo = Math.min(lo, x); hi = Math.max(hi, x);
+    }
+    return hi - lo;
+  };
+  const lean = make({ physique: physiqueOf({ speed: 80, power: 30, stamina: 80 }) }), heavy = make({ physique: physiqueOf({ speed: 30, power: 90, stamina: 30 }) });
+  assert.ok(width(heavy) > width(balanced) + 0.004, `heavy ${width(heavy)} vs balanced ${width(balanced)}`);
+  assert.ok(width(lean) < width(balanced) - 0.004, `lean ${width(lean)} vs balanced ${width(balanced)}`);
+  // Sanctioned: padded gloves (big, no taped cuffs); street: small taped fists. Mouthguard is optional.
+  const gloved = make({ wraps: false });
+  assert.ok(gloved.extras.gloveL.scaling.x > balanced.extras.gloveL.scaling.x + 0.03);
+  assert.ok(!balanced.extras.mouth && make({}, { ...PHOTO_OUTFITS.red, mouthguard: true }).extras.mouth);
+  const r = gloved.pose({ x: 0, y: 0, vx: 0, vy: 0, gasRatio: 1, activePunch: null }, { x: 0, y: 1.2, activePunch: null }, 0, 0, 1 / 60, 0);
+  assert.ok([r.gloveL.x, r.gloveL.y, r.gloveL.z].every(Number.isFinite));
+});
+
 test('the existing clips pose the person: finite bones, soles on the floor, head and fists where a boxer has them', async () => {
   const { ModelBoxer, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
   const { B, scene, person } = await personWorld();

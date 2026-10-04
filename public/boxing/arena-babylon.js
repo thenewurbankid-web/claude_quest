@@ -1388,9 +1388,10 @@ function limitLights(B, scene) {
 /**
  * Mounts the 3D view in `parent` and starts rendering. Returns { destroy }.
  * names: { red, blue } for the lower thirds. looks: { red, blue } from character creation (see normalizeLook); a
- * corner without one wears its outfit from the reference photo.
+ * corner without one wears its outfit from the reference photo. physiques: { red, blue } from physiqueOf(stats) (render-only);
+ * sanctioned: padded gloves instead of taped fists.
  */
-export async function createArena3D({ parent, sim, names = {}, looks = {}, timeOfDay = 'day', BABYLON: B = globalThis.BABYLON }) {
+export async function createArena3D({ parent, sim, names = {}, looks = {}, physiques = {}, sanctioned = false, timeOfDay = 'day', BABYLON: B = globalThis.BABYLON }) {
   const night = timeOfDay === 'night';
   B ??= await loadBabylon();
   const canvas = document.createElement('canvas');
@@ -1464,7 +1465,7 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
   let boxers;
   try {
     const assets = await loadBoxerAssets(B, scene);
-    boxers = Object.fromEntries(['red', 'blue'].map((c) => [c, new ModelBoxer(B, scene, assets, c, shadow, { glove: LOOK.wraps, trunks: LOOK.trunks[c], wraps: true, outfit: looks[c] ? normalizeLook(looks[c], PHOTO_OUTFITS[c]) : PHOTO_OUTFITS[c] })]));
+    boxers = Object.fromEntries(['red', 'blue'].map((c) => [c, new ModelBoxer(B, scene, assets, c, shadow, { glove: LOOK.wraps, trunks: LOOK.trunks[c], wraps: !sanctioned, physique: physiques[c], outfit: looks[c] ? normalizeLook(looks[c], PHOTO_OUTFITS[c]) : PHOTO_OUTFITS[c] })]));
   } catch (err) {
     console.warn('boxer models unavailable, using primitive boxers:', err);
     boxers = { red: new Boxer(B, scene, 'red', shadow), blue: new Boxer(B, scene, 'blue', shadow) };

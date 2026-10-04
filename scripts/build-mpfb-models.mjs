@@ -14,6 +14,28 @@ const OUT = path.join(import.meta.dirname, '..', 'public', 'boxing', 'models');
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
 const doc = await io.read(path.join(BUILD, 'person_raw.glb'));
 
+// Physique morph targets (BOX-25): the lean and heavy builds have the same vertices as the balanced one, so each mesh
+// gets two POSITION targets, 'lean' and 'heavy' (their offsets from balanced). The game blends them by the fighter's stats.
+const VARIANTS = ['lean', 'heavy'];
+const variantDocs = await Promise.all(VARIANTS.map((v) => io.read(path.join(BUILD, `person_raw_${v}.glb`))));
+for (const mesh of doc.getRoot().listMeshes()) {
+  const prims = mesh.listPrimitives();
+  const others = variantDocs.map((d) => d.getRoot().listMeshes().find((m) => m.getName() === mesh.getName()));
+  if (others.some((m) => !m)) throw new Error(`${mesh.getName()} missing from a variant build`);
+  prims.forEach((prim, pi) => {
+    const base = prim.getAttribute('POSITION').getArray();
+    others.forEach((om, vi) => {
+      const alt = om.listPrimitives()[pi].getAttribute('POSITION').getArray();
+      if (alt.length !== base.length) throw new Error(`${mesh.getName()}: ${VARIANTS[vi]} has different vertices`);
+      const delta = new Float32Array(base.length);
+      for (let i = 0; i < base.length; i++) delta[i] = alt[i] - base[i];
+      const acc = doc.createAccessor(`${mesh.getName()}_${VARIANTS[vi]}`).setType('VEC3').setArray(delta).setBuffer(doc.getRoot().listBuffers()[0]);
+      prim.addTarget(doc.createPrimitiveTarget(VARIANTS[vi]).setAttribute('POSITION', acc));
+    });
+  });
+  mesh.setWeights(VARIANTS.map(() => 0)).setExtras({ ...mesh.getExtras(), targetNames: VARIANTS });
+}
+
 for (const m of doc.getRoot().listMaterials()) {
   m.setNormalTexture(null);
   if (/^(hair|brows|lashes)/.test(m.getName())) m.setAlphaMode('MASK').setAlphaCutoff(0.5).setDoubleSided(true);

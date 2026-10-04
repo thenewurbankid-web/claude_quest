@@ -37,12 +37,17 @@ header has no CC0 line; the headers it read are in `assets-src/build/mpfb/licenc
 | `top_tee`, `top_tank`, `top_tee_sleeve` | `elvs_crude_t-shirt_male` | MakeHuman, edited by Elvaerwyn, CC0 |
 | `top_varsity`, `top_varsity_sleeve` (the jacket) | `male_casualsuit05` (its shirt) | Data Collection AB, Joel Palmius, Jonas Hauquier, CC0 |
 | `pants_jeans` | `male_casualsuit04` (its trousers) | same, CC0 |
+| `pants_trunks` (boxing trunks: these shorts on a flat grey colour, tinted in game) | `cortu_jeans_shorts` | Cortu Johnstone, CC0 |
 | `top_hoodie`, `top_hoodie_sleeve` (a knit sweater) | `toigo_fisherman_sweater` | MRT, CC0 |
 | `shoes_timbs` | `toigo_ankle_boots_male` | MRT, CC0 |
 | `shoes_sneakers` | `shoes05` | Data Collection AB et al., CC0 |
 | `hair_short01`, `hair_short02` | `short01`, `short02` | same, CC0 |
 | eyes, brows, lashes | `low-poly`, `eyebrow001`, `eyelashes01` | same, CC0 |
 | skin, `person_skin_*.webp` | `young_caucasian_male` (light), `young_asian_male` (medium), `young_african_male` (deep) | same, CC0 |
+
+`person.glb` also carries two morph targets on every mesh, `lean` and `heavy`: the offsets of the same MPFB body built with
+different macro and detail targets (`scripts/build-mpfb-boxer.py --variant lean|heavy`, merged by `build-mpfb-models.mjs`). Same
+CC0 data, no new asset. The gloves, cuffs and mouthguard are drawn in code (primitives), so they carry no licence.
 
 Garment textures are converted to grey (shading kept) so the game can tint them with a look's colours; normal maps were
 dropped and textures resized to 1024 px WebP.

@@ -53,6 +53,7 @@ TOPS = {            # style -> clothes asset (the suits' shirts are cut out of t
     'hoodie': 'toigo_fisherman_sweater',        # long-sleeved knit
 }
 JEANS = 'male_casualsuit04'                      # the suit's jeans (its tee is dropped)
+TRUNKS = 'cortu_jeans_shorts'                     # boxing trunks: these shorts on a flat grey texture, tinted by the look
 SHOES = {'timbs': 'toigo_ankle_boots_male', 'sneakers': 'shoes05'}
 HAIR = {'short01': 'short01', 'short02': 'short02'}
 SKINS = {'light': 'young_caucasian_male', 'medium': 'young_asian_male', 'deep': 'young_african_male'}
@@ -150,6 +151,7 @@ for style in ('tee', 'varsity', 'hoodie'):
     parts[f'top_{style}'] = add('clothes', TOPS[style], 'Clothes')
 parts['top_tank'] = None                         # made from top_tee below
 parts['pants_jeans'] = add('clothes', JEANS, 'Clothes')
+parts['pants_trunks'] = add('clothes', TRUNKS, 'Clothes')
 for k, n in SHOES.items(): parts[f'shoes_{k}'] = add('clothes', n, 'Clothes')
 for k, n in HAIR.items(): parts[f'hair_{k}'] = add('hair', n, 'Hair')
 parts['eyes'] = add('eyes', EYES, 'Eyes')
@@ -376,6 +378,9 @@ for style, asset in TOPS.items():
     set_mat(parts[f'top_{style}'], m)
     if style != 'tank': set_mat(parts[f'top_{style}_sleeve'], m)
 set_mat(parts['pants_jeans'], build_material('pants_jeans', mhmat_of('clothes', JEANS), tint=True))
+flat = bpy.data.images.new('trunks_flat', 8, 8, alpha=False); flat.pixels = [0.5, 0.5, 0.5, 1.0] * 64
+flat.filepath_raw = os.path.join(OUT, 'trunks_flat.png'); flat.file_format = 'PNG'; flat.save()
+set_mat(parts['pants_trunks'], build_material('pants_trunks', mhmat_of('clothes', TRUNKS), tint=True, force_diffuse=flat.filepath_raw))
 set_mat(parts['shoes_timbs'], build_material('shoes_timbs', mhmat_of('clothes', SHOES['timbs'])))
 set_mat(parts['shoes_sneakers'], build_material('shoes_sneakers', mhmat_of('clothes', SHOES['sneakers']), tint=True))
 

@@ -36,6 +36,9 @@ const hash = (s) => { let h = 2166136261; for (const c of String(s)) h = Math.im
 
 export const tierIndex = (rep) => TIERS.reduce((t, x, i) => (rep >= x.rep ? i : t), 0);
 
+/** Sanctioned fights (padded gloves) are the career fights above the block parties; street fights and quick fights use wraps. */
+export const isSanctioned = (offer) => !!offer && offer.tier >= 1;
+
 export function newCareer(seed = 1) {
   return { v: 1, seed: seed >>> 0, week: 1, money: 0, rep: 0, energy: ENERGY.max, injury: 0, fights: 0, trained: {}, rivals: {}, log: [] };
 }

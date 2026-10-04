@@ -387,8 +387,8 @@ export async function paintOutfit(B, scene, mesh, baseTex, outfit) {
 
 /** The two fighters' default outfits, taken from the user's reference photo. Character creation starts from these. */
 export const PHOTO_OUTFITS = {
-  red: { topStyle: 'tee', top: '#ecebe6', jeans: '#8fa8c4', boots: 'timbs', cap: '#1c2540', capBackwards: true, chain: true, wraps: '#c9343a', skin: 'light' },
-  blue: { topStyle: 'varsity', top: '#1f2a44', sleeve: '#c9c6bf', jeans: '#2f3b52', boots: 'sneakers', cap: null, chain: true, wraps: '#2f6fd0', skin: 'deep' },
+  red: { topStyle: 'tee', top: '#ecebe6', jeans: '#8fa8c4', boots: 'timbs', cap: '#1c2540', capBackwards: true, chain: true, wraps: '#c9343a', skin: 'light', bottoms: 'jeans', trunks: '#b3262e', mouthguard: false },
+  blue: { topStyle: 'varsity', top: '#1f2a44', sleeve: '#c9c6bf', jeans: '#2f3b52', boots: 'sneakers', cap: null, chain: true, wraps: '#2f6fd0', skin: 'deep', bottoms: 'jeans', trunks: '#2f6fd0', mouthguard: false },
 };
 
 /** What character creation offers. Everything comes from the reference photo (user: "the outfits will be the ones in the photo"). */
@@ -401,6 +401,8 @@ export const LOOK_OPTIONS = {
   cap: ['#1c2540', '#16171a', '#7a1f26', '#ecebe6', '#3d5a3a'],
   wraps: ['#c9343a', '#2f6fd0', '#ecebe6', '#16171a', '#d9a12b'],
   skin: { light: 'Light', medium: 'Medium', deep: 'Deep' },
+  bottoms: { jeans: 'Jeans', trunks: 'Boxing trunks' },
+  trunks: ['#b3262e', '#2f6fd0', '#ecebe6', '#16171a', '#d9a12b', '#3d5a3a'],
 };
 // Medium skin: the light texture multiplied by this, so the painted folds and features stay.
 const SKIN_TINT = { medium: [0.8, 0.64, 0.52] };
@@ -426,6 +428,9 @@ export function normalizeLook(look, base = PHOTO_OUTFITS.red) {
     chain: typeof l.chain === 'boolean' ? l.chain : !!base.chain,
     wraps: hex(l.wraps, base.wraps),
     skin: pick(l.skin, Object.keys(LOOK_OPTIONS.skin), base.skin ?? 'light'),
+    bottoms: pick(l.bottoms, Object.keys(LOOK_OPTIONS.bottoms), base.bottoms ?? 'jeans'),
+    trunks: hex(l.trunks, base.trunks ?? '#b3262e'),
+    mouthguard: typeof l.mouthguard === 'boolean' ? l.mouthguard : !!base.mouthguard,
   };
 }
 
@@ -434,12 +439,12 @@ export function normalizeLook(look, base = PHOTO_OUTFITS.red) {
 
 /** Garment textures are baked grey with this mean (scripts/build-mpfb-boxer.py), so diffuseColor / this gives the exact hex. */
 const GREY_MEAN = 0.8;
-const TINTED = new Set(['top_tee', 'top_tank', 'top_hoodie', 'top_varsity', 'pants_jeans', 'shoes_sneakers']);
+const TINTED = new Set(['top_tee', 'top_tank', 'top_hoodie', 'top_varsity', 'pants_jeans', 'pants_trunks', 'shoes_sneakers']);
 const TOP_PARTS = { tee: ['top_tee', 'top_tee_sleeve'], tank: ['top_tank'], varsity: ['top_varsity', 'top_varsity_sleeve'], hoodie: ['top_hoodie', 'top_hoodie_sleeve'] };
 
 /** Names of the person.glb meshes a look shows. Dark hair for medium and deep skin, brown for light; none under a cap. */
 export function personParts(o) {
-  const parts = ['skin', 'eyes', 'brows', 'lashes', 'pants_jeans', `shoes_${o.boots === 'sneakers' ? 'sneakers' : 'timbs'}`, ...(TOP_PARTS[o.topStyle] ?? TOP_PARTS.tee)];
+  const parts = ['skin', 'eyes', 'brows', 'lashes', o.bottoms === 'trunks' ? 'pants_trunks' : 'pants_jeans', `shoes_${o.boots === 'sneakers' ? 'sneakers' : 'timbs'}`, ...(TOP_PARTS[o.topStyle] ?? TOP_PARTS.tee)];
   if (!o.cap) parts.push(o.skin === 'light' ? 'hair_short02' : 'hair_short01');
   return parts;
 }
@@ -447,10 +452,22 @@ export function personParts(o) {
 /** The colour (hex) a tinted person mesh gets from the look, or null for an untinted one. */
 export function personTint(name, o) {
   if (name === 'pants_jeans') return o.jeans;
+  if (name === 'pants_trunks') return o.trunks;
   if (name === 'shoes_sneakers') return '#ececea';
   if (name === 'top_varsity_sleeve') return o.sleeve ?? o.top;
   if (TINTED.has(name) || /^top_.*_sleeve$/.test(name)) return o.top;
   return null;
+}
+
+/**
+ * How far a fighter's build leans toward the lean or heavy body (0..1 each, never both): power against the mean of speed
+ * and stamina, a 30-point gap being the full shift. Even stats keep the balanced body. Render-only, from the stats both
+ * sides already share, so nothing extra travels in P2P.
+ */
+export function physiqueOf(stats) {
+  const n = (x) => Math.min(100, Math.max(0, Number(x) || 0));
+  const d = Math.min(1, Math.max(-1, (n(stats?.power) - (n(stats?.speed) + n(stats?.stamina)) / 2) / 30));
+  return { lean: d < 0 ? -d : 0, heavy: d > 0 ? d : 0 };
 }
 
 export class ModelBoxer {
@@ -469,6 +486,12 @@ export class ModelBoxer {
       const pbr = m.material;
       const part = m.name.slice(corner.length + 1);
       if (person) m.setEnabled(shown.has(part));
+      if (person && part === 'pants_trunks' && !pbr?.albedoTexture) {   // the flat trunks are exported as a plain colour, no texture
+        const flat = new B.StandardMaterial(`${pbr.name}-${corner}`, scene);
+        flat.diffuseColor = B.Color3.FromHexString(personTint(part, lookOutfit)); flat.specularColor = new B.Color3(0.12, 0.12, 0.12); flat.specularPower = 24;
+        m.material = flat;
+        continue;
+      }
       if (!pbr?.albedoTexture) continue;
       const mat = new B.StandardMaterial(`${pbr.name}-${corner}`, scene);
       if (person) {
@@ -484,6 +507,7 @@ export class ModelBoxer {
       mat.specularColor = new B.Color3(0.08, 0.07, 0.07); mat.specularPower = /Eyes|eyes/.test(pbr.name) ? 96 : 20;
       m.material = mat;
     }
+    this.setPhysique(colors.physique);
     if (person) this.rig.standOn(this.rig.meshes.find((m) => m.isEnabled() && /^shoes_/.test(m.name.slice(corner.length + 1))));
     for (const m of this.rig.meshes) { shadow.addShadowCaster(m); m.receiveShadows = true; }
 
@@ -507,10 +531,10 @@ export class ModelBoxer {
       return m;
     };
     // Street gear (colors.wraps): taped fists instead of gloves, low sneakers instead of high-top boots.
-    const wraps = !!colors.wraps;
+    const wraps = !!colors.wraps;   // false in a sanctioned fight: padded gloves
     const wrapCol = outfit?.wraps ?? colors.glove;
     const glove = mat('glove', wrapCol, wraps ? 0.04 : 0.12), trunks = mat('trunks', colors.trunks, 0.06);
-    const band = mat('band', outfit ? '#3a2a1e' : wraps ? wrapCol : '#f1f1f1', 0.05);
+    const band = mat('band', wraps ? (outfit ? '#3a2a1e' : wrapCol) : '#f1f1f1', 0.05);
     const bootCol = outfit ? (outfit.boots === 'sneakers' ? '#ececea' : '#c89a5c') : wraps && corner === 'red' ? '#e9e9e6' : '#111318';
     const boot = mat('boot', bootCol, 0.05);
     const keep = (m, material) => { m.material = material; m.rotationQuaternion = new B.Quaternion(); shadow.addShadowCaster(m); return m; };
@@ -541,6 +565,7 @@ export class ModelBoxer {
         this.extras.capDome = keep(B.MeshBuilder.CreateSphere('capDome', { diameter: 0.215, segments: 14, slice: 0.55 }, scene), capM);
         this.extras.capBrim = keep(B.MeshBuilder.CreateBox('capBrim', { width: 0.18, height: 0.012, depth: 0.12 }, scene), capM);
       }
+      if (outfit.mouthguard) this.extras.mouth = keep(B.MeshBuilder.CreateBox('mouth', { width: MOUTH.w, height: MOUTH.h, depth: MOUTH.d }, scene), mat('mouthguard', '#f4f4f4', 0.2));
       if (outfit.chain) this.extras.chain = keep(B.MeshBuilder.CreateTorus('chain', { diameter: 0.2, thickness: 0.012, tessellation: 24 }, scene), mat('chain', '#d4a63a', 0.1));
     }
 
@@ -548,6 +573,15 @@ export class ModelBoxer {
     this.lastPunch = null; this.retract = null;
     this.hitAnim = null; this.fw = null;
     this.fall = 0; this.knocked = false; this.koStart = null;
+  }
+
+  /** Blends the person's lean and heavy morph targets (see physiqueOf); balanced is the base mesh. No-op without morphs. */
+  setPhysique(p) {
+    const w = { lean: Math.min(1, Math.max(0, p?.lean ?? 0)), heavy: Math.min(1, Math.max(0, p?.heavy ?? 0)) };
+    for (const m of this.rig.meshes) {
+      const mgr = m.morphTargetManager;
+      for (let i = 0; mgr && i < mgr.numTargets; i++) { const t = mgr.getTarget(i); if (t.name in w) t.influence = w[t.name]; }
+    }
   }
 
   /** Captures the stance feet (offsets from the body, in its frame) so planting returns to the same stance. */
@@ -745,7 +779,7 @@ export class ModelBoxer {
     }
 
     // Cap and chain ride on a head/neck frame: up along the neck, right across the shoulders, forward out of the face.
-    if (X.capDome || X.chain) {
+    if (X.capDome || X.chain || X.mouth) {
       const head = rig.pos('Head'), neckP = rig.pos('neck_01');
       const hu = norm(sub(head, neckP)), across = norm(sub(rig.pos('upperarm_r'), rig.pos('upperarm_l')));
       const cross = (a, b) => v(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
@@ -757,6 +791,10 @@ export class ModelBoxer {
         X.capDome.position.set(c.x, c.y, c.z); X.capDome.rotationQuaternion.copyFrom(frame(f));
         const b = add(c, add(mul(fwd, f * CAP.brim), mul(hu, -0.005)));
         X.capBrim.position.set(b.x, b.y, b.z); X.capBrim.rotationQuaternion.copyFrom(frame(f));
+      }
+      if (X.mouth) {
+        const c = add(head, add(mul(hu, MOUTH.up), mul(fwd, MOUTH.fwd)));
+        X.mouth.position.set(c.x, c.y, c.z); X.mouth.rotationQuaternion.copyFrom(frame(1));
       }
       if (X.chain) {
         const c = add(neckP, add(mul(hu, -0.06), mul(fwd, 0.04)));
@@ -782,6 +820,8 @@ const SPINE_LEAN = [0.06, 0.08, 0.1, 0.12, 0.12];
 const STRAIGHT = 1;
 /** Where the cap sits relative to the Head bone (metres along the head frame), tuned by eye. */
 const CAP = { up: 0.105, fwd: 0.01, brim: 0.13 };
+/** The mouthguard's size and place on the head frame (metres). */
+const MOUTH = { w: 0.05, h: 0.011, d: 0.012, up: -0.035, fwd: 0.095 };
 const smooth = (t) => t * t * (3 - 2 * t);
 const lerpV = (a, b, t) => add(a, mul(sub(b, a), t));
 const bez2 = (a, b, c, t) => lerpV(lerpV(a, b, t), lerpV(b, c, t), t);

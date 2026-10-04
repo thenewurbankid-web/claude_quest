@@ -1,5 +1,5 @@
 // Measures the 3D view in headless Chromium at a phone-sized canvas: meshes, draw calls, frame time, plus a screenshot.
-//   node scripts/measure-boxing.mjs [--crowd=photo|3d] [--time=day|night] [--shot=path.png] [--cam=hard|ringside|rooftop] [--frames=240]
+//   node scripts/measure-boxing.mjs [--crowd=photo|3d] [--time=day|night] [--shot=path.png] [--cam=hard|ringside|rooftop] [--frames=240] [--nomorph]
 // Needs playwright: PLAYWRIGHT_DIR=/path/to/node_modules/playwright (default: the construct checkout's copy).
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -15,12 +15,20 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(`http://localhost:${PORT}/boxing/?debug${args.crowd === '3d' ? '&crowd=3d' : ''}`);
-  await page.selectOption('#time', args.time || 'day');
-  await page.selectOption('#rounds', '3').catch(() => {});
-  await page.click('#new-fight');
+  await page.waitForSelector('#t-play');
+  if (args.time === 'night') {
+    await page.click('[data-go=settings]');
+    await page.locator('#set-time button', { hasText: 'Night' }).click();
+    await page.click('#s-settings .back');
+  }
+  await page.click('#t-play');
+  await page.click('#f-next');
+  await page.waitForSelector('#opps .opp');
+  await page.click('#o-fight');
   await page.waitForFunction(() => globalThis.__bmArena, null, { timeout: 120000 });
   await page.waitForTimeout(3000);
   if (args.cam) await page.evaluate((c) => __bmArena.cut(c, 600000, 'blue'), args.cam);
+  if (args.nomorph !== undefined) await page.evaluate(() => { for (const b of Object.values(__bmArena.boxers)) b.setPhysique({ lean: 0, heavy: 0 }); });
   const res = await page.evaluate(async (frames) => {
     const { scene, engine } = __bmArena;
     const inst = new BABYLON.SceneInstrumentation(scene);

@@ -9,8 +9,8 @@ import { loadBoxerAssets, ModelBoxer, PHOTO_OUTFITS, normalizeLook } from './box
 const ME = { x: 0, y: 0, vx: 0, vy: 0, gasRatio: 1, health: 100, activePunch: null };
 const OPP = { x: 0, y: 1.6, vx: 0, vy: 0, gasRatio: 1, health: 100, activePunch: null };
 
-/** Mounts the preview in `parent`. Resolves with { setLook(look), destroy() }. */
-export async function createLookPreview({ parent, look, corner = 'red' }) {
+/** Mounts the preview in `parent`. Resolves with { setLook(look), setPhysique(p), destroy() }. physique: physiqueOf(stats). */
+export async function createLookPreview({ parent, look, corner = 'red', physique = null }) {
   const B = await loadBabylon();
   const canvas = document.createElement('canvas');
   canvas.style.cssText = 'width:100%;height:100%;display:block;outline:none;touch-action:none';
@@ -57,7 +57,7 @@ export async function createLookPreview({ parent, look, corner = 'red' }) {
     if (boxer) teardown();
     const before = new Set(scene.materials);
     const outfit = normalizeLook(l, PHOTO_OUTFITS[corner]);
-    boxer = new ModelBoxer(B, scene, assets, corner, shadow, { glove: outfit.wraps, trunks: '#9e1c24', wraps: true, outfit });
+    boxer = new ModelBoxer(B, scene, assets, corner, shadow, { glove: outfit.wraps, trunks: '#9e1c24', wraps: true, physique, outfit });
     // Instancing adds the container's shared PBR materials to the scene too; those must outlive every rebuild.
     owned = scene.materials.filter((m) => !before.has(m) && !assets.boxer.materials.includes(m));
   };
@@ -84,6 +84,7 @@ export async function createLookPreview({ parent, look, corner = 'red' }) {
   // Clicking through swatches rebuilds the rig each time; a short wait keeps that to one rebuild per settle.
   let pending = null;
   return {
+    setPhysique(p) { physique = p; boxer?.setPhysique(p); },
     setLook(l) { clearTimeout(pending); pending = setTimeout(() => build(l), 120); },
     destroy() { clearTimeout(pending); io.disconnect(); ro.disconnect(); engine.stopRenderLoop(); scene.dispose(); engine.dispose(); canvas.remove(); },
   };

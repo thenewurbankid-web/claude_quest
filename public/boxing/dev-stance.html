@@ -5,8 +5,9 @@
 <canvas id="c"></canvas>
 <script type="module">
 // Fixed camera on one boxer in guard: ?cam=front|side|back|three&skin=light|medium|deep&punch=jab|cross|hook|uppercut|body&k=0..1
+// &phys=lean|heavy|balanced&bottoms=trunks&mouthguard=1&gloves=1
 import { loadBabylon } from './arena-babylon.js';
-import { loadBoxerAssets, loadGltfLoader, ModelBoxer, PHOTO_OUTFITS } from './boxer-model.js';
+import { loadBoxerAssets, loadGltfLoader, ModelBoxer, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 const q = new URLSearchParams(location.search);
 const B = await loadBabylon();
 const engine = new B.Engine(document.getElementById('c'), true, { preserveDrawingBuffer: true }, true);
@@ -22,8 +23,9 @@ const az = { front: Math.PI / 2, side: 0, back: -Math.PI / 2, three: Math.PI / 2
 const cam = new B.ArcRotateCamera('cam', az, 1.5, 4.2, new B.Vector3(0, 0.95, 0), scene); cam.fov = 0.42; cam.minZ = 0.1;
 await loadGltfLoader(B);
 const assets = await loadBoxerAssets(B, scene);
-const outfit = { ...PHOTO_OUTFITS.red, skin: q.get('skin') || PHOTO_OUTFITS.red.skin };
-const boxer = new ModelBoxer(B, scene, assets, 'red', { addShadowCaster() {} }, { glove: outfit.wraps, trunks: '#9e1c24', wraps: true, outfit });
+const outfit = normalizeLook({ ...PHOTO_OUTFITS.red, skin: q.get('skin') || PHOTO_OUTFITS.red.skin, ...(q.get('bottoms') ? { bottoms: q.get('bottoms') } : {}), ...(q.get('mouthguard') ? { mouthguard: true } : {}) });
+const physique = { lean: q.get('phys') === 'lean' ? 1 : 0, heavy: q.get('phys') === 'heavy' ? 1 : 0 };
+const boxer = new ModelBoxer(B, scene, assets, 'red', { addShadowCaster() {} }, { glove: outfit.wraps, trunks: '#9e1c24', wraps: !q.get('gloves'), physique, outfit });
 const punch = q.get('punch');
 const ME = { x: 0, y: 0, vx: 0, vy: 0, gasRatio: 1, health: 100, activePunch: punch ? { type: punch, launchTick: 0, arriveTick: 100 } : null };
 const OPP = { x: 0, y: 1.2, vx: 0, vy: 0, gasRatio: 1, health: 100, activePunch: null };

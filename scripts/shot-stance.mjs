@@ -1,5 +1,5 @@
 // Screenshots the idle stance (or a punch) from front/side/back in headless Chromium.
-//   node scripts/shot-stance.mjs <outPrefix> [--cams=front,side] [--punch=jab --k=0.5] [--skin=light]
+//   node scripts/shot-stance.mjs <outPrefix> [--cams=front,side] [--punch=jab --k=0.5] [--skin=light] [--phys=lean|heavy] [--bottoms=trunks] [--mouthguard=1] [--gloves=1]
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 const args = Object.fromEntries(process.argv.slice(3).map((a) => a.replace(/^--/, '').split('=')));
@@ -13,7 +13,7 @@ try {
   for (const cam of (args.cams || 'front,side').split(',')) {
     const page = await browser.newPage({ viewport: { width: 480, height: 720 }, deviceScaleFactor: 1 });
     const errors = []; page.on('pageerror', (e) => errors.push(String(e))); if (args.log) page.on('pageerror', (e) => console.log('[err]', String(e))); if (args.log) page.on('console', (m) => console.log('[page]', m.text().slice(0, 200))); page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-    const qs = new URLSearchParams({ cam, ...(args.punch ? { punch: args.punch, k: args.k || '0.5' } : {}), ...(args.skin ? { skin: args.skin } : {}) });
+    const qs = new URLSearchParams({ cam, ...(args.punch ? { punch: args.punch, k: args.k || '0.5' } : {}), ...(args.skin ? { skin: args.skin } : {}), ...Object.fromEntries(['phys', 'bottoms', 'mouthguard', 'gloves'].filter((k) => args[k]).map((k) => [k, args[k]])) });
     await page.goto(`http://localhost:${PORT}/boxing/dev-stance.html?${qs}`);
     await page.waitForFunction(() => globalThis.__ready, null, { timeout: 30000 });
     await page.waitForTimeout(1500);

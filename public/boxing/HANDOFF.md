@@ -4,6 +4,14 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): BOX-14 follow-up, stat-driven physique and boxing gear (BOX-25)
+
+- **Physique**: `build-mpfb-boxer.py --variant lean|heavy|balanced` now builds all three (same vertices), and `build-mpfb-models.mjs` merges lean and heavy into `person.glb` as glTF morph targets (`lean`, `heavy`) on every mesh (skin, garments, hair, eyes), 3.2 -> 4.0 MB. `boxer-model.js` `physiqueOf(stats)` (power vs mean of speed and stamina; a 30-point gap is the full shift; even stats = balanced) and `ModelBoxer.setPhysique`. The arena gets `physiques: {red, blue}` from each side's stats (so P2P needs nothing new), the Look preview follows the fighter's stats and updates when training changes them. Render-only, `FighterModel` never reads it. The skeleton stays the balanced one, so animations are unchanged.
+- **Gear**: Look has Bottoms (Jeans / Boxing trunks, `pants_trunks` from CC0 `cortu_jeans_shorts`, tinted by `look.trunks`), Mouthguard (small white insert on the face, drawn in code) and the Wraps colour now also colours gloves. All three go through `normalizeLook` (`bottoms`, `trunks`, `mouthguard`). Sanctioned fights wear padded gloves with white cuffs instead of wraps: `career.js` `isSanctioned(offer)` is true for career fights above tier 0 (block parties stay street); quick fights and P2P use wraps. **That tier rule is my choice**, change it in `isSanctioned` if you want otherwise.
+- **Re-check**: variants differ from balanced by at most 2.1 cm per vertex (lean) and 1.5 cm (heavy); arm and leg bones are unchanged, so clips can only move a limb that far into the garments. Screenshots of the stance, gloves, and hook/body shots at full heavy (`qa/box-25-physiques.png`; use `scripts/shot-stance.mjs --phys=heavy --gloves=1 --punch=hook`) show no visible clipping. Frame time: `measure-boxing.mjs` (rewritten for the new flow, has `--nomorph`) gives 3.8-7 ms CPU/frame at 400 px with or without morphs, i.e. noise, no measurable cost. 285 tests pass, `demo-e2e.mjs` clean.
+- **Untested**: a real phone's frame time, the morphs through P2P between two devices, Look panel at 375 px with the new rows (code only, not screenshotted), night.
+- **Not great yet**: the differences between lean, balanced and heavy are subtle (more in arms and legs than the torso); to exaggerate, rebuild with stronger values in `VARIANTS`. The trunks are short (jean-shorts length) with no waistband stripe; gloves don't wear in the primitive fallback.
+
 ## Done (2026-10-04): more gym drills (BOX-19)
 
 Three new `DRILLS` in `career.js`, each a phone mini-game scored through the same `hitScore`/`drillResult`/`applyDrill` path as the heavy bag: **Speed bag** (speed; fast marker, 14 taps), **Roadwork** (stamina; tap as a closing ring meets its core on a fixed beat, `beatAt`), **Sparring** (ring IQ; a glove loads, slip the other way fast, fixed `SPAR_CUES`, scored by `sparPos`). All deterministic, no randomness. The gym screen now lists every drill as a card with its own Start button; the trainer tip points at the weakest trainable stat, so it now names all four. Files: `career.js`, `index.html` (gym section and CSS), `test/boxing.test.js` (277 tests pass).
@@ -286,7 +294,7 @@ User: the fighters "look weak and crooked" (BOX-14). Before shots showed the Qua
 ## Done (2026-10-04): BOX-14 slice 2, athletic boxer body (shipped live)
 
 `scripts/build-mpfb-boxer.py` now builds an athletic body: `ATHLETE` detail targets (V-shape torso, lats, pecs, thick neck, strong jaw, shoulder/arm/leg muscle), `proportions=0.6`, and a `--variant balanced|lean|heavy` switch (only balanced is shipped; lean/heavy write `person_raw_<variant>.glb`, for slice 3). Garments are inflated 4-6 mm along their normals so the muscle doesn't poke through clothes. `person.glb` rebuilt (`node scripts/build-mpfb-models.mjs`). Before/after: `qa/box-14-before-front.png` vs `qa/box-14-athletic-front.png`/`-side.png`. 272 tests pass. Untested in a real game/phone: frame time with the new mesh, clipping of every punch against the wider shoulders.
-- Still to do for BOX-14: slice 3 (lean/balanced/heavy blended by stats, morph targets), slice 4 (trunks, sanctioned gloves, mouthguard), animation clip re-check.
+- Slice 3, slice 4 and the clip re-check were done in BOX-25 (above).
 
 ## Done (2026-10-04): BOX-18 slice 3, lean into starts, stops and turns (shipped live)
 
