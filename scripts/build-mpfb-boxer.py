@@ -104,9 +104,37 @@ def q_pos(name):
 
 # ─── Build ────────────────────────────────────────────────────────────────────────
 for o in list(bpy.data.objects): bpy.data.objects.remove(o)
+# Athletic fighter bodies (BOX-14): MPFB macro sliders plus MakeHuman detail targets (CC0 data shipped with MPFB). Detail
+# values are 0..1; 'incr'/'decr' are separate targets. Three builds: lean (speed), balanced, heavy (power).
+SIDES = ('l', 'r')
+def both(name, v): return {f'{s}-{name}': v for s in SIDES}
+ATHLETE = {                       # common to every variant: boxer shoulders, back, neck, jaw, trim waist
+    'torso-vshape-incr': 1.0, 'torso-muscle-dorsi-incr': 1.0, 'torso-muscle-pectoral-incr': 0.9, 'torso-scale-horiz-incr': 0.25,
+    'measure-neck-circ-incr': 0.8, 'neck-scale-horiz-incr': 0.4, 'chin-width-incr': 0.4, 'chin-prominent-incr': 0.4,
+    'stomach-tone-incr': 0.8, 'head-square': 0.25,
+    **both('upperarm-shoulder-muscle-incr', 1.0), **both('upperarm-muscle-incr', 1.0), **both('lowerarm-muscle-incr', 0.8),
+    'measure-upperarm-circ-incr': 0.7, **both('upperarm-scale-horiz-incr', 0.3), **both('upperarm-scale-depth-incr', 0.3),
+    **both('upperleg-muscle-incr', 0.5), **both('lowerleg-muscle-incr', 0.6),
+}
+VARIANTS = {
+    'balanced': {'macro': dict(muscle=0.82, weight=0.42), 'detail': ATHLETE},
+    'lean':     {'macro': dict(muscle=0.68, weight=0.28), 'detail': {**ATHLETE, 'torso-vshape-incr': 0.5, 'measure-waist-circ-decr': 0.4,
+                 'torso-muscle-pectoral-incr': 0.5, 'torso-muscle-dorsi-incr': 0.6, 'measure-neck-circ-incr': 0.4,
+                 **both('upperarm-shoulder-muscle-incr', 0.6), **both('upperarm-muscle-incr', 0.45), **both('upperleg-muscle-incr', 0.3)}},
+    'heavy':    {'macro': dict(muscle=0.97, weight=0.62), 'detail': {**ATHLETE, 'torso-vshape-incr': 0.9, 'torso-muscle-pectoral-incr': 0.9,
+                 'torso-muscle-dorsi-incr': 1.0, 'measure-neck-circ-incr': 0.9, 'neck-scale-horiz-incr': 0.5,
+                 **both('upperarm-shoulder-muscle-incr', 1.0), **both('upperarm-muscle-incr', 0.85), **both('lowerarm-muscle-incr', 0.7),
+                 **both('upperleg-muscle-incr', 0.6)}},
+}
+VARIANT = argv[argv.index('--variant') + 1] if '--variant' in argv else 'balanced'
 mac = TS.get_default_macro_info_dict()
-mac.update(gender=1.0, muscle=0.7, weight=0.5)
+mac.update(gender=1.0, proportions=0.6, **VARIANTS[VARIANT]['macro'])
 body = HS.create_human(macro_detail_dict=mac)
+for tname, val in VARIANTS[VARIANT]['detail'].items():
+    path = TS.target_full_path(tname)
+    if not path: raise SystemExit(f'no MPFB target named {tname}')
+    TS.load_target(body, path, weight=val, name=tname)
+print('SHAPEKEYS', [(k.name, round(k.value, 2)) for k in body.data.shape_keys.key_blocks if k.value] if body.data.shape_keys else None)
 TS.bake_targets(body)
 rig = HS.add_builtin_rig(body, 'game_engine')
 body.name = 'skin'
@@ -184,6 +212,17 @@ print('JEANS SHELLS', infos)
 # The varsity jacket is the other suit's shirt shell(s) without its trousers.
 infos = split_loose(parts['top_varsity'], lambda i, inf: inf[i][0] > 0.9)
 print('VARSITY SHELLS', infos)
+
+# The athletic body's muscles push through clothes that were fitted with a thin offset (skin shows at the chest, shoulders,
+# thighs and ankles), so every garment is inflated a few mm along its normals.
+INFLATE = {'top': 0.006, 'pants': 0.006, 'shoes': 0.004}
+for name, o in parts.items():
+    for prefix, amt in INFLATE.items():
+        if name.startswith(prefix):
+            bm = bm_of(o); bm.verts.ensure_lookup_table(); bm.normal_update()
+            for vtx in bm.verts: vtx.co += vtx.normal * amt
+            bm.to_mesh(o.data); bm.free()
+print('BODY HEIGHT', round(parts['skin'].dimensions.z, 3), 'SHOULDERS', round(parts['skin'].dimensions.x, 3))
 
 # ─── T-pose ────────────────────────────────────────────────────────────────────────
 meshes = [o for o in parts.values()]
@@ -362,10 +401,10 @@ for o in list(bpy.data.objects):
 bpy.ops.object.select_all(action='DESELECT')
 for o in list(parts.values()) + [rig]: o.select_set(True)
 bpy.context.view_layer.objects.active = rig
-raw = os.path.join(OUT, 'person_raw.glb')
+raw = os.path.join(OUT, 'person_raw.glb' if VARIANT == 'balanced' else f'person_raw_{VARIANT}.glb')
 bpy.ops.export_scene.gltf(filepath=raw, export_format='GLB', use_selection=True, export_apply=False, export_skins=True,
                           export_animations=False, export_yup=True, export_image_format='AUTO', export_materials='EXPORT',
                           export_extras=False, export_def_bones=False)
-bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'person.blend'))
+bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'person.blend' if VARIANT == 'balanced' else f'person_{VARIANT}.blend'))
 json.dump(LICENCES, open(os.path.join(OUT, 'licences.json'), 'w'), indent=1)
 print('WROTE', raw, 'objects', sorted(parts))
