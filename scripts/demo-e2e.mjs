@@ -45,6 +45,8 @@ try {
     await page.click('#start-round');
     await page.waitForTimeout(4000);
     await page.screenshot({ path: `${QA}7-fight-${time}.png` });
+    await page.waitForTimeout(25000);                         // damage builds on the HUD silhouettes
+    await page.screenshot({ path: `${QA}7b-fight-damage-${time}.png`, clip: { x: 0, y: 0, width: 375, height: 120 } });
     await page.evaluate(() => { const s = document.getElementById('speed-override'); s.value = 'instant'; });   // later rounds run instantly
     for (let i = 0; i < 200 && !(await visible(page, '#s-result')); i++) {
       if (await visible(page, '#start-round') && await page.locator('#start-round').isEnabled()) await page.click('#start-round');

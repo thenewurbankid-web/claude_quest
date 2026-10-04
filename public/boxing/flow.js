@@ -75,6 +75,26 @@ export function fightStats(rounds) {
   return out;
 }
 
+/** Body zones for the damage silhouette. The sim records only a punch's target (head/body) and outcome, so a blocked shot is the guard zone. */
+export const DAMAGE_ZONES = ['head', 'body', 'guard'];
+export const zoneOf = (p) => (p.outcome === 'landed' ? (p.target === 'body' ? 'body' : 'head') : p.outcome === 'blocked' ? 'guard' : null);
+
+const zoneZero = () => ({ head: { damage: 0, hits: 0 }, body: { damage: 0, hits: 0 }, guard: { damage: 0, hits: 0 } });
+export const emptyDamage = () => ({ red: zoneZero(), blue: zoneZero() });
+
+/** Adds one impact record to the damage tally of the corner that took it. Returns the zone it hit, or null for a slip. */
+export function recordDamage(dmg, p) {
+  const z = zoneOf(p);
+  if (!z) return null;
+  const slot = dmg[p.defender][z];
+  slot.damage += p.damage;
+  slot.hits += 1;
+  return z;
+}
+
+/** 0..1 intensity for tinting a zone; any damage shows, 20 health points is full. */
+export const zoneHeat = (damage) => (damage > 0 ? Math.min(1, 0.25 + damage / 20) : 0);
+
 /**
  * One line from the corner and the tactic it points to. `me`/`opp` are { health, gasRatio, stats }.
  * `precedent` is the best past winner from the fight log, if any ({ tactic, label }).
