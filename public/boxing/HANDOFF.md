@@ -24,7 +24,7 @@ Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds 
 
 - **Logo**: `scripts/build-logo.mjs` now has a clear word gap (BRING / THE), a stronger slant (0.30), and more joined strokes (B-R-I-N-G run on, R-U in RUCKUS). First-row scale 2.3 so both rows fit. Rebuilt `img/logo-ruckus-{640,1100}.webp` (105 KB / 231 KB).
 - **Title background**: the two flat SVG silhouette fighters are gone. The BOX-17 photoreal `sprites2d/{red,blue}_idle_guard.webp` sheets now idle there (`.duel .fgt` in `index.html`, frame stepped from the title fx loop at about 9 fps; blue is mirrored; dimmed, fading into the fog at the feet; the `.cam` drift gives the slow camera move; static first frame under reduced motion). Fence, lamps and light shafts kept. No new assets, so no new credits (sprites are the BOX-17 renders).
-- Shots: `scripts/title-shots.mjs <tag>` writes `qa/box-30-{before,after}-{375,1440}.png`. `npm test` 331 pass, no console errors.
+- Shipped: claude-quest main 1b8b304, bring-the-ruckus defedbc. Shots: `scripts/title-shots.mjs <tag>` writes `qa/box-30-{before,after}-{375,1440}.png`. `npm test` 331 pass, no console errors.
 - **Untested**: real phones, Safari/Firefox, whether the fighters look right next to a long player name line, the idle loop seam (16-frame sheet, looped as is).
 
 
