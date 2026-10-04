@@ -7,6 +7,7 @@ const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 const cfg = require('./config.json');
 const store = require('./lib/store');
+const { serveStatic } = require('./lib/static');
 const { collectAll, latestActivity } = require('./lib/collect');
 const { generateStory, fallbackStory, askModel, factsText, ago, clip } = require('./lib/story');
 const L = require('./lib/lore');
@@ -458,9 +459,6 @@ const body = req => new Promise((ok, fail) => {
 const send302 = (res, to) => { res.writeHead(302, { location: to }); res.end(); };
 const send = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
 const findDecision = (pid, id) => world.towns.find(t => t.id === pid)?.decisions.find(d => d.id === id);
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json',
-  '.hdr': 'application/octet-stream', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream',
-  '.ogg': 'audio/ogg', '.jpg': 'image/jpeg', '.md': 'text/markdown' };
 const THREE_DIR = path.join(__dirname, 'node_modules', 'three');
 const editorAssets = require('./lib/editor-assets')(PUBLIC); // asset editor: local-only list + import
 const studio = require('./lib/plugins')(path.join(__dirname, 'plugins'), cfg); // studio plugins: providers and tools, local only
@@ -738,10 +736,7 @@ http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/javascript' });
       return fs.createReadStream(f).pipe(res);
     }
-    const file = path.join(PUBLIC, url.pathname === '/' ? 'index.html' : path.normalize(url.pathname));
-    if (!file.startsWith(PUBLIC) || !fs.existsSync(file)) return send(res, 404, { error: 'not found' });
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
-    fs.createReadStream(file).pipe(res);
+    return serveStatic(PUBLIC, url.pathname, res);
   } catch (e) {
     if (!e.status) console.error(e);
     if (res.headersSent) return res.end();
