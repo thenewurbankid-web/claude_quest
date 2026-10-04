@@ -327,3 +327,6 @@ Run it with `npm run static -- 4792` (or `preview_start boxing-static`), then op
   maps, and the damage divisor `/ 400` in `_resolveArrivals`).
 - `boxing-manager/` is a leftover empty folder at the worktree root. Delete it by hand.
 - WebLLM worker is not started yet. `toLLMContext()` already produces the prompt block.
+
+## Done (2026-10-04): UI style pass, graffiti type and monochrome (BOX-13, Boxing UI Dev)
+User style direction applied to the whole UI. Sedgwick Ave Display (graffiti: logo, titles, buttons) plus Barlow Condensed (body, numbers) are self-hosted in `public/boxing/fonts/` (OFL, licences in `fonts/CREDITS.md`), no Google request at runtime. Palette in `:root` of `index.html` is now black surfaces, white/soft-grey text and one muted ember accent (`--accent #c2512f`); primary buttons are white on black; the title scene is desaturated; logo has an ember tag underline and a slow drip (off under `prefers-reduced-motion`). Fight-canvas content (3D arena, Phaser) is unchanged. Untested: real phone/Safari font rendering; screens other than title and career intro were not eyeballed after the recolour (hurt flash, result, gym, card), only the token swap.
