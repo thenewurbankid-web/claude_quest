@@ -266,6 +266,9 @@
   .cardtbl th { font: 600 11px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding-bottom: 6px; }
   .cardtbl th.r { color: #f3f3f3; } .cardtbl th.b { color: #a4a4a9; }
   .cardtbl td { padding: 6px 0; border-top: 1px solid var(--line); opacity: 0; animation: fade .35s forwards; animation-delay: calc(var(--i) * .55s); }
+  .cardtbl td.won { color: #fff; animation-name: stamp; } .cardtbl td.lost { color: var(--muted); }
+  @keyframes stamp { 0% { opacity: 0; transform: scale(1.8); } 60% { opacity: 1; transform: scale(.95); } 100% { opacity: 1; transform: none; } }
+  .cardtbl tr.tot td.won { text-shadow: 0 0 14px rgba(255,255,255,.45); }
   .cardtbl tr.tot td { font-size: 20px; border-top: 2px solid var(--muted); animation-delay: calc(var(--i) * .55s + .3s); }
   .stat2 { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px 10px; font-size: 14px; align-items: center; }
   .stat2 b { font: 600 15px var(--mono); } .stat2 span:nth-child(3n+2) { color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
@@ -1179,10 +1182,10 @@ function renderResult() {
   const tbl = el('table', { className: 'cardtbl' },
     el('tr', {}, el('th', { textContent: 'Round' }), el('th', { className: mine === 'red' ? 'r' : 'b', textContent: r.names[mine] }), el('th', { className: theirs === 'red' ? 'r' : 'b', textContent: r.names[theirs] })));
   r.card.rows.forEach((row, i) => {
-    const cell = (v) => el('td', { textContent: row.ko && v === 10 ? 'KO' : v });
-    tbl.append(el('tr', { style: `--i:${i}` }, el('td', { textContent: row.round }), cell(row[mine]), cell(row[theirs])));
+    const cell = (c) => el('td', { className: row[c] > row[c === mine ? theirs : mine] ? 'won' : row[c] < row[c === mine ? theirs : mine] ? 'lost' : '', textContent: row.ko && row[c] === 10 ? 'KO' : row[c] });
+    tbl.append(el('tr', { style: `--i:${i}` }, el('td', { textContent: row.round }), cell(mine), cell(theirs)));
   });
-  tbl.append(el('tr', { className: 'tot', style: `--i:${rows}` }, el('td', { textContent: 'Total' }), el('td', { textContent: r.card.total[mine] }), el('td', { textContent: r.card.total[theirs] })));
+  tbl.append(el('tr', { className: 'tot', style: `--i:${rows}` }, el('td', { textContent: 'Total' }), el('td', { className: r.card.total[mine] > r.card.total[theirs] ? 'won' : r.card.total[mine] < r.card.total[theirs] ? 'lost' : '', textContent: r.card.total[mine] }), el('td', { className: r.card.total[theirs] > r.card.total[mine] ? 'won' : r.card.total[theirs] < r.card.total[mine] ? 'lost' : '', textContent: r.card.total[theirs] })));
 
   const s = r.stats;
   const acc = (c) => (s[c].thrown ? Math.round((100 * s[c].landed) / s[c].thrown) : 0);

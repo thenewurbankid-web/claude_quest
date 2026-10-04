@@ -413,3 +413,7 @@ Most of BOX-24 was BOX-21 (stat sources, tendencies, learned-from-log, plan chip
 `index.html` only. Meters are monochrome (white health, grey stamina; health under 35% turns ember and pulses), the clock turns ember and blinks in the last 10 s, round pips under the clock, and a graffiti banner slams in on "Round N / Fight", "End of round N" and "K.O." (`banner()`, `drawPips()`). Speed and leave buttons are 56 px round thumb buttons in the bottom corners above the plan chip. Reduced motion: the global rule makes the banner and pulses instant (banner never visible). `npm test` 277 pass; `demo-e2e.mjs` clean at 375 px (`qa/game-7-fight-*.png`).
 - **Untested**: real phone thumb reach, the banner and low-health pulse by eye (the screenshot is a mid-round frame), night HUD.
 - Already existed from BOX-13 (not redone): hit flash, shake, KO slow-mo, scorecard reveal, Training upgrade screen, outfit unlocks, debug drawer. **Remaining in BOX-26**: scorecard reveal polish, upgrade-screen polish, a 2D-swap check.
+
+## Done (2026-10-04): BOX-26 slice 2, scorecard reveal polish (Boxing UI Dev)
+`index.html` only. Scorecard cells now mark the round winner (bright, stamps in) and dim the loser; the Total row glows for the winner. Reduced motion: global rule makes it instant. `npm test` 281 pass.
+- **Untested**: by eye on a phone. **Remaining in BOX-26**: upgrade-screen polish, a 2D-swap check (the e2e script only drives the 3D view).
