@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { FighterModel, CombatSimulation, computePunch, mulberry32, PUNCHES, TACTICS, RULESETS, RING_HALF_M, TICK_MS, damageDivisorFor, DEFAULT_ROUNDS, FIGHT_FORMATS } from '../public/boxing/physics-engine.js';
 import { buildFightLogRow, rankPrecedents, similarity, profileTags, successScore, toLLMContext } from '../public/boxing/game-db.js';
 
-const PINNED_SEED_11 = 'fc297163519c3059a51dd9b829ea2c12cec0b2baab51f9cb2e8892ab444ac1de'; // re-pinned for BOX-31 (held locomotion intents, dead zone, acceleration limit); before that BOX-20 (35 s x 3 defaults, fight-time damage divisor); before that BOX-22;
+const PINNED_SEED_11 = '739281f7bc829c3f3ef819de59604f0bd64a2451235e39b9721052d751cdc46d'; // re-pinned for BOX-34 (brawl buff); before that BOX-31 (held locomotion intents, dead zone, acceleration limit); before that BOX-20 (35 s x 3 defaults, fight-time damage divisor); before that BOX-22;
 const AVG = { speed: 50, power: 50, stamina: 50, ringIQ: 50 };
 const fighter = (corner, stats = AVG) => new FighterModel({ corner, name: corner, stats });
 const fight = (seed, red = AVG, blue = AVG, tactics = { red: 'pressure', blue: 'outbox' }) => {

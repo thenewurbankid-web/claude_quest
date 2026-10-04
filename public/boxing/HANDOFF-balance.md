@@ -156,3 +156,24 @@ Overall KO rate .16 -> .21 (band .10-.25). Recover stops being a dead tactic (.0
 Anything in a browser; other stat mixes; sanctioned ruleset balance; the `--moves` rates (clinch/shove counts) before/after.
 
 Shipped: claude-quest main 369e8c1 (rebased on 93047f0, 335 tests pass), bring-the-ruckus 1f70c6b (live: https://thenewurbankid-web.github.io/bring-the-ruckus/). demo-e2e not run.
+
+## BOX-34: brawl buffed back into the band (2026-10-04)
+`physics-engine.js`, `test/boxing.test.js` (335 pass; `PINNED_SEED_11` re-pinned). Board decision on BOX-31: brawl must be viable.
+
+### What changed
+- Brawl `defendMs` -20 -> -34. Note the sign: `guardMs` is ADDED to the defender's reaction window, so negative means brawl needs LESS time to defend, i.e. it is a tougher defender (chin / shrugging shots off), not an open guard as the doc comment says. Positive values made brawl worse in tests.
+- Haymaker: `massFactor` 1.55 -> 1.8, `gasCost` 2.8 -> 2.0. Overhand `gasCost` 2.1 -> 1.7 (pressure also throws it).
+- Bug fix exposed by this tuning: `_separate` could leave fighters overlapping when one was clamped on the ropes (the rope clamp undid the push). The other fighter now takes the remaining push, along the wall in corners. The existing "never overlap" test caught it on one seed.
+
+### Numbers (3 x 35 s, stats 50; mean win share per tactic, KO overall)
+| | pressure | outbox | counter | body_attack | recover | brawl | dirty | KO |
+|---|---|---|---|---|---|---|---|---|
+| before (n=40/pair) | .68 | .49 | .55 | .49 | .40 | .23 | .65 | .21 |
+| after (n=60/pair) | .68 | .40 | .52 | .42 | .37 | .45 | .66 | .18 |
+Outbox, body_attack and recover paid for it (still inside .37-.66, recover on the edge). Rows tried: defendMs -38 gave brawl .49 but recover .36; -40 alone .49; haymaker/overhand changes alone moved brawl only .23 -> .28, so the damage/gas changes are small helpers and the tougher defence does the work.
+
+### Recover (.40 now .37): does it win by doing nothing?
+No. It throws about a third of the punches outbox does and still lands 0.66 of them (outbox v recover, n=60: recover 38.5 landed at .66 rate, outbox 10.5 at .12). It stands at 1.45 m with `counter: 0.5` and jab-heavy weights, so a fighter who walks in (outbox at 1.25 m, pressure, dirty) eats counters and loses the scorecard; recover v recover and v counter throw almost nothing (~12 landed) and win on the few exchanges. Proposed fix (not applied): drop recover `counter` 0.5 -> 0.3 and `gasRegen` 1.7 -> 1.4, or widen the scorecard's penalty for fighters who barely engage. User call.
+
+### Untested
+Browser; other stat mixes; sanctioned ruleset. Not changed: `defendMs` doc comment (wrong sign wording).

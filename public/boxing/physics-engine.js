@@ -87,8 +87,8 @@ export const PUNCHES = Object.freeze({
   uppercut:   { family: 'uppercut', hand: 'rear', reachFactor: 0.68, pathFactor: 1.25, speedFactor: 0.95, massFactor: 1.10, windupMs: 170, recoveryMs: 210, gasCost: 1.8, target: 'head', peripheral: true },
   body:       { family: 'body',     hand: 'rear', reachFactor: 0.85, pathFactor: 1.20, speedFactor: 0.95, massFactor: 1.10, windupMs: 155, recoveryMs: 190, gasCost: 1.6, target: 'body' },
   // Street strikes.
-  haymaker:   { family: 'hook',     hand: 'rear', reachFactor: 0.90, pathFactor: 1.75, speedFactor: 0.90, massFactor: 1.55, windupMs: 340, recoveryMs: 300, gasCost: 2.8, target: 'head' },
-  overhand:   { family: 'hook',     hand: 'rear', reachFactor: 0.92, pathFactor: 1.55, speedFactor: 1.00, massFactor: 1.30, windupMs: 230, recoveryMs: 240, gasCost: 2.1, target: 'head', peripheral: true },
+  haymaker:   { family: 'hook',     hand: 'rear', reachFactor: 0.90, pathFactor: 1.75, speedFactor: 0.90, massFactor: 1.8, windupMs: 340, recoveryMs: 300, gasCost: 2.0, target: 'head' },
+  overhand:   { family: 'hook',     hand: 'rear', reachFactor: 0.92, pathFactor: 1.55, speedFactor: 1.00, massFactor: 1.30, windupMs: 230, recoveryMs: 240, gasCost: 1.7, target: 'head', peripheral: true },
   hook_body:  { family: 'body',     hand: 'lead', reachFactor: 0.78, pathFactor: 1.35, speedFactor: 1.00, massFactor: 1.05, windupMs: 150, recoveryMs: 190, gasCost: 1.6, target: 'body', peripheral: true },
   shovel:     { family: 'body',     hand: 'rear', reachFactor: 0.66, pathFactor: 1.15, speedFactor: 0.95, massFactor: 1.15, windupMs: 165, recoveryMs: 200, gasCost: 1.7, target: 'body', peripheral: true },
   short_upper:{ family: 'uppercut', hand: 'lead', reachFactor: 0.58, pathFactor: 1.10, speedFactor: 1.00, massFactor: 1.05, windupMs: 125, recoveryMs: 180, gasCost: 1.5, target: 'head', peripheral: true },
@@ -112,7 +112,7 @@ export const TACTICS = Object.freeze({
   counter:     { label: 'Counter-punch', rangeM: 1.20, aggression: 0.45, combo: 0.30, lateral: 0.30, counter: 1.0, gasRegen: 1.1, weights: { jab: 2, cross: 3, hook: 2, uppercut: 1, body: 1, double_jab: 0.5 }, counterWeights: { cross: 3, check_hook: 3, jab: 1.5, hook: 1, short_upper: 1 }, moves: { feint: 0.12, pivot: 0.45, shell: 0.5, clinch: 0.05, taunt: 0.05 } },
   body_attack: { label: 'Body attack',  rangeM: 0.95, defendMs: 15, aggression: 0.9, combo: 0.40, lateral: 0.15, counter: 0.3, gasRegen: 1.0, weights: { jab: 1, cross: 1, hook: 1, uppercut: 1, body: 4, hook_body: 3, shovel: 2.5 }, moves: { clinch: 0.12, feint: 0.15, pivot: 0.15, shove: 0.12 } },
   recover:     { label: 'Recover',      rangeM: 1.45, aggression: 0.25, combo: 0.10, lateral: 0.70, counter: 0.5, gasRegen: 1.7, weights: { jab: 5, cross: 1, hook: 0, uppercut: 0, body: 0 }, moves: { clinch: 0.30, shell: 0.8, pivot: 0.5, shove: 0.15 } },
-  brawl:       { label: 'Brawl',        rangeM: 0.90, defendMs: -20, aggression: 1.15, combo: 0.45, lateral: 0.05, counter: 0.1, gasRegen: 0.9, weights: { jab: 0.5, cross: 1.5, hook: 2.5, overhand: 3, haymaker: 2.5, body: 1, hook_body: 1, flurry: 1.2 }, moves: { taunt: 0.12, shove: 0.20, clinch: 0.03, cheap: 0.06 } },
+  brawl:       { label: 'Brawl',        rangeM: 0.90, defendMs: -34, aggression: 1.15, combo: 0.45, lateral: 0.05, counter: 0.1, gasRegen: 0.9, weights: { jab: 0.5, cross: 1.5, hook: 2.5, overhand: 3, haymaker: 2.5, body: 1, hook_body: 1, flurry: 1.2 }, moves: { taunt: 0.12, shove: 0.20, clinch: 0.03, cheap: 0.06 } },
   dirty_boxing:{ label: 'Dirty boxing', rangeM: 0.72, crowdMs: 15, defendMs: 15, aggression: 0.3, combo: 0.35, lateral: 0.05, counter: 0.25, gasRegen: 1.1, weights: { jab: 0.5, cross: 0.5, hook: 1, uppercut: 1.5, short_upper: 3.5, body: 1.5, hook_body: 2.5, shovel: 2 }, moves: { clinch: 0.65, shove: 0.35, feint: 0.15, pivot: 0.2, cheap: 0.16 } },
 });
 
@@ -543,6 +543,14 @@ export class CombatSimulation {
     b.pos.x += ux * push; b.pos.y += uy * push;
     const lim = RING_HALF_M - BODY_RADIUS_M;      // a push must not carry anyone through the ropes
     for (const f of [a, b]) { f.pos.x = clamp(f.pos.x, -lim, lim); f.pos.y = clamp(f.pos.y, -lim, lim); }
+    // A fighter on the ropes can't give way: the other takes the rest of the push (corners: along the wall).
+    for (const [mover, sign] of [[b, 1], [a, -1], [b, 1], [a, -1]]) {
+      const rx = b.pos.x - a.pos.x, ry = b.pos.y - a.pos.y, rd = Math.sqrt(rx * rx + ry * ry) || 1e-6;
+      if (rd >= minD - 1e-9) break;
+      const need = minD - rd;
+      mover.pos.x = clamp(mover.pos.x + sign * (rx / rd) * need, -lim, lim);
+      mover.pos.y = clamp(mover.pos.y + sign * (ry / rd) * need, -lim, lim);
+    }
   }
 
   // ── actions that are not punches (events: 'action') ──
