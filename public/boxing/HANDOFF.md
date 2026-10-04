@@ -310,6 +310,7 @@ User: the fighters "look weak and crooked" (BOX-14). Before shots showed the Qua
 - Smoke: `node scripts/shot-arena2d.mjs` (dev page `dev-arena2d.html`) ran a round in headless Chromium at 375x667 with no console errors; shots in `qa/box-17-arena2d-*.png`.
 - Not done / untested: night plate (falls back to day), ground contact shadow barely visible, no post-pass or looks recolour, no close angles, no crowd animation (crowd is baked into the plate), no real-phone frame time, game flow (not just the dev page) in a browser, P2P with this view.
 - Next: slice 3 (post-pass and looks).
+- **Shipped (live, 2026-10-04)**: claude-quest main 7703d78, bring-the-ruckus 1016762 (merged origin/main incl. BOX-22 and BOX-26 first; 308 tests pass; `demo-e2e.mjs` clean locally and live; live manifest, atlases and plate return 200). Dev pages are not synced to the public repo. Blue's outfit is a second Cycles render (`--outfit blue`), not the mask recolour in the plan.
 
 ## BOX-17 plan: photoreal 2D projection (written 2026-10-04, before any rendering)
 
