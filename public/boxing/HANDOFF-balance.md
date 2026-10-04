@@ -70,3 +70,59 @@ Spacing and ring bounds: both already existed (`_move` clamps to the ring minus 
 Tests (`npm test`: 105 pass, was 101): impact events carry contact/energy/knockout and are consistent with outcome and health; the contact point lies 0.15 m from the defender centre on the attacker side; fighters stay inside the ropes and at least 0.55 m apart on every tick across 3 tactic pairs x 6 seeds; the sim is pinned: a seed-11 full-fight hash (rounds, result, positions every tick) equals the hash from the engine before this change, and a listener that mutates the event (`contact.x`, `energy01`) leaves the output unchanged.
 
 Not covered here (Boxing Dev, after BOX-14): all rendering of contact, reactions, falls and footwork; "contact timing matches sim events within a frame" can only be tested once the renderer reads `contact`. Untested in the browser: nothing was changed in rendering. Open question for the visual side: the sim has no get-up and no knockdown short of KO, so "get up or stay down" would need a sim design decision (user's call).
+
+- 2026-10-04 (BOX-15, user): fights move to photoreal 2D projection. The sim-side events (contact point and region, `energy01`, `knockout`, ring bounds, body distance) stay and now drive which rendered clip plays and when. The 3D visual items (contact, reactions, falls, footwork, fatigue) become clip selection and timing in the 2D renderer, owned by Boxing Dev under a new issue. Suggested mapping for that renderer: `contact.region` picks the clip family (head / body / guard / air), `energy01` picks light vs heavy, `contact.dir*` picks the facing, `knockout` picks the fall, and `arriveTick` is the timing anchor.
+
+## BOX-22: street-fight moveset in the sim (2026-10-04)
+Commit ff459d4 on `worktree-boxing-balance`. Files: `physics-engine.js`, `scripts/boxing-balance.mjs`, `test/boxing.test.js` (122 pass, was 105). All deterministic (same rng, +-*/ and sqrt only); no rendering touched.
+
+### What exists
+- **Strikes** (`PUNCHES`): haymaker, overhand, hook_body, shovel, short_upper, check_hook (counter-only, thrown off a slip), cheap_shot (only after a clinch break, foul, x1.5 damage). `double_jab` and `flurry` (2-4 chained punches) are weight keys, not PUNCHES entries.
+- **Dirty boxing / defence / movement** as `action` events: circle_off, shove, clinch, forearm_frame, push_off (street, then a queued punch), ref_break (sanctioned), shell, pivot, feint (type shoulder|step), taunt, foul. Slip, roll, pull_back, parry, block and shell are the `defense` label on impacts.
+- **Rulesets** (`RULESETS`, constructor option `ruleset`, default `street`, unknown names fall back to street): street = 1.4 s clinch, shoves and full cheap shots, no ref; sanctioned = 0.7 s clinch ended by the ref, no shoves, cheap shots x0.25 as often, each foul costs 1 card point (`summarizeRound.fouls`).
+- **Tactics**: new `brawl` and `dirty_boxing`; the four old tactics got move rates, `defendMs` and per-style counter weights.
+- **Composure**: taunt drains it, the victim reads slower; taunter is exposed (+45 ms window). Feints widen the next punch's window (less for high Ring IQ). Shell halves landed damage.
+
+### Event contract (for BOX-17 / BOX-18)
+- `impact` (unchanged shape) gains `move`, `hand` (lead|rear), `combo {id,index,length}` (id unique per fight), `defense`, `foul`. `type` stays the legacy family (jab/cross/hook/uppercut/body) so `PUNCH_CLIP[type]` and `HAND` keep working; use `move`+`hand` for the specific clip.
+- `action`: `{kind, type, corner, against, hand (lead|rear|both), target, energy01, dir, contact:{region,x,y,heightM,dirX,dirY}, round, tick, startTick, endTick}` plus `points` on foul. Tick resets each round.
+- `snapshot()` adds `ruleset` and per fighter `composure`, `action`, `clinch`, `shell`.
+
+### Numbers
+- `damageDivisorFor(roundSeconds)`: linear 54 at <=35 s to 475 at 180 s (replaces `DAMAGE_DIVISOR`). 35 s x 3 rounds: overall KO rate 0.16 (band 0.10-0.25), mean win share pressure .67, outbox .59, counter .56, body_attack .55, dirty_boxing .61, brawl .39, recover .05 (n=20). Old 180 s x 6 default (n=10): KO 0.25, counter .75, dirty .70, brawl .18, pressure .37.
+- Pairwise results are still rock-paper-scissors with extremes (reaction-window model makes close range decisive). Recover almost never wins. Check hook is rare (about 0.04 a fight), cheap shot about 0.3 a fight.
+- Pin test re-pinned (seed 11) since the sim changed; it now also mutates `action` events to prove they are read-only.
+- Batch: `node scripts/boxing-balance.mjs --n 40 --rounds 3 --seconds 35 --moves [--ruleset sanctioned] [--set a.b.c=v]`.
+
+### Open / for others
+- `index.html` has no venue concept and builds the sim without `ruleset` or `roundSeconds`; both peers must send and use the same `ruleset` in the P2P `start` message (normalize it against `RULESETS`). Default is street.
+- Untested: anything in the browser (no renderer reads `action` events or `move` yet), other stat mixes, per-round tactic changes, `--ruleset sanctioned` balance (only unit-tested).
+- Tactic rebalance beyond the KO band and 0.37-0.66 mean shares is not attempted; user call if pairwise extremes matter.
+
+## BOX-20: shorter fights (2026-10-04, sim side)
+`physics-engine.js`, `test/boxing.test.js` (126 pass, was 122), `scripts/boxing-balance.mjs` (defaults now 3 rounds x 35 s). Deterministic, no rendering touched.
+
+### What exists
+- Defaults: `DEFAULT_ROUNDS` 3, `DEFAULT_ROUND_SECONDS` 35, `DEFAULT_BREAK_SECONDS` 10 (constructor option `breakSeconds`). `FIGHT_FORMATS`: `street_early` (2 rounds, 1-2 allowed), `street` (3), `title` (5, 3-5 allowed). Nothing in `index.html` reads them yet.
+- Break: recovery between rounds is `break / (break + 15)` of the missing gas and composure (40 % at 10 s, the old fixed value). The sim does not simulate the break itself; the UI shows the 10 s corner timer and calls `startRound` after it.
+- `sim.runToEnd(pick?)`: sim to result. `pick(sim)` returns `{red, blue}` per round; without it each corner keeps its last tactic. Same output as stepping round by round (tested).
+- Fast-forward is a UI job: step the sim more ticks per frame (it is deterministic, so any rate gives the same fight). `runRoundToEnd()` skips a single round.
+- `damageDivisorFor(roundSeconds, rounds = 3)` now scales with total fight seconds (54 at 105 s, 475 at 1080 s, floor 12), so a 5-round title fight no longer KOs 69 % of the time. Before: 3 x 35 s unchanged (54).
+- Scorecards: when cards are level (usual over 1, 2 or 4 rounds), the fighter with clearly more landed score (joules + 25 per landed shot, over 5 %) wins; within 5 % is a draw. Method label stays `Decision`.
+
+### Numbers (294 fights per row: every tactic pair x 6 seeds, stats 50, 35 s rounds)
+| rounds | KO | decision | draw |
+|---|---|---|---|
+| 1 | .06 | .92 | .02 |
+| 2 | .14 | .77 | .09 |
+| 3 | .17 | .81 | .02 |
+| 4 | .17 | .73 | .11 |
+| 5 | .17 | .81 | .02 |
+Before: KO 0 / 0 / .17 / - / .69 at 1 / 2 / 3 / - / 5 rounds, 2-round draws 31 %. The remaining draws are mostly recover v recover (no punches thrown). 1-round fights rarely KO; raise their damage if you want more.
+
+### Open
+- Untested in the browser: nothing here touches the UI. `index.html` still passes `rounds` from its select and no `roundSeconds`/`breakSeconds`, so it now runs 35 s rounds with the old round counts (option values 1-6). Wiring the format picker, corner timer, fast-forward and a sim-to-result button belongs to Boxing Dev. Both P2P peers must send the same `rounds`, `roundSeconds`, `breakSeconds`.
+- Not tried: other stat mixes, the sanctioned ruleset, tactic pair extremes (unchanged from BOX-22).
+
+## BOX-27: shipped to main (2026-10-04)
+Rebased BOX-20/22 onto origin/main (BOX-15 was already there). Conflict was test-only: both sides appended tests to `test/boxing.test.js`; kept both. One fix beyond the merge: Boxing Dev's BOX-17 test requires every `PUNCHES` key to have an `ATTACK_CLIP`, so `public/boxing/clips2d.js` now maps the seven BOX-22 punches onto existing clips (haymaker/check_hook -> hook, overhand -> cross, hook_body/shovel -> body, short_upper -> uppercut, cheap_shot -> jab). Placeholders: Boxing Dev should author or pick proper clips. `npm test` 302 pass. Untested in the browser.

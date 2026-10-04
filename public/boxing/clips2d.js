@@ -23,7 +23,12 @@ export const CLIPS = Object.freeze({
   celebrate:   { frames: 24, fps: 15, loop: true },
 });
 
-export const ATTACK_CLIP = Object.freeze({ jab: 'atk_jab', cross: 'atk_cross', hook: 'atk_hook', uppercut: 'atk_uppercut', body: 'atk_body' });
+export const ATTACK_CLIP = Object.freeze({
+  jab: 'atk_jab', cross: 'atk_cross', hook: 'atk_hook', uppercut: 'atk_uppercut', body: 'atk_body',
+  // BOX-22 street strikes reuse the nearest clip until dedicated ones are authored
+  haymaker: 'atk_hook', overhand: 'atk_cross', hook_body: 'atk_body', shovel: 'atk_body',
+  short_upper: 'atk_uppercut', check_hook: 'atk_hook', cheap_shot: 'atk_jab',
+});
 
 export const HEAVY_ENERGY = 0.6;   // energy01 at which a hit gets a push-in and effects
 export const STAGGER_ENERGY = 0.75;

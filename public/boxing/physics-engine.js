@@ -34,7 +34,19 @@ const GUARD_OFFSET_M = 0.25;               // fist rests this far ahead of centr
 const TARGET_DEPTH_M = 0.15;               // head/body surface ahead of centre
 const SLIP_DISTANCE_M = 0.12;              // how far a head must move to evade
 const EXCHANGE_IDLE_MS = 800;              // quiet time that closes an exchange
-const DAMAGE_DIVISOR = 475;                // joules per health point
+export const DEFAULT_ROUNDS = 3, DEFAULT_ROUND_SECONDS = 35, DEFAULT_BREAK_SECONDS = 10;
+/** Fight formats: how many rounds each kind of fight runs (min..max), street fights start short. */
+export const FIGHT_FORMATS = {
+  street_early: { label: 'Street fight', rounds: 2, minRounds: 1, maxRounds: 2 },
+  street:       { label: 'Street fight', rounds: 3, minRounds: 3, maxRounds: 3 },
+  title:        { label: 'Title fight',  rounds: 5, minRounds: 3, maxRounds: 5 },
+};
+const DIVISOR_LONG = 475, DIVISOR_SHORT = 54;   // joules per health point at 1080 s (6 x 180) and at 105 s (3 x 35) of fighting
+/** Fewer punches fit in a short fight, so each one has to hurt more. Linear in total fight seconds (no pow: lockstep-safe). */
+export function damageDivisorFor(roundSeconds, rounds = DEFAULT_ROUNDS) {
+  const k = (clamp(roundSeconds * rounds, 35, 1080) - 105) / 975;
+  return Math.max(12, DIVISOR_SHORT + (DIVISOR_LONG - DIVISOR_SHORT) * k);
+}
 const BLOCK_MARGIN_MS = 35;                // late reactions within this are blocks
 const PERIPHERAL_MS = 30;                  // extra perception for punches from the side
 const HEAD_HEIGHT_M = 1.6;                 // contact height for head shots
@@ -42,27 +54,61 @@ const BODY_HEIGHT_M = 1.15;                // contact height for body shots
 const ENERGY_REF_J = 170;                  // transferred joules that read as a full-strength hit (about p95 of landed punches)
 const ROPES_ZONE_M = 0.6;                  // within this of the ropes, a defender can't slip back
 
-/** Punch catalogue. Factors are relative to the fighter's base values. */
-export const PUNCHES = Object.freeze({
-  jab:      { reachFactor: 1.00, pathFactor: 1.00, speedFactor: 1.10, massFactor: 0.70, windupMs: 130, recoveryMs: 120, gasCost: 0.8, target: 'head' },
-  cross:    { reachFactor: 1.05, pathFactor: 1.05, speedFactor: 1.00, massFactor: 1.00, windupMs: 150, recoveryMs: 170, gasCost: 1.4, target: 'head' },
-  hook:     { reachFactor: 0.78, pathFactor: 1.45, speedFactor: 1.05, massFactor: 1.15, windupMs: 160, recoveryMs: 200, gasCost: 1.8, target: 'head', peripheral: true },
-  uppercut: { reachFactor: 0.68, pathFactor: 1.25, speedFactor: 0.95, massFactor: 1.10, windupMs: 170, recoveryMs: 210, gasCost: 1.8, target: 'head', peripheral: true },
-  body:     { reachFactor: 0.85, pathFactor: 1.20, speedFactor: 0.95, massFactor: 1.10, windupMs: 155, recoveryMs: 190, gasCost: 1.6, target: 'body' },
+const FEINT_MS = 32;                       // a feint that works slows the defender's read by this much
+const EXPOSED_MS = 45;                     // a taunting or beaten fighter reacts this much slower
+const CLINCH_RANGE_M = 0.8;                // centre distance within which a clinch can start
+
+/**
+ * Venue rules. Street: no ref, clinches end when one fighter pushes off, shoves
+ * and cheap shots are allowed. Sanctioned: the ref breaks clinches, shoving is
+ * out, and a cheap shot is a foul (one card point) and much rarer.
+ */
+export const RULESETS = Object.freeze({
+  street:     { label: 'Street',     refBreak: false, clinchMs: 1400, shove: true,  cheapScale: 1.0, foulPoints: 0 },
+  sanctioned: { label: 'Sanctioned', refBreak: true,  clinchMs: 700,  shove: false, cheapScale: 0.25, foulPoints: 1 },
 });
+
+/**
+ * Punch catalogue. Factors are relative to the fighter's base values. `family`
+ * is the legacy shape (jab/cross/hook/uppercut/body) that renderers already
+ * draw; `hand` is the punching hand. counterOnly moves are only thrown off a
+ * slip; afterBreak moves only right after a clinch or shove breaks (foul under
+ * sanctioned rules).
+ */
+export const PUNCHES = Object.freeze({
+  jab:        { family: 'jab',      hand: 'lead', reachFactor: 1.00, pathFactor: 1.00, speedFactor: 1.10, massFactor: 0.70, windupMs: 130, recoveryMs: 120, gasCost: 0.8, target: 'head' },
+  cross:      { family: 'cross',    hand: 'rear', reachFactor: 1.05, pathFactor: 1.05, speedFactor: 1.00, massFactor: 1.00, windupMs: 150, recoveryMs: 170, gasCost: 1.4, target: 'head' },
+  hook:       { family: 'hook',     hand: 'lead', reachFactor: 0.78, pathFactor: 1.45, speedFactor: 1.05, massFactor: 1.15, windupMs: 160, recoveryMs: 200, gasCost: 1.8, target: 'head', peripheral: true },
+  uppercut:   { family: 'uppercut', hand: 'rear', reachFactor: 0.68, pathFactor: 1.25, speedFactor: 0.95, massFactor: 1.10, windupMs: 170, recoveryMs: 210, gasCost: 1.8, target: 'head', peripheral: true },
+  body:       { family: 'body',     hand: 'rear', reachFactor: 0.85, pathFactor: 1.20, speedFactor: 0.95, massFactor: 1.10, windupMs: 155, recoveryMs: 190, gasCost: 1.6, target: 'body' },
+  // Street strikes.
+  haymaker:   { family: 'hook',     hand: 'rear', reachFactor: 0.90, pathFactor: 1.75, speedFactor: 0.90, massFactor: 1.55, windupMs: 340, recoveryMs: 300, gasCost: 2.8, target: 'head' },
+  overhand:   { family: 'hook',     hand: 'rear', reachFactor: 0.92, pathFactor: 1.55, speedFactor: 1.00, massFactor: 1.30, windupMs: 230, recoveryMs: 240, gasCost: 2.1, target: 'head', peripheral: true },
+  hook_body:  { family: 'body',     hand: 'lead', reachFactor: 0.78, pathFactor: 1.35, speedFactor: 1.00, massFactor: 1.05, windupMs: 150, recoveryMs: 190, gasCost: 1.6, target: 'body', peripheral: true },
+  shovel:     { family: 'body',     hand: 'rear', reachFactor: 0.66, pathFactor: 1.15, speedFactor: 0.95, massFactor: 1.15, windupMs: 165, recoveryMs: 200, gasCost: 1.7, target: 'body', peripheral: true },
+  short_upper:{ family: 'uppercut', hand: 'lead', reachFactor: 0.58, pathFactor: 1.10, speedFactor: 1.00, massFactor: 1.05, windupMs: 125, recoveryMs: 180, gasCost: 1.5, target: 'head', peripheral: true },
+  check_hook: { family: 'hook',     hand: 'lead', reachFactor: 0.78, pathFactor: 1.30, speedFactor: 1.05, massFactor: 0.95, windupMs: 110, recoveryMs: 190, gasCost: 1.4, target: 'head', peripheral: true, counterOnly: true },
+  cheap_shot: { family: 'hook',     hand: 'lead', reachFactor: 0.60, pathFactor: 1.00, speedFactor: 1.30, massFactor: 0.80, windupMs: 70,  recoveryMs: 230, gasCost: 1.2, target: 'body', afterBreak: true, foul: true, damageFactor: 1.5 },
+});
+
+// Weight keys that are not in PUNCHES: double_jab is jab + a queued jab, flurry is 2-4 chained punches.
 
 /**
  * Corner actions (tactics) the manager picks between rounds.
  * rangeM: preferred centre-to-centre distance. aggression: punch attempts per
  * second at full gas. combo: chance the next punch chains with no gap.
- * lateral: circling speed as a share of foot speed.
+ * lateral: circling speed as a share of foot speed. defendMs: added to the
+ * window this fighter needs to defend (negative = open guard). moves: per-second
+ * rates of the non-punch actions when their conditions hold.
  */
 export const TACTICS = Object.freeze({
-  pressure:    { label: 'Pressure',     rangeM: 0.85, crowdMs: 30, aggression: 1.0, combo: 0.35, lateral: 0.10, counter: 0.2, gasRegen: 1.0, weights: { jab: 1, cross: 2, hook: 3, uppercut: 2, body: 2 } },
-  outbox:      { label: 'Box outside',  rangeM: 1.25, aggression: 0.8, combo: 0.25, lateral: 0.60, counter: 0.4, gasRegen: 1.0, weights: { jab: 6, cross: 2, hook: 0.5, uppercut: 0.2, body: 0.5 } },
-  counter:     { label: 'Counter-punch', rangeM: 1.20, aggression: 0.45, combo: 0.30, lateral: 0.30, counter: 1.0, gasRegen: 1.1, weights: { jab: 2, cross: 3, hook: 2, uppercut: 1, body: 1 } },
-  body_attack: { label: 'Body attack',  rangeM: 0.95, aggression: 0.9, combo: 0.40, lateral: 0.15, counter: 0.3, gasRegen: 1.0, weights: { jab: 1, cross: 1, hook: 1, uppercut: 1, body: 5 } },
-  recover:     { label: 'Recover',      rangeM: 1.70, aggression: 0.25, combo: 0.10, lateral: 0.70, counter: 0.5, gasRegen: 1.7, weights: { jab: 5, cross: 1, hook: 0, uppercut: 0, body: 0 } },
+  pressure:    { label: 'Pressure',     rangeM: 0.85, crowdMs: 30, defendMs: 30, aggression: 0.85, combo: 0.35, lateral: 0.10, counter: 0.2, gasRegen: 1.0, weights: { jab: 1, cross: 2, hook: 3, uppercut: 1.5, body: 2, overhand: 1.2, short_upper: 1.5, hook_body: 1, flurry: 0.8 }, moves: { shove: 0.30, clinch: 0.10, feint: 0.15, pivot: 0.2, cheap: 0.03 } },
+  outbox:      { label: 'Box outside',  rangeM: 1.25, aggression: 0.8, combo: 0.25, lateral: 0.60, counter: 0.4, gasRegen: 1.0, weights: { jab: 5, cross: 2, hook: 0.5, uppercut: 0.2, body: 0.5, double_jab: 2.5, flurry: 0.4 }, moves: { feint: 0.55, pivot: 0.5, clinch: 0.05, shove: 0.10 } },
+  counter:     { label: 'Counter-punch', rangeM: 1.20, aggression: 0.45, combo: 0.30, lateral: 0.30, counter: 1.0, gasRegen: 1.1, weights: { jab: 2, cross: 3, hook: 2, uppercut: 1, body: 1, double_jab: 0.5 }, counterWeights: { cross: 3, check_hook: 3, jab: 1.5, hook: 1, short_upper: 1 }, moves: { feint: 0.12, pivot: 0.45, shell: 0.5, clinch: 0.05, taunt: 0.05 } },
+  body_attack: { label: 'Body attack',  rangeM: 0.95, defendMs: 15, aggression: 0.9, combo: 0.40, lateral: 0.15, counter: 0.3, gasRegen: 1.0, weights: { jab: 1, cross: 1, hook: 1, uppercut: 1, body: 4, hook_body: 3, shovel: 2.5 }, moves: { clinch: 0.12, feint: 0.15, pivot: 0.15, shove: 0.12 } },
+  recover:     { label: 'Recover',      rangeM: 1.45, aggression: 0.25, combo: 0.10, lateral: 0.70, counter: 0.5, gasRegen: 1.7, weights: { jab: 5, cross: 1, hook: 0, uppercut: 0, body: 0 }, moves: { clinch: 0.30, shell: 0.8, pivot: 0.5, shove: 0.15 } },
+  brawl:       { label: 'Brawl',        rangeM: 0.90, defendMs: -20, aggression: 1.15, combo: 0.45, lateral: 0.05, counter: 0.1, gasRegen: 0.9, weights: { jab: 0.5, cross: 1.5, hook: 2.5, overhand: 3, haymaker: 2.5, body: 1, hook_body: 1, flurry: 1.2 }, moves: { taunt: 0.12, shove: 0.20, clinch: 0.03, cheap: 0.06 } },
+  dirty_boxing:{ label: 'Dirty boxing', rangeM: 0.72, crowdMs: 15, defendMs: 15, aggression: 0.3, combo: 0.35, lateral: 0.05, counter: 0.25, gasRegen: 1.1, weights: { jab: 0.5, cross: 0.5, hook: 1, uppercut: 1.5, short_upper: 3.5, body: 1.5, hook_body: 2.5, shovel: 2 }, moves: { clinch: 0.65, shove: 0.35, feint: 0.15, pivot: 0.2, cheap: 0.16 } },
 });
 
 export const STAT_KEYS = ['speed', 'power', 'stamina', 'ringIQ'];
@@ -141,6 +187,8 @@ export class FighterModel {
     this.attr = deriveAttributes(this.stats, bodyMassKg);
     this.health = 100;
     this.gas = this.attr.maxGas;
+    this.composure = 100;           // taunts drain it; below 100 the fighter reads slower
+    this.comboId = 0;               // unique per fight, so event consumers can group a chain
     this.resetForRound();
   }
 
@@ -155,7 +203,18 @@ export class FighterModel {
     this.counterUntilTick = 0;      // a slip opened a counter window until here
     this.circleDir = this.corner === 'red' ? 1 : -1;
     this.recentPunches = [];        // last 6 punch types, used for predictability
-    this.activePunch = null;        // { type, launchTick, arriveTick } for rendering
+    this.activePunch = null;        // { type, move, hand, launchTick, arriveTick } for rendering
+    this.activeAction = null;       // { kind, hand, startTick, endTick } for non-punch moves
+    this.queue = [];                // punches still to throw in a double jab / flurry / push-off
+    this.comboRun = null;           // { index, length } of the combination in progress
+    this.feintUntilTick = 0;        // a feint is working until here
+    this.exposedUntilTick = 0;      // taunting or beaten cheap shot: slower to react until here
+    this.shellUntilTick = 0;        // covered up: landed shots do half damage
+    this.clinch = null;             // { endTick, initiator } while tied up
+    this.push = null;               // { vx, vy, untilTick } shove or pivot impulse
+    this.afterBreakUntilTick = 0;   // a clinch or shove just broke: cheap-shot window
+    this.clinchCooldownTick = 0;
+    this.lastDefense = null;
   }
 
   /** 0.75–1.0: hand speed, foot speed and head movement scale with remaining gas. */
@@ -226,7 +285,11 @@ export function computePunch({ attacker, defender, type, tick, rng, isCounter = 
   const jitterMs = (rng() + rng() - 1) * 40;   // ±40 ms triangular neuromotor noise (seeded)
   // Pressure crowds a defender who is not also pressing: less room to read and slip.
   const crowdMs = defender.tacticKey === 'pressure' ? 0 : (attacker.tactic.crowdMs || 0);
-  const reactionWindowMs = Math.max(60, perceptionMs + motorMs + fatiguePenaltyMs - anticipationMs + jitterMs + crowdMs);
+  // A working feint, a rattled or showboating defender, and the defender's own guard style.
+  const feintMs = attacker.feintUntilTick > tick ? FEINT_MS * (1 - 0.6 * d.readSkill) : 0;
+  const rattledMs = (1 - defender.composure / 100) * 35 + (defender.exposedUntilTick > tick ? EXPOSED_MS : 0);
+  const guardMs = defender.tactic.defendMs || 0;
+  const reactionWindowMs = Math.max(60, perceptionMs + motorMs + fatiguePenaltyMs - anticipationMs + jitterMs + crowdMs + feintMs + rattledMs + guardMs);
 
   // Collision rule.
   const marginMs = reactionWindowMs - travelTimeMs;  // > 0 means the fist wins
@@ -241,7 +304,7 @@ export function computePunch({ attacker, defender, type, tick, rng, isCounter = 
   const transferredJoules = outcome === 'landed' ? kineticJoules : outcome === 'blocked' ? kineticJoules * 0.15 : 0;
 
   return {
-    type, target: pd.target, isCounter,
+    type: pd.family, move: type, hand: pd.hand, target: pd.target, isCounter,
     attacker: attacker.corner, defender: defender.corner,
     launchTick: tick,
     arriveTick: tick + Math.max(1, Math.ceil(travelTimeMs / TICK_MS)),
@@ -290,12 +353,19 @@ function contactOf(p, atk, def) {
  * Listeners: on('exchange' | 'impact' | 'round_end' | 'fight_end', fn).
  */
 export class CombatSimulation {
-  constructor({ red, blue, seed = 1, rounds = 6, roundSeconds = 180, matchId }) {
+  constructor({ red, blue, seed = 1, rounds = DEFAULT_ROUNDS, roundSeconds = DEFAULT_ROUND_SECONDS, breakSeconds = DEFAULT_BREAK_SECONDS, matchId, ruleset = 'street' }) {
     this.fighters = { red, blue };
+    this.ruleset = RULESETS[ruleset] ? ruleset : 'street';   // both P2P peers must pass the same one
+    this.rules = RULESETS[this.ruleset];
+    this.roundActions = { red: {}, blue: {} };   // counts of non-punch actions this round
+    this.roundFouls = { red: 0, blue: 0 };
     this.seed = seed >>> 0;
     this.rng = mulberry32(this.seed);
     this.totalRounds = rounds;
     this.roundTicks = Math.round(roundSeconds * SIM_HZ);
+    this.roundSeconds = roundSeconds;
+    this.breakSeconds = breakSeconds;
+    this.damageDivisor = damageDivisorFor(roundSeconds, rounds);
     this.matchId = matchId ?? `m_${this.seed.toString(36)}`;
     this.roundIndex = 0;              // 1-based once a round starts
     this.phase = 'awaiting_corner';
@@ -326,11 +396,17 @@ export class CombatSimulation {
     this.pending = [];
     this.exchange = null;
     this.roundTelemetry = [];
+    this.roundActions = { red: {}, blue: {} };
+    this.roundFouls = { red: 0, blue: 0 };
     this.cornerActions = { red: cornerActions.red, blue: cornerActions.blue };
     for (const c of ['red', 'blue']) {
       const f = this.fighters[c];
-      // Between-round recovery: 40 % of the missing gas comes back.
-      if (this.roundIndex > 1) f.gas = Math.min(f.attr.maxGas, f.gas + (f.attr.maxGas - f.gas) * 0.4);
+      // Between-round recovery: a share of the missing gas comes back, break / (break + 15 s) (40 % for the 10 s default).
+      if (this.roundIndex > 1) {
+        const share = this.breakSeconds / (this.breakSeconds + 15);
+        f.gas = Math.min(f.attr.maxGas, f.gas + (f.attr.maxGas - f.gas) * share);
+        f.composure += (100 - f.composure) * share;
+      }
       f.resetForRound();
       f.tacticKey = TACTICS[cornerActions[c]] ? cornerActions[c] : 'outbox';
       f.tactic = TACTICS[f.tacticKey];
@@ -347,6 +423,7 @@ export class CombatSimulation {
     this._move(red, blue);
     this._move(blue, red);
     this._separate(red, blue);
+    this._stepClinch(red, blue);
     this._resolveArrivals();
     if (this.phase !== 'running') return this.phase; // KO
 
@@ -364,10 +441,30 @@ export class CombatSimulation {
     return this.rounds[this.rounds.length - 1];
   }
 
+  /**
+   * Sim to result: runs every remaining round with no rendering and returns the result. `pick(sim)` returns
+   * {red, blue} tactics for each round (e.g. the manager's AI); without it each corner keeps its last tactic.
+   */
+  runToEnd(pick) {
+    while (this.phase !== 'fight_over') {
+      const last = this.cornerActions;
+      this.startRound((pick && pick(this)) ?? last ?? { red: 'outbox', blue: 'outbox' });
+      this.runRoundToEnd();
+    }
+    return this.result;
+  }
+
   // ── movement ──
 
   _move(self, opp) {
     const t = self.tactic;
+    self.composure = Math.min(100, self.composure + 0.4 * DT);
+    if (self.clinch) {
+      // Tied up: no footwork, and holding on is a rest.
+      self.vel.x = 0; self.vel.y = 0;
+      self.gas = clamp(self.gas + self.attr.gasRegenPerS * 0.6 * DT, 0, self.attr.maxGas);
+      return;
+    }
     const dx = opp.pos.x - self.pos.x, dy = opp.pos.y - self.pos.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1e-6;
     const ux = dx / dist, uy = dy / dist;          // unit vector toward opponent
@@ -382,11 +479,18 @@ export class CombatSimulation {
     const err = dist - t.rangeM;
     const radial = clamp(err * 3, -1, 1) * foot;
     // Lateral: circle, switching direction now and then (seeded).
-    if (this.rng() < 0.25 * DT) self.circleDir = -self.circleDir;
+    if (this.rng() < 0.25 * DT) {
+      self.circleDir = -self.circleDir;
+      if (dist < 2.2 && this.tick >= self.nextActionTick) this._act(self, opp, 'circle_off', { target: 'none', region: 'air', heightM: 0, durMs: 400, dir: self.circleDir });
+    }
     const lateral = t.lateral * foot * self.circleDir;
 
     self.vel.x = ux * radial + px * lateral;
     self.vel.y = uy * radial + py * lateral;
+    if (self.push) {
+      if (this.tick >= self.push.untilTick) self.push = null;
+      else { self.vel.x += self.push.vx; self.vel.y += self.push.vy; }
+    }
     self.pos.x = clamp(self.pos.x + self.vel.x * DT, -RING_HALF_M + BODY_RADIUS_M, RING_HALF_M - BODY_RADIUS_M);
     self.pos.y = clamp(self.pos.y + self.vel.y * DT, -RING_HALF_M + BODY_RADIUS_M, RING_HALF_M - BODY_RADIUS_M);
 
@@ -411,44 +515,227 @@ export class CombatSimulation {
     for (const f of [a, b]) { f.pos.x = clamp(f.pos.x, -lim, lim); f.pos.y = clamp(f.pos.y, -lim, lim); }
   }
 
+  // ── actions that are not punches (events: 'action') ──
+
+  /** Records a non-punch move: the fighter's current action, a round count, and an 'action' event for renderers. */
+  _act(self, opp, kind, { type = kind, target = 'none', energy01 = 0, region = 'air', heightM = HEAD_HEIGHT_M, durMs = 300, dir = 0, extra } = {}) {
+    const dx = opp.pos.x - self.pos.x, dy = opp.pos.y - self.pos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1e-6;
+    const dirX = dx / dist, dirY = dy / dist;
+    const startTick = this.tick, endTick = this.tick + Math.max(1, Math.ceil(durMs / TICK_MS));
+    const hand = (kind === 'feint' || kind === 'circle_off' || kind === 'pivot' || kind === 'forearm_frame') ? 'lead' : 'both';
+    self.activeAction = { kind, type, hand, startTick, endTick };
+    this.roundActions[self.corner][kind] = (this.roundActions[self.corner][kind] ?? 0) + 1;
+    const depth = TARGET_DEPTH_M;
+    this._emit('action', {
+      kind, type, corner: self.corner, against: opp.corner, hand, target, energy01, dir,
+      contact: { region, x: opp.pos.x - dirX * depth, y: opp.pos.y - dirY * depth, heightM, dirX, dirY },
+      round: this.roundIndex, tick: this.tick, startTick, endTick, ...extra,
+    });
+  }
+
+  _ropesM(f) { return RING_HALF_M - Math.max(Math.abs(f.pos.x), Math.abs(f.pos.y)); }
+
+  /** An impulse that moves `f` `distM` along (ux, uy) over `ms`. */
+  _impulse(f, ux, uy, distM, ms) {
+    const sec = ms / 1000;
+    f.push = { vx: (ux * distM) / sec, vy: (uy * distM) / sec, untilTick: this.tick + Math.ceil(ms / TICK_MS) };
+  }
+
+  _hold(f, ms) { f.committedUntilTick = Math.max(f.committedUntilTick, this.tick + Math.ceil(ms / TICK_MS)); }
+
+  _unit(from, to) {
+    const dx = to.pos.x - from.pos.x, dy = to.pos.y - from.pos.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1e-6;
+    return { x: dx / d, y: dy / d };
+  }
+
+  _shove(a, b) {
+    const u = this._unit(a, b);
+    this._impulse(b, u.x, u.y, 0.55, 120);
+    this._hold(b, 300); b.queue.length = 0;
+    this._hold(a, 250);
+    a.nextActionTick = a.committedUntilTick; a.afterBreakUntilTick = this.tick + Math.ceil(800 / TICK_MS);
+    a.gas = Math.max(0, a.gas - 1.0); b.gas = Math.max(0, b.gas - 3.0);
+    this._act(a, b, 'shove', { target: 'body', energy01: 0.35, region: 'body', heightM: 1.3, durMs: 250 });
+  }
+
+  _startClinch(a, b) {
+    const ms = this.rules.clinchMs + (this.rules.refBreak ? 0 : this.rng() * 400);
+    const endTick = this.tick + Math.ceil(ms / TICK_MS);
+    a.clinch = { endTick, initiator: true }; b.clinch = { endTick, initiator: false };
+    for (const f of [a, b]) { f.queue.length = 0; this._hold(f, ms); f.nextActionTick = endTick; }
+    this._act(a, b, 'clinch', { target: 'body', energy01: 0.2, region: 'body', heightM: 1.3, durMs: ms });
+    this._act(a, b, 'forearm_frame', { target: 'head', energy01: 0.15, region: 'head', heightM: HEAD_HEIGHT_M, durMs: ms });
+  }
+
+  _stepClinch(red, blue) {
+    if (!red.clinch || !blue.clinch) { red.clinch = blue.clinch = null; return; }
+    const [a, b] = red.clinch.initiator ? [red, blue] : [blue, red];
+    b.gas = Math.max(0, b.gas - 1.2 * DT);                       // the frame wears the other fighter down
+    if (this.tick < a.clinch.endTick) return;
+    a.clinch = b.clinch = null;
+    const cool = this.tick + Math.ceil(2000 / TICK_MS), window = this.tick + Math.ceil(800 / TICK_MS);
+    for (const f of [a, b]) { f.clinchCooldownTick = cool; f.afterBreakUntilTick = window; f.committedUntilTick = this.tick; }
+    if (this.rules.refBreak) {
+      // The ref steps in: both back off, nobody gains.
+      const u = this._unit(a, b);
+      this._impulse(a, -u.x, -u.y, 0.25, 150); this._impulse(b, u.x, u.y, 0.25, 150);
+      for (const f of [a, b]) f.nextActionTick = this.tick + Math.ceil(200 / TICK_MS);
+      this._act(a, b, 'ref_break', { target: 'none', durMs: 200 });
+      return;
+    }
+    // No ref: the fresher fighter pushes off and throws.
+    const [pusher, other] = b.gasRatio > a.gasRatio ? [b, a] : [a, b];
+    const u = this._unit(pusher, other);
+    this._impulse(other, u.x, u.y, 0.7, 150);
+    this._hold(other, 250); other.nextActionTick = Math.max(other.nextActionTick, this.tick + Math.ceil(250 / TICK_MS));
+    const w = {};
+    for (const k of ['cross', 'hook', 'overhand', 'haymaker']) if ((pusher.tactic.weights[k] ?? 0) > 0) w[k] = pusher.tactic.weights[k];
+    pusher.queue = [weightedPick(w, this.rng) ?? 'cross'];
+    pusher.nextActionTick = this.tick + Math.ceil(170 / TICK_MS);
+    this._act(pusher, other, 'push_off', { target: 'body', energy01: 0.45, region: 'body', heightM: 1.3, durMs: 170 });
+  }
+
+  _shell(a, opp) {
+    a.shellUntilTick = this.tick + Math.ceil(700 / TICK_MS);
+    this._hold(a, 700); a.queue.length = 0;
+    this._act(a, opp, 'shell', { target: 'head', region: 'guard', durMs: 700 });
+  }
+
+  _pivot(a, opp) {
+    const u = this._unit(a, opp);
+    let px = -u.y, py = u.x;
+    const toCentre = px * -a.pos.x + py * -a.pos.y;
+    if (toCentre < 0 || (toCentre === 0 && a.circleDir < 0)) { px = -px; py = -py; }
+    this._impulse(a, px, py, 0.7, 200);
+    this._hold(a, 200);
+    this._act(a, opp, 'pivot', { durMs: 200, dir: px * u.y - py * u.x });
+  }
+
+  _feint(a, opp) {
+    const step = this.rng() < 0.5;
+    a.feintUntilTick = this.tick + Math.ceil(300 / TICK_MS);
+    this._hold(a, step ? 140 : 100);
+    if (step) { const u = this._unit(a, opp); this._impulse(a, u.x, u.y, 0.15, 100); }
+    a.gas = Math.max(0, a.gas - 0.4);
+    this._act(a, opp, 'feint', { type: step ? 'step' : 'shoulder', target: 'head', durMs: step ? 140 : 100 });
+  }
+
+  _taunt(a, opp) {
+    const drain = 14 * (1 - 0.5 * opp.attr.readSkill);
+    opp.composure = Math.max(0, opp.composure - drain);
+    a.exposedUntilTick = this.tick + Math.ceil(700 / TICK_MS);
+    this._hold(a, 450); a.queue.length = 0;
+    this._act(a, opp, 'taunt', { target: 'head', energy01: Math.min(1, drain / 20), durMs: 450 });
+  }
+
+  _foul(f, opp, move) {
+    if (!this.rules.foulPoints) return;
+    this.roundFouls[f.corner] += this.rules.foulPoints;
+    this._act(f, opp, 'foul', { type: move, target: 'none', durMs: 400, extra: { points: this.rules.foulPoints } });
+  }
+
+  /** Per-tick chance of starting a non-punch move. Returns true if one started. */
+  _tryMoves(self, opp, dist) {
+    const m = self.tactic.moves;
+    if (!m) return false;
+    const roll = (rate) => rate > 0 && this.rng() < rate * DT;
+    const ropes = this._ropesM(self) < ROPES_ZONE_M;
+    const tired = 1 - self.gasRatio, hurt = 1 - self.health / 100;
+    if (ropes && (self.health < 80 || self.gasRatio < 0.5) && dist < 1.6 && roll(m.shell)) { this._shell(self, opp); return true; }
+    if (ropes && dist < 1.4 && roll(m.pivot)) { this._pivot(self, opp); return true; }
+    if (dist < CLINCH_RANGE_M && !opp.clinch && this.tick >= self.clinchCooldownTick && roll((m.clinch ?? 0) * (1 + 2 * tired + hurt))) { this._startClinch(self, opp); return true; }
+    if (this.rules.shove && dist < 0.85 && roll(m.shove)) { this._shove(self, opp); return true; }
+    if (self.afterBreakUntilTick > this.tick && dist - GUARD_OFFSET_M - TARGET_DEPTH_M <= self.reachM * PUNCHES.cheap_shot.reachFactor && roll((m.cheap ?? 0) * this.rules.cheapScale)) {
+      this._foul(self, opp, 'cheap_shot'); this._launch(self, opp, 'cheap_shot', false); return true;
+    }
+    if (self.feintUntilTick <= this.tick && dist < 1.7 && roll(m.feint)) { this._feint(self, opp); return true; }
+    if (self.health >= opp.health - 5 && dist > 0.9 && roll(m.taunt)) { this._taunt(self, opp); return true; }
+    return false;
+  }
+
   // ── offence ──
 
+  _canReach(self, type, gapM) {
+    const pd = PUNCHES[type];
+    return gapM * pd.pathFactor <= self.reachM * pd.reachFactor;
+  }
+
   _decide(self, opp) {
-    if (this.tick < self.nextActionTick || self.committedUntilTick > this.tick) return;
+    if (self.clinch || this.tick < self.nextActionTick || self.committedUntilTick > this.tick) return;
     const t = self.tactic;
     const dx = opp.pos.x - self.pos.x, dy = opp.pos.y - self.pos.y;
-    const gapM = Math.sqrt(dx * dx + dy * dy) - GUARD_OFFSET_M - TARGET_DEPTH_M;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const gapM = dist - GUARD_OFFSET_M - TARGET_DEPTH_M;
 
-    // Only punches that can physically reach are candidates.
-    const options = {};
-    for (const type in PUNCHES) {
-      const w = t.weights[type] ?? 0;
-      if (w > 0 && gapM * PUNCHES[type].pathFactor <= self.reachM * PUNCHES[type].reachFactor) options[type] = w;
+    // Rest of a double jab, flurry or push-off combination.
+    if (self.queue.length) {
+      const type = self.queue[0];
+      if (opp.clinch || !this._canReach(self, type, gapM)) { self.queue.length = 0; self.comboRun = null; return; }
+      self.queue.shift();
+      this._launch(self, opp, type, false, self.comboRun ? { index: self.comboRun.index + 1, length: self.comboRun.length } : null);
+      return;
     }
-    if (Object.keys(options).length === 0) return;
+    if (this._tryMoves(self, opp, dist)) return;
 
     // A slip opened a counter window: fire at once if the tactic wants to.
     const isCounter = self.counterUntilTick > this.tick && this.rng() < t.counter;
-    const attemptsPerS = t.aggression * (0.5 + 0.5 * self.staminaFactor);
-    if (!isCounter && this.rng() >= attemptsPerS * DT) return;
+    const weights = isCounter && t.counterWeights ? t.counterWeights : t.weights;
+    // Only moves that can physically reach are candidates.
+    const options = {};
+    for (const key in weights) {
+      const w = weights[key];
+      const base = key === 'double_jab' || key === 'flurry' ? 'jab' : key;
+      const pd = PUNCHES[base];
+      if (!(w > 0) || !pd || pd.afterBreak || (pd.counterOnly && !isCounter)) continue;
+      if (this._canReach(self, base, gapM)) options[key] = w;
+    }
+    if (Object.keys(options).length === 0) return;
 
-    const type = weightedPick(options, this.rng);
-    this._launch(self, opp, type, isCounter);
+    // A working feint also means the fighter follows up now.
+    const follow = self.feintUntilTick > this.tick;
+    const attemptsPerS = t.aggression * (0.5 + 0.5 * self.staminaFactor);
+    if (!isCounter && !follow && this.rng() >= attemptsPerS * DT) return;
+
+    const pick = weightedPick(options, this.rng);
+    if (pick === 'double_jab') { self.queue = ['jab']; self.comboId++; this._launch(self, opp, 'jab', isCounter, { index: 0, length: 2 }); return; }
+    if (pick === 'flurry') {
+      const w = {};
+      for (const key in t.weights) { const pd = PUNCHES[key]; if (t.weights[key] > 0 && pd && !pd.afterBreak && !pd.counterOnly) w[key] = t.weights[key]; }
+      const length = 2 + Math.floor(this.rng() * 3);
+      const chain = [];
+      for (let i = 0; i < length; i++) chain.push(weightedPick(w, this.rng));
+      const first = chain.shift();
+      self.queue = chain; self.comboId++;
+      this._launch(self, opp, first, isCounter, { index: 0, length });
+      return;
+    }
+    this._launch(self, opp, pick, isCounter);
   }
 
-  _launch(attacker, defender, type, isCounter) {
+  _launch(attacker, defender, type, isCounter, combo = null) {
     const p = computePunch({ attacker, defender, type, tick: this.tick, rng: this.rng, isCounter });
     const pd = PUNCHES[type];
+    p.afterDefense = isCounter ? attacker.lastDefense : null;
+    p.foul = !!pd.foul && this.rules.foulPoints > 0;
+    if (combo) p.combo = { id: attacker.comboId, ...combo };
+    attacker.comboRun = combo && attacker.queue.length ? combo : null;
+    attacker.feintUntilTick = 0;
 
     attacker.gas = Math.max(0, attacker.gas - pd.gasCost * (1 + attacker.stats.power / 200));
     attacker.committedUntilTick = p.arriveTick + Math.ceil(pd.recoveryMs / TICK_MS);
-    const chains = this.rng() < attacker.tactic.combo;
-    const gapTicks = chains ? 0 : Math.ceil((150 + this.rng() * 350) / TICK_MS);
-    attacker.nextActionTick = attacker.committedUntilTick + gapTicks;
+    if (attacker.queue.length) attacker.nextActionTick = attacker.committedUntilTick;
+    else {
+      const chains = this.rng() < attacker.tactic.combo;
+      const gapTicks = chains ? 0 : Math.ceil((150 + this.rng() * 350) / TICK_MS);
+      attacker.nextActionTick = attacker.committedUntilTick + gapTicks;
+    }
     attacker.counterUntilTick = 0;
+    attacker.lastDefense = null;
     attacker.recentPunches.push(type);
     if (attacker.recentPunches.length > 6) attacker.recentPunches.shift();
-    attacker.activePunch = { type, launchTick: p.launchTick, arriveTick: p.arriveTick, outcome: p.outcome };
+    attacker.activePunch = { type: p.type, move: p.move, hand: p.hand, launchTick: p.launchTick, arriveTick: p.arriveTick, outcome: p.outcome };
 
     if (!this.exchange) {
       this.exchange = { id: ++this.exchangeSeq, startTick: this.tick, initiator: attacker.corner, punches: [] };
@@ -466,21 +753,34 @@ export class CombatSimulation {
 
     for (const p of due) {
       const atk = this.fighters[p.attacker], def = this.fighters[p.defender];
-      let damage = 0;
+      const pd = PUNCHES[p.move];
+      const straight = p.type === 'jab' || p.type === 'cross';
+      let damage = 0, defense = null;
       if (p.outcome === 'landed') {
-        damage = (p.transferredJoules / DAMAGE_DIVISOR) * (p.target === 'body' ? 0.55 : 1.0);
-        def.gas = Math.max(0, def.gas - p.transferredJoules / (p.target === 'body' ? 60 : 120));
+        const shelled = def.shellUntilTick > this.tick;
+        const k = (shelled ? 0.5 : 1) * (pd.damageFactor ?? 1);
+        damage = (p.transferredJoules / this.damageDivisor) * (p.target === 'body' ? 0.55 : 1.0) * k;
+        def.gas = Math.max(0, def.gas - (p.transferredJoules / (p.target === 'body' ? 60 : 120)) * (shelled ? 0.5 : 1));
+        if (shelled) defense = 'shell';
       } else if (p.outcome === 'blocked') {
-        damage = p.transferredJoules / DAMAGE_DIVISOR;
+        damage = p.transferredJoules / this.damageDivisor;
         def.gas = Math.max(0, def.gas - p.transferredJoules / 100);
+        defense = p.onRopes ? 'shell' : straight ? 'parry' : 'block';
       } else {
         // A clean slip opens a counter window scaled by the defender's Ring IQ.
         def.counterUntilTick = this.tick + Math.ceil((120 + 280 * def.attr.readSkill) / TICK_MS);
+        defense = straight ? 'slip' : p.type === 'hook' ? 'roll' : p.type === 'uppercut' ? 'pull_back' : 'pivot';
+        def.lastDefense = defense;
+      }
+      if (pd.foul && p.outcome !== 'landed') {
+        // A cheap shot that misses leaves the thrower open to the answer.
+        atk.exposedUntilTick = this.tick + Math.ceil(500 / TICK_MS);
+        def.counterUntilTick = Math.max(def.counterUntilTick, this.tick + Math.ceil(400 / TICK_MS));
       }
       def.health = Math.max(0, def.health - damage);
       if (atk.activePunch && atk.activePunch.launchTick === p.launchTick) atk.activePunch = null;
 
-      const record = { ...p, damage, contact: contactOf(p, atk, def), energy01: Math.min(1, p.transferredJoules / ENERGY_REF_J), knockout: def.health <= 0, resolvedTick: this.tick, healthAfter: { red: this.fighters.red.health, blue: this.fighters.blue.health }, gasAfter: { red: this.fighters.red.gas, blue: this.fighters.blue.gas } };
+      const record = { ...p, damage, defense, contact: contactOf(p, atk, def), energy01: Math.min(1, p.transferredJoules / ENERGY_REF_J), knockout: def.health <= 0, resolvedTick: this.tick, healthAfter: { red: this.fighters.red.health, blue: this.fighters.blue.health }, gasAfter: { red: this.fighters.red.gas, blue: this.fighters.blue.gas } };
       if (this.exchange) { this.exchange.punches.push(record); this.exchange.lastTick = this.tick; }
       this._emit('impact', record);
 
@@ -521,8 +821,8 @@ export class CombatSimulation {
 
   /** Light-weight view of live state for renderers. */
   snapshot() {
-    const f = (m) => ({ corner: m.corner, x: m.pos.x, y: m.pos.y, vx: m.vel.x, vy: m.vel.y, health: m.health, gasRatio: m.gasRatio, activePunch: m.activePunch, tactic: m.tacticKey });
-    return { tick: this.tick, tMs: this.tMs, round: this.roundIndex, phase: this.phase, red: f(this.fighters.red), blue: f(this.fighters.blue) };
+    const f = (m) => ({ corner: m.corner, x: m.pos.x, y: m.pos.y, vx: m.vel.x, vy: m.vel.y, health: m.health, gasRatio: m.gasRatio, activePunch: m.activePunch, tactic: m.tacticKey, composure: m.composure, action: m.activeAction && m.activeAction.endTick > this.tick ? m.activeAction : null, clinch: !!m.clinch, shell: m.shellUntilTick > this.tick });
+    return { tick: this.tick, tMs: this.tMs, round: this.roundIndex, phase: this.phase, ruleset: this.ruleset, red: f(this.fighters.red), blue: f(this.fighters.blue) };
   }
 }
 
@@ -533,7 +833,8 @@ export function serializePunch(p) {
   return {
     t_ms: round(p.launchTick * TICK_MS, 2),
     arrive_ms: round(p.arriveTick * TICK_MS, 2),
-    attacker: p.attacker, defender: p.defender, punch: p.type, target: p.target, counter: p.isCounter,
+    attacker: p.attacker, defender: p.defender, punch: p.type, move: p.move, hand: p.hand, target: p.target, counter: p.isCounter,
+    combo: p.combo ?? null, defense: p.defense ?? null, foul: !!p.foul,
     distance_vector: { dx_m: round(p.distanceVector.dx), dy_m: round(p.distanceVector.dy), magnitude_m: round(p.distanceVector.magnitudeM) },
     velocities_mps: {
       attacker: { vx: round(p.velocities.attacker.vx), vy: round(p.velocities.attacker.vy) },
@@ -611,12 +912,14 @@ function summarizeRound(sim, reason, koWinner) {
   const score = (t) => t.joules_landed + 25 * t.landed;
   const sr = score(totals.red), sb = score(totals.blue);
   const winner = reason === 'ko' ? koWinner : Math.abs(sr - sb) < 1e-9 ? 'even' : sr > sb ? 'red' : 'blue';
-  const cards = { red: winner === 'blue' ? 9 : 10, blue: winner === 'red' ? 9 : 10 };
+  const cards = { red: (winner === 'blue' ? 9 : 10) - sim.roundFouls.red, blue: (winner === 'red' ? 9 : 10) - sim.roundFouls.blue };
   return {
     schema: 'bm.round.v1',
     match_id: sim.matchId,
     round_index: sim.roundIndex,
+    ruleset: sim.ruleset,
     reason, winner, cards,
+    actions: sim.roundActions, fouls: { ...sim.roundFouls },
     duration_ms: round(sim.tick * TICK_MS, 2),
     corner_actions: { ...sim.cornerActions },
     totals,
@@ -633,6 +936,12 @@ function scoreFight(sim, koWinner) {
   for (const r of sim.rounds) { cards.red += r.cards.red; cards.blue += r.cards.blue; }
   let winner = koWinner;
   let method = koWinner ? `KO in round ${sim.roundIndex}` : 'Decision';
+  if (!winner && cards.red === cards.blue) {
+    // Level cards (common over 2 or 4 rounds): the fighter who landed clearly more takes it, within 5 % is a draw.
+    const total = (c) => sim.rounds.reduce((s, r) => s + r.totals[c].joules_landed + 25 * r.totals[c].landed, 0);
+    const tr = total('red'), tb = total('blue');
+    if (Math.abs(tr - tb) > 0.05 * Math.max(tr, tb)) winner = tr > tb ? 'red' : 'blue';
+  }
   if (!winner) winner = cards.red === cards.blue ? 'draw' : cards.red > cards.blue ? 'red' : 'blue';
   if (winner === 'draw') method = 'Draw';
   return { match_id: sim.matchId, winner, method, cards, rounds: sim.rounds.length };
