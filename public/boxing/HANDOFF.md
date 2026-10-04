@@ -214,6 +214,13 @@ User directive: finish a working demo first, fixes later. No open issues stood b
 - **Parked (not started)**: balance (counter-punching dominates), night not measured for crowd or frame time on a real phone, all-male crowd, primitive fallback ignoring looks/outfits, `boxing-manager/` stray folder, WebLLM worker, items under "Untested" above.
 - **Still untested**: a real phone's GPU and touch, how the person looks up close, P2P looks.
 
+## Done (2026-10-04): standalone on GitHub Pages (BOX-12)
+
+The game is its own public repo, https://github.com/thenewurbankid-web/bring-the-ruckus, live at https://thenewurbankid-web.github.io/bring-the-ruckus/. Done in claude-quest's `public/boxing` first so both stay one codebase (commit "Standalone Boxing (BOX-12)"): Babylon 7.54.3, its glTF loader, Phaser 3.90.0 and Dexie 4.4.6 load from pinned jsDelivr URLs (the versions in `package.json`); `linkcrypto.js` is copied into `public/boxing/`; models, textures and the crowd atlas load through `new URL(..., import.meta.url)`, so no absolute `/boxing/` or `/vendor/` paths remain. `scripts/demo-e2e.mjs` takes `DEMO_URL`.
+- **Syncing the repo**: clone it, `rsync -a --exclude .git public/boxing/ <clone>/`, commit, push main (done once, as 4c4a687; the repo also has a `.nojekyll`). The user asked for this push in BOX-12; it is not a standing permission.
+- Checked: `npm test` 101 pass; `demo-e2e.mjs` at 375 px finished day and night fights with no console errors both locally and against the live Pages URL.
+- **Untested**: a real phone on Pages, P2P between two devices over Pages (HTTPS, WebRTC), jsDelivr being down (no fallback).
+
 ## Next jobs
 
 1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
