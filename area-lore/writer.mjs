@@ -41,12 +41,12 @@ const SCHEMA = { type: 'object', properties: { line: { type: 'string' }, questio
  * Words from Ollama, or the template when it fails or answers with something unusable.
  * @param {{ url: string, model: string }|null} ollama  null skips the model
  */
-export async function writeWords(kind, ev, ollama, { fetchFn = globalThis.fetch, timeoutMs = 120_000 } = {}) {
+export async function writeWords(kind, ev, ollama, { fetchFn = globalThis.fetch, timeoutMs = 120_000, keepAlive } = {}) {
   if (!ollama?.url || !ollama?.model) return templateWords(kind, ev);
   try {
     const res = await fetchFn(`${ollama.url.replace(/\/$/, '')}/api/chat`, {
       method: 'POST', signal: AbortSignal.timeout(timeoutMs),
-      body: JSON.stringify({ model: ollama.model, stream: false, think: false, format: SCHEMA, options: { temperature: 0.8 },
+      body: JSON.stringify({ model: ollama.model, stream: false, think: false, ...(keepAlive !== undefined ? { keep_alive: keepAlive } : {}), format: SCHEMA, options: { temperature: 0.8 },
         messages: [{ role: 'system', content: SYSTEM },
           { role: 'user', content: `Kind: ${kind}\nHappening: ${clip(ev.title, 120)}${ev.sky ? `\nSky: ${ev.sky}` : ''}` }] }),
     });

@@ -17,7 +17,29 @@ Try it locally (templates only without `OLLAMA_MODEL`):
 node area-lore/generate.mjs --areas area-lore/areas.example.json --out /tmp/lore
 ```
 
-## Three repos
+## Live news, moderated (CLA-16, replaces the three-repo setup below)
+
+The game server (`app.js`, `area-lore/service.mjs`) generates lore on this Mac, the user approves it, and only approved
+stories are published.
+
+1. `config.json` gets `"lore": { "cell": "gcpv", "everyHours": 3 }` (a geohash-4 cell, or `"areas": [{cell, feeds}]` as in
+   `areas.example.json`). On start and every `everyHours` the server writes new stories (qwen3:4b, templates when the
+   model is down) into a **pending** queue (`data/lore-queue.json`), then tells Ollama to unload the model.
+2. Open **http://127.0.0.1:4777/lore-review** (local only). Each story shows its cell, dates, the real source, and the
+   Riddle or errand it creates. **Approve**, **Edit then approve**, **Reject** (optional reason), bulk approve, and
+   **Generate now**. Nothing else publishes.
+3. Approve pushes to the orphan branch **`lore`** of `thenewurbankid-web/claude_quest` (only `lore/cells.json` and
+   `lore/<cell>/...`) from a separate clone at `~/.claude-quest/lore-repo` (`lore.repoDir`; `lore.remote` to change the
+   remote). Only the `lore` branch is ever pushed; the clone must be outside the game checkout and on `lore`. A failed
+   push leaves the story approved and is retried on the next tick or approve.
+4. The game reads `https://raw.githubusercontent.com/thenewurbankid-web/claude_quest/lore/lore/` (`LORE_BASE` in
+   `boot.js`), with the calendar fallback. `lore.base` (a local folder, served at `/lore-local/`, or a URL) overrides it
+   for testing, and `?lore=<folder/>` overrides both. `lore.cell` is also the default cell while the place is only guessed.
+
+Test against a local bare repo: `git init --bare /tmp/lore.git`, set `lore.remote` to it and `lore.base` to
+`~/.claude-quest/lore-repo/lore`.
+
+## Three repos (old design, not used)
 
 `claude_quest` is public, so a self-hosted runner must never be attached to it.
 

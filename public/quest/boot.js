@@ -157,11 +157,15 @@ addEventListener('quest:lodge', async () => {
 });
 // ---------- R3: Lore quests ----------
 const qs = new URLSearchParams(location.search);
-// The published lore folder (area-lore/README.md, step 7). null until the claude-quest-lore repo exists: calendar only.
-const LORE_BASE = null;
+// The published lore folder: the user's `lore` branch on GitHub (CLA-16). The game server can override it
+// (config.json lore.base, a local folder or URL) and give a default cell for desktop use; ?lore=<folder/> wins over both.
+const LORE_BASE = 'https://raw.githubusercontent.com/thenewurbankid-web/claude_quest/lore/lore/';
+const serverLore = await fetch('/api/lore/config').then(r => (r.ok ? r.json() : null)).catch(() => null);
 const loreBase = qs.has('lore') ? new URL((qs.get('lore') || 'quest/sample-lore/').replace(/\/?$/, '/'), document.baseURI)
-  : LORE_BASE ? new URL(LORE_BASE) : null;
-const loreCell = () => (/^[0-9b-hjkmnp-z]{4}$/.test(qs.get('cell') || '') ? qs.get('cell') : geohash(place().lat, place().lon));
+  : new URL((serverLore?.base || LORE_BASE).replace(/\/?$/, '/'), document.baseURI);
+const CELL = /^[0-9b-hjkmnp-z]{4}$/;
+const loreCell = () => (CELL.test(qs.get('cell') || '') ? qs.get('cell')
+  : place().guessed && CELL.test(serverLore?.cell || '') ? serverLore.cell : geohash(place().lat, place().lon));
 let loreShown = { entries: [], calendar: true };
 const refreshLore = async () => {
   const cell = loreCell(), p = place();
@@ -198,7 +202,7 @@ addEventListener('quest:board', async () => {
   let pick = null;
   try {
     const l = await store.snapshot(), now = new Date();
-    pick = await townBoard.show(await boardRows(), { guessed: !!place().guessed && !qs.get('cell'), calendar: loreShown.calendar,
+    pick = await townBoard.show(await boardRows(), { guessed: !!place().guessed && !qs.get('cell') && !CELL.test(serverLore?.cell || ''), calendar: loreShown.calendar,
       onUsePlace: usePlace, missions: missionsOf(l, mp, now, rules), gated: gated(l, now, rules), gate: rules.pressureGate,
       current: mp.current, onBegin: async id => { const r = begin(mp, await store.snapshot(), id, new Date()); if (!r.problem) await commitMp(r); } });
   } finally { lock(false); }

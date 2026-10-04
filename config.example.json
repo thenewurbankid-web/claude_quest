@@ -4,6 +4,7 @@
   "storyMinMinutes": 10,
   "sharedTranscripts": ["-Users-you-Repositories"],
   "ollama": { "url": "http://localhost:11434", "model": "qwen3:4b" },
+  "lore": { "cell": "gcpv", "everyHours": 3 },
   "projects": [
     {
       "id": "my-project",

@@ -712,6 +712,14 @@ const link = (process.env.CQ_LINK ?? (linkCfg.enabled ? '1' : '')) === '1'
   ? require('./lib/link').start({ broker: linkCfg.broker || require('./public/linkcrypto').DEFAULT_BROKER, pagesUrl: process.env.CQ_PAGES_URL || linkCfg.pagesUrl || 'https://thenewurbankid-web.github.io/keeper_quest', dispatch, trim: trimForLink })
   : null;
 
+// Area lore (CLA-16): scheduled local generation into a moderation queue, the review page, publishing on approve.
+let loreService = null;
+import('./area-lore/service.mjs').then(m => {
+  loreService = m.createLoreService({ dataDir: store.DATA, gameDir: __dirname, publicDir: PUBLIC, cfg, log: console.log,
+    ollama: cfg.ollama ? { url: cfg.ollama.url, model: cfg.lore?.model || 'qwen3:4b' } : null });
+  if (process.env.CQ_NO_LORE !== '1') loreService.start();
+}).catch(err => console.error('lore service:', err.message));
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const route = routes[`${req.method} ${url.pathname}`];
@@ -720,6 +728,7 @@ http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/editor/')) return await editorAssets(req, res, url);
     if (url.pathname.startsWith('/api/studio/')) return await studio(req, res, url);
     if (url.pathname === '/settings') return send302(res, '/settings.html');
+    if (loreService && await loreService.handle(req, res, url)) return;
     if (url.pathname === '/mqtt.min.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
       return fs.createReadStream(path.join(__dirname, 'node_modules', 'mqtt', 'dist', 'mqtt.min.js')).pipe(res);

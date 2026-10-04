@@ -77,6 +77,24 @@ export async function gather(area, { now = new Date(), fetchFn = globalThis.fetc
   return out;
 }
 
+/**
+ * New entries only, for the moderation queue: `known` (everything already queued, approved, published or rejected)
+ * is treated as existing, so it is never written twice. Returns the entries not in `known`.
+ */
+export async function generateNew({ areas, known = [], now = new Date(), ollama = null, fetchFn = globalThis.fetch, log = () => {}, keepAlive }) {
+  const out = [];
+  for (const area of areas) {
+    if (!GEOHASH_CELL.test(area.cell || '')) { log(`skipped an area with a bad cell: ${JSON.stringify(area.cell)}`); continue; }
+    const existing = known.filter(e => e.cell === area.cell);
+    const ids = new Set(existing.map(e => e.id));
+    const happenings = await gather(area, { now, fetchFn, log });
+    const { entries } = await buildCell({ cell: area.cell, happenings, existing, now,
+      words: (kind, ev) => writeWords(kind, ev, ollama, { fetchFn, keepAlive }) });
+    out.push(...entries.filter(e => !ids.has(e.id)));
+  }
+  return out;
+}
+
 const readJson = async p => JSON.parse(await readFile(p, 'utf8'));
 
 /** Runs every area into the lore folder `out`, then rewrites cells.json from the cells that have an index. */
