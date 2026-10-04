@@ -1521,6 +1521,7 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, physi
       if (!atkPose || !defPose) return;
       const from = norm(sub(defPose.head, atkPose.chest));
       def.hit(p, v(from.x, 0, from.z));
+      if (p.outcome === 'landed') boxers[p.attacker].cue(p.type === 'jab' ? 'nod' : ['nod', 'tilt', 'low'][(p.tick | 0) % 3]);   // swagger after a clean shot
       if (p.outcome === 'landed') {
         const at = p.target === 'body' ? defPose.chest : defPose.head;
         spray.emitter = new B.Vector3(at.x, at.y, at.z);
@@ -1543,7 +1544,7 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, physi
       const ko = /KO/.test(res.method);
       if (ko) {
         const loser = res.winner === 'red' ? 'blue' : 'red';
-        boxers[loser].knocked = true;
+        boxers[loser].knocked = true; boxers[res.winner].koWin = true;
         arena.crowd.roar(1);
         cut('ringside', 1e9, loser);
       }
@@ -1574,11 +1575,14 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, physi
         overlay.banner(`Round ${s.round}`, `of ${sim.totalRounds}`, 1600);
         cut('hard', 0);
       }
+      // Before the bell: a shimmy in round 1, touching gloves after that. Cosmetic cues only.
+      if (s.phase === 'awaiting_corner') for (const c of ['red', 'blue']) boxers[c].cue(s.round > 1 ? 'touch' : 'shimmy', true);
       lastPhase = s.phase; lastRound = s.round;
     }
     for (const c of ['red', 'blue']) {
       overlay.third(c, names[c] ?? c, `${TACTIC_LABEL[s[c].tactic] ?? s[c].tactic} · ${Math.round(s[c].health)} hp`);
       const b = boxers[c];
+      b.mode = b.koWin ? 'won' : s.phase === 'round_over' || s.phase === 'fight_over' ? 'bell' : 'fight';
       if (b.knocked || s[c].health <= 0) b.fall = Math.min(1, b.fall + dt / 0.85);
       else b.fall = Math.max(0, b.fall - dt / 1.5);
     }

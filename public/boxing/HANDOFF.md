@@ -4,6 +4,14 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): swag for the 3D fighters (BOX-28 follow-up)
+
+- **`swag.js`** (new, pure maths, render-only): `STYLES` per sim tactic (pressure and body attack crouch low and lean in; outbox rises on its toes with a looser, lower, wider lead hand; counter gets a Philly-shell lean back; brawl is square with rolling shoulders and chin up; dirty boxing leans close), blended slowly when the corner changes tactic. `Swag` (seeded per fighter) holds the beats and a lopsided guard (one hand a bit lower and wider, constant per fighter).
+- **Beats**, all cosmetic and slow, only start when nothing is happening (not punching, no punch incoming, no shell/clinch/taunt/hit), with a 3.5 s quiet gap, 9 s before a repeat, and cues made mid-exchange are dropped after 1.4 s: nod / head tilt / hand dropped low after a clean landing (`impact` event, about 55% of landings), shoulder shrug after slipping a punch (from the opponent's `slipped` punch), glove offered at the bell from round 2 and a shimmy before round 1 (`awaiting_corner` phase), slow neck roll or glove-adjust every 8-15 s while idle, backing slowly to the corner after the bell (`round_over`/`fight_over`), and the KO winner backing away with a fist up and chin raised. Taunt now also tilts the head. Idle bounce is 1.5 Hz (90 BPM), weight shifts foot to foot at 0.75 Hz.
+- **Files**: `swag.js`, `boxer-model.js` (`ModelBoxer.cue`, style and beats in `pose`; no read of looks, no write to the sim), `arena-babylon.js` (cues from `impact`, phase changes, `fight_end`).
+- **Checks**: 334 tests pass (2 new: styles/beats/never mid-exchange/deterministic/smooth envelopes; boxer smoke for style height and shimmy swing and unchanged snapshot). Idle hip/head reversals still 1.45/s with or without injected sim noise, feet 0. `measure-boxing.mjs`: 5.2 ms CPU/frame, no errors.
+- **Untested**: how any of it looks in a browser (head and shoulder angles, glove offer, backing to the corner, KO walk-off, the 2D photoreal arena has no swag). Tell me which beats read badly or too often. Not pushed or synced (waiting on permission).
+
 ## Done (2026-10-04): calm, loose fighters: less stepping, no shiver (BOX-28)
 
 - **Footwork** (`footwork.js`): the sim position is low-passed (`Smoother`, 12 rad/s, lag taken back out) before it drives feet, root and hips. A foot lifts only at ~75% (lead) / 85% (trail) of stance width of lag (hysteresis via a 0.3 s per-foot cooldown), steps are cadence-capped (0.42 s between step groups), land past their spot (one step = a long hold), and the back foot follows (step-drag). A `still` hold (punching, clinch, shell, taunt) raises the threshold; only an emergency lag (1.1x stance) steps through it. Hips drop so both legs always reach (planted feet still do not slip).
@@ -371,7 +379,7 @@ BOX-22 landed. `boxer-model.js`: the seven new punches borrow a base punch's cli
 
 ## Next jobs
 
-0a. **BOX-28 follow-ups**: watch the fighters in a browser (stepping, sway, hands) and tell me what's off; decide whether the sim's constant locomotion (0.7 m/s average) should be reduced so steps reach <=2/s (sim change, Sim Dev); and say whether I may push main and sync bring-the-ruckus.
+0a. **BOX-28 follow-ups**: watch the fighters in a browser (stepping, sway, hands, swag beats) and tell me what's off; decide whether the sim's constant locomotion (0.7 m/s average) should be reduced so steps reach <=2/s (sim change, Sim Dev); and say whether I may push main and sync bring-the-ruckus.
 
 0. **BOX-17 slice 3**: post-pass and looks (see the plan above). Check slice 2 in the browser first: View, "2D photoreal (beta)".
 

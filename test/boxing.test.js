@@ -1190,3 +1190,64 @@ test('fighters are calm: no shiver from sim noise, fewer steps in a real round, 
   const round = await measureRound({ seed: 11, world });
   for (const c of ['red', 'blue']) assert.ok(round[c].stepsPerSec <= 5, `${c} ${round[c].stepsPerSec} steps/s`);
 });
+
+test('swagger (BOX-28): styles differ per tactic, beats are calm, rare and never mid-exchange', async () => {
+  const { Swag, STYLES, styleOf, BEATS, BEAT_RAD } = await import('../public/boxing/swag.js');
+  // Every sim tactic has a style, pressure sits lower than outboxing, the brawler is squarer with the chin up, and the idle beat is ~90 BPM.
+  const { TACTICS } = await import('../public/boxing/physics-engine.js');
+  for (const k of Object.keys(TACTICS)) assert.ok(STYLES[k], `no style for ${k}`);
+  assert.ok(styleOf('pressure').crouch > styleOf('outbox').crouch && styleOf('outbox').toe > styleOf('pressure').toe);
+  assert.ok(styleOf('brawl').square > 0.1 && styleOf('brawl').chinUp > styleOf('pressure').chinUp);
+  assert.ok(styleOf('dirty_boxing').lean > styleOf('outbox').lean && styleOf('counter').philly > 0.05);
+  assert.ok(Math.abs(BEAT_RAD / (2 * Math.PI) * 60 - 90) < 1);
+  // Deterministic per seed, different between fighters.
+  const run = (seed, busyAt = () => false) => {
+    const s = new Swag(seed), log = []; let t = 0;
+    for (let i = 0; i < 60 * 120; i++, t += 1 / 60) {
+      if (i % 90 === 0) { s.cue('nod', t); s.cue('shrug', t); s.cue('tilt', t); }
+      const fx = s.update(t, 1 / 60, { busy: busyAt(t), tactic: 'outbox' });
+      log.push({ t, active: s.active?.kind ?? null, fx: { ...fx } });
+      for (const k of Object.keys(BEATS)) assert.ok(fx[k] >= 0 && fx[k] <= 1.0001);
+    }
+    return log;
+  };
+  const a = run(31), b = run(31), c = run(57);
+  assert.deepEqual(a.map((x) => x.active), b.map((x) => x.active));
+  assert.notDeepEqual(a.map((x) => x.active), c.map((x) => x.active));
+  assert.notEqual(new Swag(31).asym.low, new Swag(57).asym.low);
+  // Not spammy: even when cued every 1.5 s, at most one beat per (beat length + 3.5 s gap) and each starts from zero.
+  const starts = a.filter((x, i) => x.active && !a[i - 1]?.active).length;
+  assert.ok(starts <= 120 / 3.5 + 1 && starts >= 3, `${starts} beats in 120 s`);
+  // Smooth: an envelope never jumps more than 0.1 per frame.
+  for (let i = 1; i < a.length; i++) for (const k of Object.keys(BEATS)) assert.ok(Math.abs(a[i].fx[k] - a[i - 1].fx[k]) < 0.1, `${k} jumped`);
+  // Never mid-exchange: while busy no beat starts, and cues made mid-exchange are dropped once the wait passes.
+  const busy = run(31, (t) => t % 10 < 6);
+  for (let i = 1; i < busy.length; i++) if (busy[i].active && !busy[i - 1].active) assert.ok(busy[i].t % 10 >= 6, `beat started at ${busy[i].t} mid-exchange`);
+  // The bell: the walk to the corner and the KO walk-off ease in slowly (no jump) and ease back out.
+  const w = new Swag(31); let prev = 0, peak = 0;
+  for (let i = 0; i < 60 * 8; i++) { const fx = w.update(i / 60, 1 / 60, { mode: 'bell' }); assert.ok(fx.walk - prev < 0.03); prev = fx.walk; peak = Math.max(peak, fx.walk); }
+  assert.ok(peak > 0.9);
+});
+
+test('swagger (BOX-28): the 3D boxer shows beats and styles without shiver or sim writes', async () => {
+  const { loadPerson } = await import('../scripts/motion-metrics.mjs');
+  const { ModelBoxer, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  const { B, scene, person } = await loadPerson();
+  const mk = (c) => new ModelBoxer(B, scene, person, c, { addShadowCaster() {} }, { glove: '#c9343a', trunks: '#9e1c24', wraps: true, outfit: PHOTO_OUTFITS[c] });
+  const side = (x, tactic) => ({ x, y: 0, vx: 0, vy: 0, gasRatio: 1, activePunch: null, tactic });
+  const hipY = {};
+  for (const tactic of ['pressure', 'outbox']) {
+    const bx = mk('red'); let n = 0, sum = 0;
+    for (let i = 0; i < 600; i++) { bx.pose(side(-0.65, tactic), side(0.65, 'outbox'), i * 4, i * 4, 1 / 60, i / 60); if (i > 300) { sum += bx.rig.pos('pelvis').y; n++; } }
+    hipY[tactic] = sum / n;
+  }
+  assert.ok(hipY.pressure < hipY.outbox - 0.03, `pressure ${hipY.pressure} should sit lower than outbox ${hipY.outbox}`);
+  // A cued head tilt moves the head sideways; a forced shimmy swings the shoulders; none of it touches the snapshot.
+  const bx = mk('blue'), me = side(0.65, 'brawl'), op = side(-0.65, 'outbox'), frozen = JSON.stringify([me, op]);
+  let i = 0; const run = (n, f) => { for (let k = 0; k < n; k++, i++) { bx.pose(me, op, i * 4, i * 4, 1 / 60, i / 60); f?.(); } };
+  const swing = (n) => { let lo = 9, hi = -9; run(n, () => { const d = bx.rig.pos('upperarm_l').x - bx.rig.pos('upperarm_r').x; lo = Math.min(lo, d); hi = Math.max(hi, d); }); return hi - lo; };
+  const calm = swing(80); bx.cue('shimmy', true);
+  const shimmy = swing(80);
+  assert.ok(shimmy > calm + 0.04, `shimmy swing ${shimmy} vs idle ${calm}`);
+  assert.equal(JSON.stringify([me, op]), frozen);
+});

@@ -9,6 +9,7 @@
  */
 import { v, add, sub, mul, dot, len, norm, clamp, solveTwoBone } from './pose-math.js';
 import { Footwork, Smoother, Drift, Spring } from './footwork.js';
+import { Swag, BEAT_RAD } from './swag.js';
 
 const LOADER_SRC = 'https://cdn.jsdelivr.net/npm/babylonjs-loaders@7.54.3/babylon.glTF2FileLoader.min.js';
 let loaderPromise = null;
@@ -603,6 +604,7 @@ export class ModelBoxer {
     // Render-side state only.
     this.lastPunch = null; this.retract = null;
     this.hitAnim = null; this.fw = null;
+    this.swag = new Swag(corner === 'red' ? 31 : 57); this.mode = 'fight'; this.t = 0;
     this.fall = 0; this.knocked = false; this.koStart = null;
   }
 
@@ -656,6 +658,9 @@ export class ModelBoxer {
     }
   }
 
+  /** Asks for a cosmetic beat ('nod', 'tilt', 'low', 'shrug', 'touch', 'shimmy'); it plays when the fighter is calm. Render-only. */
+  cue(kind, force = false) { this.swag.cue(kind, this.t, force); }
+
   hit(record) {
     if (record.outcome === 'blocked') return;
     if (record.outcome !== 'landed') return;
@@ -676,6 +681,7 @@ export class ModelBoxer {
     const drift = (this.drift ??= new Drift(this.corner === 'red' ? 7 : 19));
     const D = (name, rate, lag = 0) => drift.at(name, time - lag, rate);
     const tired = 1 - me.gasRatio;
+    this.t = time;
     const nowS = performance.now() / 1000;
 
     // Our punch: scrub its clip so the fist lands on the sim's arrive tick.
@@ -699,7 +705,10 @@ export class ModelBoxer {
     if (theirs) {
       const k = clamp((tick - theirs.launchTick) / Math.max(1, theirs.arriveTick - theirs.launchTick), 0, 1);
       if (theirs.outcome === 'blocked') guardUp = smooth(clamp((k - 0.25) / 0.5, 0, 1));
-      else if (theirs.outcome === 'slipped') { slip = smooth(clamp((k - 0.3) / 0.6, 0, 1)); slipSide = (PUNCH_CLIP[theirs.type]?.side ?? 1) > 0 ? 1 : -1; }
+      else if (theirs.outcome === 'slipped') {
+        slip = smooth(clamp((k - 0.3) / 0.6, 0, 1)); slipSide = (PUNCH_CLIP[theirs.type]?.side ?? 1) > 0 ? 1 : -1;
+        if (k >= 0.9 && this.slipSeen !== theirs.launchTick) { this.slipSeen = theirs.launchTick; this.cue('shrug'); }
+      }
       else guardUp = 0.25 * k;
     }
 
@@ -738,19 +747,28 @@ export class ModelBoxer {
       layers.push({ clip: 'Death01', t: clamp((nowS - this.koStart) / rig.clips.Death01.seconds, 0, 1), w: koW });
     } else this.koStart = null;
 
+    // Swagger (cosmetic beats and the per-tactic style): only starts when nothing is happening, so never mid-exchange.
+    const pe = pc ? (punch.back > 0 ? 1 - punch.back : smooth(punch.k)) : 0;
+    const busy = pe > 0.02 || !!theirs || aw.shell > 0.1 || aw.clinch > 0.1 || aw.taunt > 0.1 || hitW > 0.05 || koW > 0;
+    const fx = this.swag.update(time, dt, { busy, tactic: me.tactic, mode: this.fall > 0 || this.knocked ? 'down' : this.mode });
+    const S = this.swag.style, asym = this.swag.asym;
+    // Walking back to the corner at the bell, and the winner's backing-away walk-off after a KO: a slow render-only offset inside the ring.
+    const away = mul(f, -(0.9 * fx.walk + 1.4 * fx.strut));
+    const wx = clamp(root.x + away.x, -2.45, 2.45) - root.x, wz = clamp(root.z + away.z, -2.45, 2.45) - root.z;
     const slipOff = mul(r, slipSide * slip * 0.14);
-    const body = add(add(root, slipOff), mul(f, lunge));
+    const body = add(add(add(root, slipOff), mul(f, lunge)), v(wx, 0, wz));
     if (!this.fw) this.initFootwork(body, f);
     // Punch weight transfer (render-only): the punching-side foot pivots toes toward the target, weight rocks onto the
     // lead leg, and body shots drop the knees.
-    const pe = pc ? (punch.back > 0 ? 1 - punch.back : smooth(punch.k)) : 0;
     const pivot = pc && pc.as !== 'jab' ? { foot: pc.side > 0 ? 'r' : 'l', yaw: -pc.side * 0.7 * (pc.big ?? 1) * pe } : null;
     const rock = pc ? mul(r, -0.012 * pe * (pc.side > 0 ? 1 : -1)) : v(0, 0, 0);
     // Loose and alive, never twitchy: everything below is a slow, wide curve (under ~2 Hz). The hips lead, and each
     // segment above them lags the one below, so the shoulders and head follow and the gloves trail.
     const idle = 1 - clamp(pe * 1.4 + aw.shell + aw.clinch, 0, 1);
     const loose = 1 + 1.2 * tired, calm = 1 - 0.6 * clamp(speed / 1.2, 0, 1);
-    const sway = add(mul(r, 0.022 * loose * calm * D('sx', 1.4)), mul(f, 0.014 * loose * calm * D('sf', 1.1)));
+    const ph = this.swag.beatPhase, stride = 1 + 0.5 * fx.walk + 0.5 * fx.strut;
+    // Weight shifts foot to foot at half the beat (~0.75 Hz), a slow nod to a 90 BPM groove.
+    const sway = add(mul(r, 0.022 * loose * calm * D('sx', 1.4) + 0.012 * calm * idle * Math.sin(time * BEAT_RAD / 2 + ph)), mul(f, 0.014 * loose * calm * D('sf', 1.1)));
     // Weight transfer: onto the back foot while loading a punch or defending, onto the front foot as it lands, then an
     // overshoot back to guard from the spring.
     const k0 = punch ? (punch.back > 0 ? 1 : punch.k) : 0, antic = pc && k0 < 0.5 ? Math.sin(Math.PI * k0 / 0.5) : 0;
@@ -759,7 +777,7 @@ export class ModelBoxer {
     // Soft knees: the hips rise and fall with a slow bounce (~1.7 Hz) and dip as a step lands (eased, not toggled).
     this.dip ??= new Spring(0);
     const dip = this.dip.update(this.fwStepping ? 1 : 0, dt, 12, 1);
-    const bob = -KNEE_BEND - 0.012 * dip + (0.011 * Math.sin(time * 10.7 + (this.corner === 'red' ? 0 : 2.1)) + 0.007 * D('by', 0.8)) * calm * idle * (1 - 0.5 * tired)
+    const shim = fx.shimmy, bob = -KNEE_BEND - S.crouch + S.toe - 0.012 * dip + ((0.011 * S.bounce + 0.012 * shim) * Math.sin(time * (shim ? 1.25 : 1) * BEAT_RAD + ph) + 0.007 * D('by', 0.8)) * calm * Math.max(idle, shim) * stride * (1 - 0.5 * tired)
       - (pc?.as === 'body' ? 0.05 * pe : 0) - 0.05 * aw.shell - 0.02 * aw.taunt;
     // Start/stop/turn: the body leans into a change of velocity (smoothed acceleration), so a start drives forward and a stop rocks back.
     const lv = this.lastVel ?? { x: mv.x, z: mv.z };
@@ -774,16 +792,26 @@ export class ModelBoxer {
     // hips leading the punch twist with the shoulders a beat behind.
     const L = idle * loose * (1 - 0.7 * koW), lag = (i) => 0.17 * i;
     const torso = {
-      side: [0.012, 0.022, 0.03, 0.034, 0.04].map((a, i) => a * L * D('roll', 1.1, lag(i))),
-      fore: [0.01, 0.015, 0.02, 0.025, 0.03].map((a, i) => a * L * D('rock', 0.9, lag(i))).map((x, i) => x + (i === 4 ? 0.07 : i === 3 ? 0.03 : 0) * (1 - koW)),
+      side: [0.012, 0.022, 0.03, 0.034, 0.04].map((a, i) => a * L * D('roll', 1.1, lag(i)) - S.philly * (i / 4) * (1 - koW)),
+      fore: [0.01, 0.015, 0.02, 0.025, 0.03].map((a, i) => a * L * D('rock', 0.9, lag(i))).map((x, i) => x + (i === 4 ? 0.07 - S.chinUp * 1.5 + 0.5 * S.lean : i === 3 ? 0.03 + 0.7 * S.lean : i === 2 ? 0.4 * S.lean : 0) * (1 - koW)),
     };
     rig.straighten(f, STRAIGHT * (1 - 0.7 * koW), SPINE_LEAN, torso);
     this.shSpring ??= new Spring(0);
     const pSh = this.shSpring.update(pe, dt, 14, 0.7);
     const side = pc ? pc.side : 0;
-    const roll = 0.1 * L * D('twist', 1.0, 0.3) + 0.07 * L * D('shoulder', 1.6, 0.5);
+    const roll = 0.1 * L * D('twist', 1.0, 0.3) + 0.07 * S.roll * L * D('shoulder', 1.6, 0.5) + S.square * idle * (1 - koW) + 0.22 * fx.shimmy * Math.sin(time * 1.25 * BEAT_RAD + ph);
     rig.twist('pelvis', 'spine_01', -side * 0.2 * pe * (pc?.big ?? 1));
     rig.twist('spine_02', 'spine_03', roll - side * 0.22 * pSh * (pc?.big ?? 1));
+    // Head and shoulder beats: nod (chin down; up on the strut), tilt, neck roll, shrug. Head moves, the sim does not.
+    const pitch = 0.2 * fx.nod * (1 + 0.5 * fx.low) - 0.12 * fx.strut - 0.12 * fx.low - 0.1 * aw.taunt;
+    const rollH = fx.side * (0.2 * fx.tilt + 0.1 * fx.low + 0.1 * aw.taunt + 0.28 * fx.neck * Math.sin(fx.u * 2 * Math.PI));
+    const pitchN = pitch + 0.2 * fx.neck * (1 - Math.cos(fx.u * 2 * Math.PI)) / 2;
+    if (Math.abs(pitchN) + Math.abs(rollH) > 1e-4) {
+      const ax = (u, a) => B.Quaternion.RotationAxis(new B.Vector3(u.x, u.y, u.z), a);
+      rig.turn(rig.bones.neck_01, ax(r, HEAD_SIGN * pitchN * 0.4)); rig.turn(rig.bones.neck_01, ax(f, HEAD_SIGN * rollH * 0.4));
+      rig.turn(rig.bones.Head, ax(r, HEAD_SIGN * pitchN * 0.6)); rig.turn(rig.bones.Head, ax(f, HEAD_SIGN * rollH * 0.6));
+    }
+    if (fx.shrug > 0) for (const sd of [-1, 1]) rig.turn(rig.bones[sd < 0 ? 'clavicle_l' : 'clavicle_r'], B.Quaternion.RotationAxis(new B.Vector3(f.x, f.y, f.z), HEAD_SIGN * sd * 0.22 * fx.shrug));
     this.plantFeet(body, f, { vx: mv.x, vy: mv.z }, 1 - (this.fall > 0 || this.knocked ? 1 : 0), dt, pivot, pc ? 1 : Math.max(aw.shell, aw.clinch, aw.taunt));
 
     // ── arm IK on top of the clips ──
@@ -795,9 +823,9 @@ export class ModelBoxer {
       for (const side of [-1, 1]) {
         const g = GUARD[side];
         const gl = local({
-          x: g.x * (1 - 0.5 * guardUp) + slipSide * slip * 0.14 + 0.014 * L * D('gx' + side, 1.5, 0.35),
-          y: g.y + 0.06 * guardUp - 0.12 * tired + 0.014 * L * D('gy' + side, 1.9, 0.35),
-          z: (g.z - 0.06 * guardUp) * (0.55 + 0.45 * clamp((gap - 0.55) / 0.5, 0, 1)) + 0.012 * L * D('gz' + side, 1.3, 0.35),
+          x: g.x * (1 - 0.5 * guardUp) + slipSide * slip * 0.14 + 0.014 * L * D('gx' + side, 1.5, 0.35) + (side === asym.side ? side * asym.out * idle : 0),
+          y: g.y + 0.06 * guardUp - 0.12 * tired + 0.014 * L * D('gy' + side, 1.9, 0.35) - (side === -1 ? S.leadLow : 0) - (side === asym.side ? asym.low * idle : 0),
+          z: (g.z - 0.06 * guardUp) * (0.55 + 0.45 * clamp((gap - 0.55) / 0.5, 0, 1)) + 0.012 * L * D('gz' + side, 1.3, 0.35) + (side === -1 ? S.leadOut : 0),
         });
         // The gloves trail the head a little and overshoot when they come back to guard.
         const gs = (this.gSpring ??= {})[side] ??= [new Spring(gl.x), new Spring(gl.y), new Spring(gl.z)];
@@ -812,6 +840,12 @@ export class ModelBoxer {
           target = lerpV(target, open, aw.taunt);
           target = lerpV(target, wrap, aw.clinch);
           target = lerpV(target, chest, shoving);
+          if (side === -1) target = lerpV(target, local({ x: 0.02, y: -0.06, z: 0.5 }), fx.touch);            // offers a glove
+          else {
+            target = lerpV(target, local({ x: 0.2, y: -0.5, z: 0.12 }), fx.low);                               // hand dropped low, an invitation
+            target = lerpV(target, local({ x: -0.02, y: -0.1, z: 0.2 }), fx.adjust * (0.5 + 0.5 * Math.sin(fx.u * 4 * Math.PI - Math.PI / 2)));   // taps the other glove
+            target = lerpV(target, local({ x: 0.14, y: 0.32, z: 0 }), fx.strut);                               // fist raised on the walk-off
+          }
           if (side === -1 && feinting) target = add(target, add(mul(f, 0.18 * feinting), mul(UPV, 0.05 * feinting)));
         }
         if (pc && pc.side === side) {
@@ -902,6 +936,8 @@ export class ModelBoxer {
 }
 
 const UPV = v(0, 1, 0);
+/** Babylon is left-handed: the sign that makes a positive pitch nod the chin down and a positive roll tilt the head to the right. */
+const HEAD_SIGN = 1;
 /** Hips drop this far below the clips' stance so planted legs have slack to reach and a step can land (m). */
 const KNEE_BEND = 0.02;
 /** The clips' stance is a wide squat; feet come in toward the body by these factors (shoulder-width, knees only slightly bent). */
