@@ -154,7 +154,7 @@ export function sightText(text, tag = 'span') {
  * pass the Recall Bell on.
  * @param {{ store: object, realmId: string, storage: Storage, connect: Function, now?: () => Date, rules?: object }} o
  */
-export function mountBridgePanel(container, { store, realmId, storage, connect, now = () => new Date(), rules = DEFAULT_RULES }) {
+export function mountBridgePanel(container, { store, realmId, storage, connect, now = () => new Date(), rules = DEFAULT_RULES, keepersOf = null }) {
   if (!document.getElementById(STYLE_ID)) { const s = el('style'); s.id = STYLE_ID; s.textContent = CSS; document.head.append(s); }
   let settings = loadBridgeSettings(storage, realmId), client = null, halted = false, link = 'off';
   const root = el('section', 'qbr-root');
@@ -187,8 +187,9 @@ export function mountBridgePanel(container, { store, realmId, storage, connect, 
     regs.replaceChildren(...[...regMap.values()].map(r => { const li = el('li'); li.append(sightText(`${r.name} (${r.keeperId})${r.skills.length ? ': ' + r.skills.join(', ') : ''}`)); return li; }));
   };
 
+  const publish = async () => { if (keepersOf && client?.up) client.keepers(keepersOf(await store.snapshot(), now())); };
   async function onEvent(e) {
-    if (e.kind === 'link') link = e.up ? 'up' : 'down';
+    if (e.kind === 'link') { link = e.up ? 'up' : 'down'; if (e.up) await publish(); }
     else if (e.kind === 'status') halted = e.halted;
     else if (e.kind === 'registered') regMap.set(e.registration.keeperId, e.registration);
     else if (e.kind === 'refused') {
@@ -225,7 +226,7 @@ export function mountBridgePanel(container, { store, realmId, storage, connect, 
 
   return {
     ring: () => (client?.bell() ?? false), open: () => (client?.open() ?? false),
-    refresh: async () => client?.setKeepers(((await store.snapshot()).keepers || []).map(k => k.id)),
+    refresh: async () => { client?.setKeepers(((await store.snapshot()).keepers || []).map(k => k.id)); await publish(); },
     destroy() { stop(); root.remove(); },
   };
 }

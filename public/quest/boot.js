@@ -37,6 +37,8 @@ import { playtestRealm } from './playtest.js';
 import { geohash, cellAndNeighbours, fetchAreaLore, boardLore, loreChanges, riddleId as loreRiddleId, LORE_MARCH } from './area-lore.js';
 import { mountTownBoard } from './town-board.js';
 import { mountStartWork, mountEmberReadout, mountRecallBell } from './keeper-hud.js';
+import { mountBridgePanel } from './bridge-client.js';
+import { keepersMessage } from './work-queue.js';
 import { missionsOf, begin, tickMission, hearBriefing, hearDebrief, gated } from './missions.js';
 import { mountMissionHud, hudView, talk as missionTalk } from './mission-hud.js';
 import { joinSummoned } from './keeper-controls.js';
@@ -207,7 +209,25 @@ addEventListener('quest:board', async () => {
 // ---------- R4: Bring your Keeper ----------
 const startWork = mountStartWork(document.body, store, { workUrl: 'work.html' });
 mountEmberReadout(document.body, store);
-mountRecallBell(document.body, store, { onKeepers: () => { if (!talking && !battle.open) openKeeper(null); } });
+// R4.5: the Bridge. Off by default; with it off nothing connects and the game runs on its own ledger and /work.
+const bridgeBox = document.createElement('div');
+Object.assign(bridgeBox.style, { position: 'fixed', top: '88px', left: '8px', right: '8px', maxWidth: '560px', maxHeight: 'calc(100vh - 104px)',
+  overflow: 'auto', zIndex: 1001, background: 'rgba(14,16,24,.95)', borderRadius: '12px', border: '1px solid rgba(255,255,255,.2)' });
+bridgeBox.hidden = true;
+const bridgeBtn = document.createElement('button');
+bridgeBtn.type = 'button'; bridgeBtn.textContent = 'Bridge'; bridgeBtn.setAttribute('aria-expanded', 'false');
+Object.assign(bridgeBtn.style, { position: 'fixed', top: '44px', left: '8px', zIndex: 1001, minHeight: '40px', padding: '8px 14px', borderRadius: '8px',
+  border: '1px solid rgba(255,255,255,.25)', background: 'rgba(14,16,24,.82)', color: '#f3e6c8', font: '600 13px system-ui, sans-serif', cursor: 'pointer' });
+bridgeBtn.onclick = () => { bridgeBox.hidden = !bridgeBox.hidden; bridgeBtn.setAttribute('aria-expanded', String(!bridgeBox.hidden)); };
+document.body.append(bridgeBtn, bridgeBox);
+let bridge = { ring() {}, refresh: async () => {} };
+try { bridge = mountBridgePanel(bridgeBox, { store, realmId: (await store.snapshot()).realm.id, storage: localStorage, rules,
+  connect: (url, opts) => globalThis.mqtt.connect(url, opts),
+  keepersOf: (l, now) => keepersMessage(l, l.keepers.map(k => k.id), now, rules) }); // the Bridge on is the opt-in: every Keeper is listed
+} catch (err) { console.warn('The Bridge panel did not mount:', err.message); }
+let bridgeKeepers = '';
+store.subscribe(l => { const k = JSON.stringify([l.keepers.map(x => [x.id, x.status]), l.queue.map(q => [q.id, q.state])]); if (k !== bridgeKeepers) { bridgeKeepers = k; bridge.refresh().catch(() => {}); } });
+mountRecallBell(document.body, store, { onRing: () => bridge.ring(), onKeepers: () => { if (!talking && !battle.open) openKeeper(null); } });
 const openKeeper = async keeperId => {
   lock(true);
   try { await startWork.open(keeperId ?? undefined); } finally { lock(false); }

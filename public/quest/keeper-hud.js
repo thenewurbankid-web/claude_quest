@@ -467,7 +467,7 @@ const typing = t => t instanceof Element && (t.closest('input, textarea, select,
  * (integration passes () => startWork.open()).
  * @returns {{ ask: () => void, destroy: () => void }}
  */
-export function mountRecallBell(container, store, { now = () => new Date(), key = 'b', onKeepers = null } = {}) {
+export function mountRecallBell(container, store, { now = () => new Date(), key = 'b', onKeepers = null, onRing = null } = {}) {
   injectStyles();
   const d = dock(container);
   const mine = [];
@@ -500,6 +500,7 @@ export function mountRecallBell(container, store, { now = () => new Date(), key 
     const l = await store.snapshot();
     const runs = (l.queue || []).filter(q => LIVE.includes(q.state)).length;
     await applyChanges(store, ringBell(l, now()));
+    try { onRing?.(); } catch { /* the Bridge's trouble is not the bell's */ }
     const s = el('p', 'qkh-said', 'Every Keeper is resting. Agents already running must be stopped in your own tool.');
     s.setAttribute('role', 'status');
     const ok = btn('Close', '', () => m.close()), foot = el('div', 'qkh-foot');
