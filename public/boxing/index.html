@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0d12">
+<meta name="theme-color" content="#000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Bring The Ruckus</title>
 <!--
@@ -145,10 +145,10 @@
 
   /* ── Upgrade ── */
   .points-big { text-align: center; padding: 6px 0 14px; }
-  .points-big b { display: block; font: 400 64px/1 var(--display); color: var(--accent); }
+  .points-big b { display: block; font: 700 68px/1 var(--body); color: var(--accent); }
   .urow { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
   .urow .nm { font: 400 20px var(--display); letter-spacing: .08em; text-transform: uppercase; }
-  .urow .nm span { font: 600 18px var(--mono); color: var(--accent); margin-left: 8px; }
+  .urow .nm span { font: 700 20px var(--body); color: var(--accent); margin-left: 8px; }
   .urow .fx { grid-column: 1; font-size: 12px; color: var(--muted); }
   .urow .bar { grid-column: 1; }
   .urow .btns { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 8px; }
@@ -178,7 +178,7 @@
   .side { display: grid; gap: 4px; }
   .side.blue { text-align: right; }
   .side .nm { font: 400 19px/1 var(--display); letter-spacing: .07em; text-transform: uppercase; text-shadow: 0 2px 4px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .side.red .nm { color: #ff7478; } .side.blue .nm { color: #6fb0ff; }
+  .side.red .nm { color: #f3f3f3; } .side.blue .nm { color: #b4b4b9; }
   .vit { display: flex; align-items: center; gap: 7px; }
   .side.blue .vit { flex-direction: row-reverse; }
   .vit .bars { flex: 1; min-width: 0; display: grid; gap: 4px; }
@@ -193,7 +193,7 @@
   .dmg-grid .who { font: 400 15px var(--display); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; }
   .dmg-fig { display: flex; align-items: center; justify-content: center; gap: 12px; }
   .dmg-list { display: grid; gap: 5px; text-align: left; font-size: 12.5px; }
-  .dmg-list b { font: 400 17px/1 var(--display); color: var(--accent); margin-right: 4px; }
+  .dmg-list b { font: 700 20px/1 var(--body); color: var(--accent); margin-right: 4px; }
   .dmg-list span { display: block; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .dmg-note { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); }
   .meter { position: relative; height: 12px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.25); border-radius: 3px; overflow: hidden; transform: skewX(-14deg); }
@@ -228,20 +228,20 @@
   #s-result .scroll { padding-top: calc(var(--top) + 18px); text-align: center; }
   .verdict { font: 400 clamp(56px, 18vw, 92px)/.95 var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0; opacity: 0; animation: pop .55s cubic-bezier(.2,1.4,.4,1) forwards; animation-delay: var(--vd, 0s); }
   .verdict.w { color: var(--accent-2); text-shadow: 0 0 30px rgba(194,81,47,.5), 3px 4px 0 #000; }
-  .verdict.l { color: #ff6b6b; text-shadow: 3px 4px 0 #000; } .verdict.d { color: #c7d0de; text-shadow: 3px 4px 0 #000; }
+  .verdict.l { color: var(--accent); text-shadow: 3px 4px 0 #000; } .verdict.d { color: #c7d0de; text-shadow: 3px 4px 0 #000; }
   .method { font: 600 14px var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 6px 0 16px; opacity: 0; animation: fade .4s forwards; animation-delay: var(--vd, 0s); }
   @keyframes pop { from { opacity: 0; transform: scale(1.7) rotate(-4deg); } to { opacity: 1; transform: none; } }
   @keyframes fade { to { opacity: 1; } }
   .cardtbl { width: 100%; border-collapse: collapse; font: 600 16px var(--mono); }
   .cardtbl th { font: 600 11px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding-bottom: 6px; }
-  .cardtbl th.r { color: #ff7478; } .cardtbl th.b { color: #6fb0ff; }
+  .cardtbl th.r { color: #f3f3f3; } .cardtbl th.b { color: #a4a4a9; }
   .cardtbl td { padding: 6px 0; border-top: 1px solid var(--line); opacity: 0; animation: fade .35s forwards; animation-delay: calc(var(--i) * .55s); }
   .cardtbl tr.tot td { font-size: 20px; border-top: 2px solid var(--muted); animation-delay: calc(var(--i) * .55s + .3s); }
   .stat2 { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px 10px; font-size: 14px; align-items: center; }
   .stat2 b { font: 600 15px var(--mono); } .stat2 span:nth-child(3n+2) { color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
   .stat2 span:nth-child(3n+1) { text-align: right; } .stat2 span:nth-child(3n) { text-align: left; }
   .reward { display: flex; justify-content: space-around; text-align: center; }
-  .reward b { display: block; font: 400 34px/1 var(--display); color: var(--accent); }
+  .reward b { display: block; font: 700 38px/1 var(--body); color: var(--accent); }
   .reward span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .unlock { background: linear-gradient(90deg, #2a1c0e, #1c222e); border: 1px solid var(--accent); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; text-align: left; }
   .unlock b { color: var(--accent); font: 400 13px var(--display); letter-spacing: .12em; text-transform: uppercase; display: block; }
@@ -249,17 +249,17 @@
 
   /* ── Career ── */
   .stat-line { display: flex; justify-content: space-between; gap: 8px; text-align: center; }
-  .stat-line b { display: block; font: 400 26px/1 var(--display); color: var(--accent); }
+  .stat-line b { display: block; font: 700 30px/1 var(--body); color: var(--accent); }
   .stat-line span { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .energy { height: 10px; border-radius: 5px; background: var(--panel-2); overflow: hidden; margin: 12px 0 6px; }
-  .energy i { display: block; height: 100%; background: linear-gradient(90deg, #d9a12b, #3fb950); }
+  .energy i { display: block; height: 100%; background: linear-gradient(90deg, #8f8f94, #f3f3f3); }
   .cond { font-size: 12.5px; color: var(--muted); } .cond.bad { color: #ff9a7a; }
   .week-h { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 0 8px; font: 400 15px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .offer { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 10px; margin-bottom: 10px; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; min-height: 84px; }
   .offer .avatar { width: 64px; height: 64px; font-size: 32px; }
   .offer .nm { font: 400 20px/1.1 var(--display); letter-spacing: .06em; text-transform: uppercase; }
   .offer .meta { font-size: 12px; color: var(--muted); }
-  .offer .purse { font: 400 22px var(--display); color: var(--accent-2); text-align: right; }
+  .offer .purse { font: 700 26px var(--body); color: var(--accent-2); text-align: right; }
   .offer.rival { border-color: var(--red); }
   .tagpill { display: inline-block; font: 700 9px var(--body); letter-spacing: .1em; padding: 2px 7px; border-radius: 999px; background: var(--red); color: #fff; margin-left: 6px; vertical-align: middle; text-transform: uppercase; }
   .tagpill.gold { background: var(--accent); color: #1b1004; }
@@ -276,9 +276,9 @@
   .poster .avatar { width: min(34vw, 130px); height: min(34vw, 130px); margin: 0 auto 8px; font-size: 56px; }
   .poster .nm { font: 400 22px/1.1 var(--display); letter-spacing: .05em; text-transform: uppercase; }
   .poster .rec { font: 600 13px var(--mono); color: var(--muted); }
-  .poster .purse-big { font: 400 54px/1 var(--display); color: var(--accent-2); margin: 18px 0 2px; }
+  .poster .purse-big { font: 700 64px/1 var(--body); color: var(--accent-2); margin: 18px 0 2px; }
   .drill-bar { position: relative; height: 64px; border-radius: 12px; border: 2px solid var(--line); overflow: hidden; margin: 14px 0;
-    background: linear-gradient(90deg, #2b1a1a 0, #2b1a1a 15%, #3a3417 15%, #3a3417 32.5%, #6b5a1d 32.5%, #6b5a1d 44%, #d9a12b 44%, #d9a12b 56%, #6b5a1d 56%, #6b5a1d 67.5%, #3a3417 67.5%, #3a3417 85%, #2b1a1a 85%); }
+    background: linear-gradient(90deg, #2b1a1a 0, #2b1a1a 15%, #3a3417 15%, #3a3417 32.5%, #3c3c40 32.5%, #3c3c40 44%, #d9a12b 44%, #d9a12b 56%, #3c3c40 56%, #3c3c40 67.5%, #3a3417 67.5%, #3a3417 85%, #2b1a1a 85%); }
   .drill-bar .mk { position: absolute; top: 0; bottom: 0; width: 6px; margin-left: -3px; background: #fff; box-shadow: 0 0 10px #fff; }
   .bag { width: 74px; height: 130px; margin: 6px auto 0; border-radius: 22px; background: linear-gradient(90deg, #5b1d1d, #a73535 45%, #5b1d1d); border: 2px solid #2a0d0d; position: relative; transform-origin: 50% -30px; }
   .bag::before { content: ''; position: absolute; left: 50%; top: -36px; width: 3px; height: 36px; background: #777; }
@@ -847,13 +847,13 @@ $('camp-reset').onclick = () => { state.pending = null; renderUpgrade(); };
 // ─── Opponents ──────────────────────────────────────────────────────────────
 
 const ARCHETYPES = {
-  slugger:    { name: 'Iron Mauler',   style: 'Heavy hands, slow feet. One shot changes the night.', stats: { speed: 38, power: 82, stamina: 55, ringIQ: 42 }, tint: '#6b1d22',
+  slugger:    { name: 'Iron Mauler',   style: 'Heavy hands, slow feet. One shot changes the night.', stats: { speed: 38, power: 82, stamina: 55, ringIQ: 42 }, tint: '#4a4a4e',
     look: { topStyle: 'tank', top: '#16171a', jeans: '#1d1e22', boots: 'timbs', cap: null, chain: true, wraps: '#16171a', skin: 'deep' } },
-  speedster:  { name: 'Quicksilver',   style: 'Flurries from every angle. Hard to catch.', stats: { speed: 84, power: 40, stamina: 60, ringIQ: 55 }, tint: '#6b5a1d',
+  speedster:  { name: 'Quicksilver',   style: 'Flurries from every angle. Hard to catch.', stats: { speed: 84, power: 40, stamina: 60, ringIQ: 55 }, tint: '#3c3c40',
     look: { topStyle: 'tee', top: '#c9a227', jeans: '#2f3b52', boots: 'sneakers', cap: '#16171a', capBackwards: false, chain: false, wraps: '#ecebe6', skin: 'medium' } },
-  technician: { name: 'The Professor', style: 'Reads you like a book and counters everything.', stats: { speed: 58, power: 50, stamina: 52, ringIQ: 82 }, tint: '#1d3a6b',
+  technician: { name: 'The Professor', style: 'Reads you like a book and counters everything.', stats: { speed: 58, power: 50, stamina: 52, ringIQ: 82 }, tint: '#58585d',
     look: { topStyle: 'hoodie', top: '#8a8f96', jeans: '#4f6b8f', boots: 'sneakers', cap: null, chain: false, wraps: '#2f6fd0', skin: 'light' } },
-  grinder:    { name: 'Diesel Dean',   style: 'Never tires. Wears you down in the late rounds.', stats: { speed: 48, power: 55, stamina: 85, ringIQ: 45 }, tint: '#1d5a3a',
+  grinder:    { name: 'Diesel Dean',   style: 'Never tires. Wears you down in the late rounds.', stats: { speed: 48, power: 55, stamina: 85, ringIQ: 45 }, tint: '#2f2f33',
     look: { topStyle: 'varsity', top: '#3d5a3a', sleeve: '#c9c6bf', jeans: '#2f3b52', boots: 'timbs', cap: '#3d5a3a', capBackwards: true, chain: true, wraps: '#d9a12b', skin: 'medium' } },
 };
 const opponentOf = (key) => (key === 'mirror'
@@ -869,7 +869,7 @@ function renderOpponents() {
       bar.firstChild.style.width = `${o.stats[s]}%`;
       return el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[s] }), bar);
     });
-    const avatar = el('div', { className: 'avatar', style: `background:linear-gradient(160deg, ${o.tint}, #0b0d12)` }, o.name[0]);
+    const avatar = el('div', { className: 'avatar', style: `background:linear-gradient(160deg, ${o.tint}, #000)` }, o.name[0]);
     return el('button', { className: 'opp', type: 'button', ariaPressed: String(state.opp === k), onclick: () => { state.opp = k; sfx.click(); renderOpponents(); } },
       avatar,
       el('div', {}, el('div', { className: 'nm', textContent: o.name }), el('div', { className: 'style', textContent: o.style }), ...mini));
@@ -1167,8 +1167,8 @@ function damageCard(r) {
 // ─── Career ─────────────────────────────────────────────────────────────────
 
 const money = (n) => `$${n.toLocaleString('en-US')}`;
-const portrait = (o) => el('div', { className: 'avatar', style: `background:linear-gradient(160deg, ${LOOK_TINT[o.arch] ?? '#4a4a55'}, #0b0d12)` }, o.name[0]);
-const LOOK_TINT = { slugger: '#6b1d22', speedster: '#6b5a1d', technician: '#1d3a6b', grinder: '#1d5a3a' };
+const portrait = (o) => el('div', { className: 'avatar', style: `background:linear-gradient(160deg, ${LOOK_TINT[o.arch] ?? '#4a4a55'}, #000)` }, o.name[0]);
+const LOOK_TINT = { slugger: '#4a4a4e', speedster: '#3c3c40', technician: '#58585d', grinder: '#2f2f33' };
 const saveCareer = () => db.saveFighter(state.fighter).then(() => { state.hasSaved = true; });
 
 function offerButton(o) {
@@ -1241,7 +1241,7 @@ function renderCard() {
     el('div', { className: 'tier', textContent: `${o.tierName}${o.title ? ' · title fight' : ''}${o.rival ? ' · rematch' : ''}` }),
     el('div', { className: 'venue', textContent: `${o.venue} · ${o.rounds} round${o.rounds > 1 ? 's' : ''}` }),
     el('div', { className: 'vs' },
-      el('div', {}, el('div', { className: 'avatar', style: 'background:linear-gradient(160deg,#6b1d22,#0b0d12)' }, state.fighter.name[0]), el('div', { className: 'nm', textContent: state.fighter.name }), el('div', { className: 'rec', textContent: recordText(state.fighter.record) })),
+      el('div', {}, el('div', { className: 'avatar', style: 'background:linear-gradient(160deg,#3a2220,#000)' }, state.fighter.name[0]), el('div', { className: 'nm', textContent: state.fighter.name }), el('div', { className: 'rec', textContent: recordText(state.fighter.record) })),
       el('b', { textContent: 'VS' }),
       el('div', {}, portrait(o), el('div', { className: 'nm', textContent: o.name }), el('div', { className: 'rec', textContent: `${o.record.w}-${o.record.l}-0` }))),
     el('div', { className: 'purse-big', textContent: money(o.purse) }),
