@@ -200,6 +200,13 @@ User: "try using open source free resources instead", and picked **the crowd** w
 - Not done: all the crowd is male (MPFB base is male here; the old crowd had women), the T-shirt hem is a little ragged on back views, night crowd not checked, the arms-up pose is a plain V.
 - **Untested**: the crowd at night and on a real phone.
 
+## Done (2026-10-04): photo crowd (BOX-5), closed with the open-source atlas
+
+The photo-impostor crowd (camera-facing cards, 5 views per person, picked from the camera angle, shader in `buildPhotoCrowd`) is in; its atlas is the Blender render from BOX-10, not ComfyUI. The ComfyUI retry the user asked for is moot: the user chose open-source sources in BOX-10, the old generation scripts are gone, and I stopped the ComfyUI server (port 8188) that was still running and swapping the machine. `?crowd=3d` or a failed atlas load keeps the procedural 3D crowd.
+- Measured with `node scripts/measure-boxing.mjs --crowd=3d|photo --time=day --cam=hard` (headless Chromium, 400x760, Metal): 3D crowd 87 active meshes, 118 draw calls, 4.5 ms CPU/frame; photo crowd 79 meshes, 110 draw calls, 3.1 ms CPU/frame. Wall ms per frame (34 vs 37) is noise from headless vsync, not a regression. Gain is mostly CPU time, not draw calls, since the 3D crowd was already thin-instanced.
+- Not done: trees and parked cars stay 3D (little to gain, a few meshes); night not measured.
+- **Untested**: the real phone, and the crowd at night.
+
 ## Next jobs
 
 1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
