@@ -148,7 +148,7 @@ const COURT = { half: 9.6, baselineZ: 9.0 };
  * by day the light is overcast and the windows are dark glass.
  * Returns { ground, crowd, update(t, dt) }.
  */
-function buildStreet(B, scene, shadow, { night = false } = {}) {
+function buildStreet(B, scene, shadow, { night = false, crowdAtlas = null } = {}) {
   const rand = mulberryish(21);
   const mat = (name, hex, opts = {}) => {
     const m = new B.StandardMaterial(name, scene);
@@ -366,7 +366,7 @@ function buildStreet(B, scene, shadow, { night = false } = {}) {
   if (night) buildNight(B, scene, shadow, { mat, glow, rand, flicker });
   buildNewYork(B, scene, shadow, mat, glow, rand, { night });
 
-  const crowd = buildCrowd(B, scene);
+  const crowd = buildCrowd(B, scene, crowdAtlas, { night });
   return {
     ground, crowd,
     update(t, dt) {
@@ -676,7 +676,7 @@ function wallPlace(B, mesh, side, along, up, out = 0) {
  * outside a shadow. The canvas-drawn signs and graffiti, the steam and the crowd are added on top, as in buildStreet.
  * Returns { ground, crowd, lit, skyUp, update } (`lit`: meshes the hemispheric fill must leave alone), or throws.
  */
-async function buildBakedCourt(B, scene, key) {
+async function buildBakedCourt(B, scene, key, crowdAtlas = null) {
   await loadGltfLoader(B);
   // Keep the textures' bytes as they are: by default the loader uploads colour images as sRGB buffers, so the GPU would
   // linearise them on sampling, and StandardMaterial (which works in gamma space) would draw them far too dark.
@@ -768,7 +768,7 @@ async function buildBakedCourt(B, scene, key) {
   subway.position.set(-LOOK.yardM + 1.625, 2.05, -8); subway.rotation.y = -Math.PI / 2;
 
   steamFrom(B, scene, new B.Vector3(-10.2, 1.75, 3.5));
-  const crowd = buildCrowd(B, scene);
+  const crowd = buildCrowd(B, scene, crowdAtlas, { night: false });
   return {
     ground: lines, crowd, lit, skyUp: info.skyUp,
     update(t, dt) { crowd.update(t, dt); },
@@ -812,7 +812,33 @@ const CROWD_WEAR = {
   cap: ['#1c2540', '#1c2540', '#1c2540', '#111111', '#7a1d24'],
 };
 
-function buildCrowd(B, scene) {
+/** The people's places: four rows round the fight, open on the hard camera's side. Deterministic (the same each fight). */
+function crowdSeats() {
+  const seats = [];
+  const rand = mulberryish(7);
+  for (let row = 0; row < 4; row++) {
+    const r = RING_HALF_M + 1.9 + row * 0.55;
+    const n = Math.round((2 * Math.PI * r) / 0.5);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + row * 0.3 + (rand() - 0.5) * 0.08;
+      // Leave a gap toward −z, where the hard camera stands.
+      const fromCam = Math.abs(Math.atan2(Math.sin(a), -Math.cos(a)));
+      if (fromCam < 0.8 + row * 0.08 || rand() < 0.06) continue;
+      const x = Math.sin(a) * r + (rand() - 0.5) * 0.15, z = Math.cos(a) * r + (rand() - 0.5) * 0.15;
+      const pick = (list) => list[Math.floor(rand() * list.length)];
+      const topCols = pick(CROWD_WEAR.top);
+      seats.push({
+        x, z, yaw: Math.atan2(-x, -z), phase: rand() * Math.PI * 2, h: 0.92 + rand() * 0.14, lean: 0.06 + rand() * 0.1,
+        up: rand() < 0.2, capped: rand() < 0.55, backwards: rand() < 0.3,
+        col: { legs: pick(CROWD_WEAR.jeans), boots: pick(CROWD_WEAR.boots), top: topCols[0], arms: topCols[1] ?? topCols[0], head: pick(CROWD_WEAR.skin), cap: pick(CROWD_WEAR.cap) },
+      });
+    }
+  }
+  return seats;
+}
+
+function buildCrowd(B, scene, atlas, opts) {
+  if (atlas) return buildPhotoCrowd(B, scene, atlas, opts);
   const m = new B.StandardMaterial('crowdM', scene);
   m.diffuseColor = new B.Color3(1, 1, 1); m.specularColor = new B.Color3(0.02, 0.02, 0.02);
   const limb = (name, h, d0, d1, x, y, rz = 0) => {
@@ -840,26 +866,7 @@ function buildCrowd(B, scene) {
   brim.position.set(0, 1.72, 0.16);
   const cap = merge('crowdCaps', [capDome, brim]);
 
-  const seats = [];
-  const rand = mulberryish(7);
-  for (let row = 0; row < 4; row++) {
-    const r = RING_HALF_M + 1.9 + row * 0.55;
-    const n = Math.round((2 * Math.PI * r) / 0.5);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + row * 0.3 + (rand() - 0.5) * 0.08;
-      // Leave a gap toward −z, where the hard camera stands.
-      const fromCam = Math.abs(Math.atan2(Math.sin(a), -Math.cos(a)));
-      if (fromCam < 0.8 + row * 0.08 || rand() < 0.06) continue;
-      const x = Math.sin(a) * r + (rand() - 0.5) * 0.15, z = Math.cos(a) * r + (rand() - 0.5) * 0.15;
-      const pick = (list) => list[Math.floor(rand() * list.length)];
-      const topCols = pick(CROWD_WEAR.top);
-      seats.push({
-        x, z, yaw: Math.atan2(-x, -z), phase: rand() * Math.PI * 2, h: 0.92 + rand() * 0.14, lean: 0.06 + rand() * 0.1,
-        up: rand() < 0.2, capped: rand() < 0.55, backwards: rand() < 0.3,
-        col: { legs: pick(CROWD_WEAR.jeans), boots: pick(CROWD_WEAR.boots), top: topCols[0], arms: topCols[1] ?? topCols[0], head: pick(CROWD_WEAR.skin), cap: pick(CROWD_WEAR.cap) },
-      });
-    }
-  }
+  const seats = crowdSeats();
   // Each part lists the people who have it and the colour key it wears.
   const parts = [
     { mesh: legs, key: 'legs', who: () => true }, { mesh: boots, key: 'boots', who: () => true },
@@ -895,6 +902,126 @@ function buildCrowd(B, scene) {
         });
         p.mesh.thinInstanceBufferUpdated('matrix');
       }
+    },
+    roar(amount) { excite = Math.min(1, excite + amount); },
+    get count() { return seats.length; },
+  };
+}
+
+// ─── The crowd as photo impostors ───────────────────────────────────────────────────
+
+/**
+ * textures/crowd_atlas.webp holds one cut-out photo per frame: a row per person, a column per view (0°, 45°, 90°, 135°,
+ * 180° off the person's front; the other side is the same frame mirrored). crowd_atlas.json says how it is laid out.
+ * scripts/build-crowd-atlas.py writes both. Returns null if either fails to load, and the procedural crowd is built.
+ */
+async function loadCrowdAtlas(B, scene) {
+  try {
+    const meta = await (await fetch('/boxing/textures/crowd_atlas.json')).json();
+    if (!(meta.rows > 0 && meta.cols > 0 && meta.frameHeightM > 0 && meta.aspect > 0 && Array.isArray(meta.up))) throw new Error('bad crowd_atlas.json');
+    const tex = await new Promise((ok, no) => {
+      const t = new B.Texture('/boxing/textures/crowd_atlas.webp', scene, false, true, B.Texture.TRILINEAR_SAMPLINGMODE, () => ok(t), (msg, e) => no(e || new Error(msg)));
+    });
+    tex.wrapU = tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+    return { meta, tex };
+  } catch (err) {
+    console.warn('crowd atlas unavailable, using the 3D crowd:', err);
+    return null;
+  }
+}
+
+// Shader comments are left out: Babylon joins the source lines, so a // would eat what follows it.
+// info = row, facing yaw, phase, brightness; grid = columns, rows; flip picks which side of the mirror is photographed;
+// lampFall (night) = brightness at lampFall.y metres from the lamp, 1 under it; lampFall.y 0 means no falloff (day).
+const CROWD_VERT = `
+precision highp float;
+attribute vec3 position; attribute vec2 uv;
+attribute vec4 world0; attribute vec4 world1; attribute vec4 world2; attribute vec4 world3;
+attribute vec4 info;
+uniform mat4 viewProjection; uniform vec3 cameraPosition; uniform float time; uniform float excite;
+uniform vec2 grid; uniform float flip;
+uniform vec3 lamp; uniform vec2 lampFall;
+varying vec2 vUV; varying float vShade; varying float vDist;
+void main() {
+  vec3 base = world3.xyz;
+  float w = length(world0.xyz), h = length(world1.xyz);
+  base.y += max(0., sin(time * (2. + excite * 6.) + info.z)) * (0.02 + excite * 0.14);
+  vec3 toCam = cameraPosition - base;
+  vec2 f = normalize(toCam.xz + vec2(1e-5));
+  vec3 right = vec3(-f.y, 0., f.x);
+  gl_Position = viewProjection * vec4(base + right * position.x * w + vec3(0., position.y * h, 0.), 1.);
+  float rel = atan(toCam.x, toCam.z) - (info.y + sin(time * 0.4 + info.z) * 0.2);
+  rel = mod(rel + 3.14159265, 6.2831853) - 3.14159265;
+  float col = min(floor(abs(rel) / 0.785398 + 0.5), grid.x - 1.);
+  float u = (rel * flip < 0.) ? 1. - uv.x : uv.x;
+  vUV = vec2((col + u) / grid.x, (grid.y - 1. - info.x + uv.y) / grid.y);
+  float lit = lampFall.y > 0. ? mix(1., lampFall.x, smoothstep(0., lampFall.y, length(base.xz - lamp.xz))) : 1.;
+  vShade = info.w * lit; vDist = length(toCam);
+}`;
+const CROWD_FRAG = `
+precision highp float;
+varying vec2 vUV; varying float vShade; varying float vDist;
+uniform sampler2D atlas; uniform vec3 tint; uniform vec3 fogColor; uniform float fogDensity;
+void main() {
+  vec4 c = texture2D(atlas, vUV);
+  if (c.a < 0.5) discard;
+  float f = 1. - exp(-fogDensity * fogDensity * vDist * vDist);
+  gl_FragColor = vec4(mix(c.rgb * tint * vShade, fogColor, clamp(f, 0., 1.)), 1.);
+}`;
+
+function buildPhotoCrowd(B, scene, { meta, tex }, { night = false } = {}) {
+  const seats = crowdSeats();
+  const pickRow = mulberryish(11);
+  const rows = { up: [], down: [] };
+  meta.up.forEach((u, i) => rows[u ? 'up' : 'down'].push(i));
+  if (!rows.up.length) rows.up = rows.down;
+  if (!rows.down.length) rows.down = rows.up;
+
+  const quad = new B.Mesh('crowdPhotos', scene);
+  const vd = new B.VertexData();
+  vd.positions = [-0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0];
+  vd.uvs = [0, 0, 1, 0, 1, 1, 0, 1];
+  vd.indices = [0, 1, 2, 0, 2, 3];
+  vd.applyToMesh(quad);
+
+  const mats = new Float32Array(seats.length * 16), info = new Float32Array(seats.length * 4);
+  const tmp = new B.Matrix(), q = B.Quaternion.Identity(), sc = new B.Vector3(), pos = new B.Vector3();
+  seats.forEach((s, i) => {
+    const list = s.up ? rows.up : rows.down;
+    const row = list[Math.floor(pickRow() * list.length)];
+    const h = meta.frameHeightM * s.h;
+    pos.set(s.x, 0, s.z); sc.set(h * meta.aspect, h, 1);
+    B.Matrix.ComposeToRef(sc, q, pos, tmp); tmp.copyToArray(mats, i * 16);
+    info.set([row, s.yaw, s.phase, 0.9 + pickRow() * 0.2], i * 4);
+  });
+  quad.thinInstanceSetBuffer('matrix', mats, 16, true);
+  quad.thinInstanceSetBuffer('info', info, 4, true);
+  quad.alwaysSelectAsActiveMesh = true;
+
+  // Day: the photos were taken in overcast light, as the court is. Night: dim and cool, brighter near the work lamp.
+  const mat = new B.ShaderMaterial('crowdPhotoM', scene, { vertexSource: CROWD_VERT, fragmentSource: CROWD_FRAG },
+    { attributes: ['position', 'uv', 'world0', 'world1', 'world2', 'world3', 'info'],
+      uniforms: ['viewProjection', 'cameraPosition', 'time', 'excite', 'grid', 'flip', 'tint', 'fogColor', 'fogDensity', 'lamp', 'lampFall'],
+      samplers: ['atlas'] });
+  mat.setTexture('atlas', tex);
+  mat.setVector2('grid', new B.Vector2(meta.cols, meta.rows));
+  mat.setFloat('flip', meta.flip ?? 1);
+  mat.setColor3('tint', night ? new B.Color3(0.78, 0.8, 0.95) : new B.Color3(0.97, 0.98, 1));
+  mat.setVector3('lamp', new B.Vector3(0, 6.3, 0)); mat.setVector2('lampFall', night ? new B.Vector2(0.3, 14) : new B.Vector2(1, 0));
+  mat.backFaceCulling = false;
+  quad.material = mat;
+  const setFog = () => {
+    const on = scene.fogMode === B.Scene.FOGMODE_EXP2;
+    mat.setColor3('fogColor', scene.fogColor); mat.setFloat('fogDensity', on ? scene.fogDensity : 0);
+  };
+  setFog();
+
+  let excite = 0;
+  return {
+    mesh: quad,
+    update(t, dt) {
+      excite = Math.max(0, excite - dt * 0.6);
+      mat.setFloat('time', t); mat.setFloat('excite', excite);
     },
     roar(amount) { excite = Math.min(1, excite + amount); },
     get count() { return seats.length; },
@@ -1313,11 +1440,13 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
     shadow.useBlurExponentialShadowMap = true; shadow.blurKernel = 48; shadow.darkness = 0.25;
   }
 
+  const crowdAtlas = new URLSearchParams(location.search).get('crowd') === '3d' ? null : await loadCrowdAtlas(B, scene);
+
   // Day: the court baked in Blender (models/court.glb). Night, or if the bake fails to load: the procedural street.
   let arena = null;
   if (!night) {
     try {
-      arena = await buildBakedCourt(B, scene, key);
+      arena = await buildBakedCourt(B, scene, key, crowdAtlas);
       hemi.excludedMeshes.push(...arena.lit);         // the bake already holds the sky's light
       if (arena.skyUp) {
         // Tint the fighters' fill with the HDRI's own sky colour.
@@ -1328,7 +1457,7 @@ export async function createArena3D({ parent, sim, names = {}, looks = {}, timeO
       console.warn('baked court unavailable, using the procedural street:', err);
     }
   }
-  arena ??= buildStreet(B, scene, shadow, { night });
+  arena ??= buildStreet(B, scene, shadow, { night, crowdAtlas });
   mergeStatic(B, scene, shadow, [arena.ground]);
 
   // Rigged Quaternius boxers when the models load; the primitive boxers otherwise.
