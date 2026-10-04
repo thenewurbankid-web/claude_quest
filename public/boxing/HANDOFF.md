@@ -207,6 +207,13 @@ The photo-impostor crowd (camera-facing cards, 5 views per person, picked from t
 - Not done: trees and parked cars stay 3D (little to gain, a few meshes); night not measured.
 - **Untested**: the real phone, and the crowd at night.
 
+## Done (2026-10-04): demo end-to-end check (BOX-11)
+
+User directive: finish a working demo first, fixes later. No open issues stood between the code and the demo (BOX-1,2,3,5,6,7,10 are done), so the slice was a check: `node scripts/demo-e2e.mjs` (headless Chromium, 375x760) names a fighter, picks a look, fights 3 rounds to the result in Day, then Night. Both finished ("Demo Kid wins: Decision (30-27)"), no console errors. Screenshots: `public/boxing/qa/demo-*.png`.
+- **Run the demo**: `npm run static -- 4792`, open http://localhost:4792/boxing/ on a phone (same network) or a 375 px window. Type a name, pick a look, set Time (Day/Night), Speed, press New fight, then Start round each round; the result shows under Corner.
+- **Parked (not started)**: balance (counter-punching dominates), night not measured for crowd or frame time on a real phone, all-male crowd, primitive fallback ignoring looks/outfits, `boxing-manager/` stray folder, WebLLM worker, items under "Untested" above.
+- **Still untested**: a real phone's GPU and touch, how the person looks up close, P2P looks.
+
 ## Next jobs
 
 1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
