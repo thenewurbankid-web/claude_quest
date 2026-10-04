@@ -141,6 +141,13 @@
   .mini .bar, .urow .bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; position: relative; }
   .mini .bar i, .urow .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
   .urow .bar b { position: absolute; inset: 0 auto 0 0; background: var(--ok); opacity: .6; border-radius: 4px; }
+  .mini.src { display: block; margin: -2px 0 8px 70px; color: var(--muted); font-size: 12px; }
+  .iq p { margin: 0 0 8px; font-size: 14px; line-height: 1.35; }
+  .iq h4 { margin: 12px 0 6px; font: 400 13px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .iq .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .iq.pop { animation: iqin .4s ease-out; }
+  @keyframes iqin { from { opacity: 0; transform: translateY(8px); } }
+  @media (prefers-reduced-motion: reduce) { .iq.pop { animation: none; } }
   .mini .val { text-align: right; font-variant-numeric: tabular-nums; }
 
   /* ── Upgrade ── */
@@ -295,6 +302,17 @@
   .bag::before { content: ''; position: absolute; left: 50%; top: -36px; width: 3px; height: 36px; background: #777; }
   .bag.hit { animation: swing .35s ease-out; }
   @keyframes swing { 0% { transform: rotate(0) } 25% { transform: rotate(9deg) } 60% { transform: rotate(-4deg) } 100% { transform: rotate(0) } }
+  .bag.speedy { width: 56px; height: 96px; }
+  .bag.speedy.hit { animation-duration: .15s; }
+  .road { position: relative; height: 150px; margin: 14px 0; }
+  .road .core, .road .ring { position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 50%; }
+  .road .core { background: var(--accent); }
+  .road .core.hit { animation: swing .25s ease-out; }
+  .road .ring { border: 4px solid #d9a12b; will-change: transform; }
+  .spar { display: flex; justify-content: space-around; align-items: center; height: 150px; margin: 14px 0; }
+  .glove { width: 76px; height: 76px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #d44, #7a1c1c); border: 3px solid #2a0d0d; opacity: .45; transition: transform .12s, opacity .12s; }
+  .glove.load { opacity: 1; transform: scale(1.5); box-shadow: 0 0 22px #d9a12b; }
+  .hit-btn.half { flex: 1; }
   .hit-btn { min-height: 92px; font: 400 40px var(--display); letter-spacing: .1em; }
   .grade { font: 400 54px/1 var(--display); text-align: center; color: var(--accent-2); margin: 8px 0 0; }
   .tip-c { margin: 10px 0 0; padding: 8px 12px; background: rgba(194,81,47,.12); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 14px; }
@@ -446,6 +464,7 @@
       <div id="f-stats"></div>
       <button class="big" id="f-train" data-go="train" style="width:100%;margin-top:8px"></button>
     </div>
+    <div class="card iq" id="f-iq"><h3>Fight IQ</h3><div id="f-iq-body"></div></div>
   </div>
   <footer class="bottom"><button class="big primary" data-go="fight" id="f-next">Pick opponent</button></footer>
 </section>
@@ -542,8 +561,9 @@ import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
 import { profileOf, receivedProfile } from './profile.js';
 import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, aiPlan, emptyDamage, recordDamage, zoneHeat, DAMAGE_ZONES, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
-import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, markerAt, drillResult, applyDrill, trainerTip } from './career.js';
+import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, SPAR_CUES, markerAt, beatAt, sparPos, drillResult, applyDrill, trainerTip } from './career.js';
 import { createSfx } from './sfx.js';
+import { statSources, tendencies, learnedFromLog, learnedLines, fighterSummary, changeLines } from './fightiq.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -791,12 +811,14 @@ function renderFighterScreen() {
   $('fighter-name').value = state.fighter.name;
   $('f-record').textContent = recordText(state.fighter.record);
   renderLook();
-  const s = state.fighter.stats;
+  const s = state.fighter.stats, src = statSources(s, state.fighter.career);
   $('f-stats').replaceChildren(...STAT_KEYS.map((k) => {
     const bar = el('div', { className: 'bar' }, el('i'));
     bar.firstChild.style.width = `${s[k]}%`;
-    return el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[k] }), bar, el('span', { className: 'val', textContent: s[k] }));
+    return el('div', {}, el('div', { className: 'mini' }, el('span', { textContent: STAT_LABEL[k] }), bar, el('span', { className: 'val', textContent: s[k] })),
+      el('div', { className: 'mini src', textContent: src[k].text }));
   }));
+  renderIq();
   $('f-next').textContent = state.fromCareer ? 'Back to career' : 'Pick opponent';
   $('f-next').dataset.go = state.fromCareer ? 'back' : 'fight';
   $('f-train').textContent = state.fighter.points > 0 ? `Train · ${state.fighter.points} points` : 'Train';
@@ -806,6 +828,21 @@ function renderFighterScreen() {
       .then((p) => { preview = p; $('look-preview-msg')?.remove(); })
       .catch((err) => { previewStarting = false; $('look-preview-msg').textContent = `Preview unavailable: ${err.message}`; console.warn(err); });
   }
+}
+
+/** The Fight IQ card: tendencies from the stats, plus counts from this device's fight log. No model is involved. */
+async function renderIq() {
+  const body = $('f-iq-body'), card = $('f-iq');
+  const t = tendencies(state.fighter.stats);
+  const rows = await db.fight_logs.toArray().catch(() => []);
+  if (state.screen !== 'fighter') return;
+  const learned = learnedLines(learnedFromLog(rows));
+  body.replaceChildren(
+    el('h4', { textContent: 'Record and condition' }), ...fighterSummary(state.fighter, state.fighter.career).map((x) => el('p', { textContent: x })),
+    el('h4', { textContent: 'How you fight' }), ...t.lines.map((x) => el('p', { textContent: x })), el('p', { textContent: `${t.style} ${t.reaction}.` }),
+    el('h4', { textContent: 'Learned from your fights' }), ...learned.map((x) => el('p', { textContent: x })),
+    el('p', { className: 'note', textContent: 'Worked out from your stats and the rounds saved on this device. It counts and looks things up; it is not a trained model.' }));
+  card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop');
 }
 
 // ─── Upgrade screen ─────────────────────────────────────────────────────────
@@ -840,6 +877,7 @@ function renderUpgrade() {
       el('div', { className: 'nm' }, STAT_LABEL[k], el('span', { textContent: cur[k] })),
       bar,
       el('div', { className: 'fx', textContent: `${fighterFx(k, cur)} · next +1 costs ${statCost(cur[k])}` }),
+      el('div', { className: 'fx', textContent: statSources(cur, state.fighter.career)[k].text + (state.pending && cur[k] > base[k] ? ` (+${cur[k] - base[k]} unsaved)` : '') }),
       el('div', { className: 'btns' }, minus, plus));
   }));
   $('points').textContent = pointsLeft();
@@ -1022,7 +1060,8 @@ function beginRound(actions) {
   sfx.bell(1);
   const mine = state.match.myCorner;
   $('round-lbl').textContent = `ROUND ${sim.roundIndex} / ${sim.totalRounds}`;
-  $('tactic-chip').textContent = TACTICS[actions[mine]].label;
+  const them = mine === 'red' ? 'blue' : 'red';
+  $('tactic-chip').textContent = `PLAN · ${TACTICS[actions[mine]].label} · vs ${TACTICS[actions[them]].label}`;
   addFeed(el('li', { className: 'round', textContent: `── Round ${sim.roundIndex} · red ${actions.red} · blue ${actions.blue}` }));
   if ($('speed-override').value === 'instant') sim.runRoundToEnd();
 }
@@ -1148,7 +1187,7 @@ function renderResult() {
       el('div', {}, el('b', { textContent: `+${r.gained}` }), el('span', { textContent: 'XP · training points' })),
       el('div', {}, el('b', { textContent: `${rec('w')}-${rec('l')}-${rec('d')}` }), el('span', { textContent: `record (${recChanged === 'w' ? 'win' : recChanged === 'l' ? 'loss' : 'draw'} added)` })),
       el('div', {}, el('b', { textContent: r.pointsAfter }), el('span', { textContent: 'to spend' }))),
-    ...(r.career ? [careerChanges(r.career)] : []),
+    ...(r.career ? [careerChanges(r.career)] : [el('div', { className: 'card iq', style: 'text-align:left' }, el('h3', { textContent: 'What changed' }), ...changeLines(r).map((x) => el('p', { textContent: x })))]),
     ...r.unlocked.map((u) => el('div', { className: 'unlock' }, el('b', { textContent: 'Unlocked' }), `${u.label}. Find it on the Fighter screen.`)),
     el('div', { id: 'r-actions' },
       ...(r.career ? [el('button', { className: 'big primary', textContent: 'Continue career', onclick: () => { sfx.click(); go('career'); } })] : []),
@@ -1329,50 +1368,94 @@ function careerChanges(r) {
 // ─── Gym: a timing drill ─────────────────────────────────────────────────────
 
 let drill = null;   // { raf, t0, taps: [], done }
-function stopDrill() { if (drill) cancelAnimationFrame(drill.raf); drill = null; }
+function stopDrill() { if (drill) { cancelAnimationFrame(drill.raf); drill.stop?.(); } drill = null; }
 
 function renderGym() {
   stopDrill();
   const c = state.fighter.career;
   if (!c) return show('career');
   $('g-energy').textContent = `Energy ${c.energy}`;
-  const d = DRILLS.heavybag, ok = canDrill(c), val = state.fighter.stats[d.stat];
-  const t = c.trained[d.stat];
+  const ok = canDrill(c);
   $('gym-body').replaceChildren(
     el('div', { className: 'tip-c', textContent: `Trainer: "${trainerTip(state.fighter.stats, c)}"` }),
-    el('div', { className: 'card', style: 'margin-top:14px' }, el('h3', { textContent: d.name }),
-      el('div', { className: 'bag' }),
-      el('p', { textContent: `Trains ${STAT_LABEL[d.stat]} (now ${val}). ${d.blurb} ${d.hits} hits. Costs ${ENERGY.drill} energy and a week.` }),
-      el('p', { className: 'muted small', textContent: t ? `${t.sessions} session${t.sessions > 1 ? 's' : ''}, +${t.gain} ${STAT_LABEL[d.stat]} so far.` : 'Never trained here.' })));
-  $('gym-foot').replaceChildren(el('button', { className: 'big primary', disabled: !ok, textContent: ok ? 'Start drill' : 'Too tired. Rest first', onclick: () => { sfx.click(); beginDrill('heavybag'); } }));
+    ...Object.entries(DRILLS).map(([key, d]) => {
+      const t = c.trained[d.stat];
+      return el('div', { className: 'card', style: 'margin-top:14px' }, el('h3', { textContent: d.name }),
+        el('p', { textContent: `Trains ${STAT_LABEL[d.stat]} (now ${state.fighter.stats[d.stat]}). ${d.blurb} ${d.hits} ${d.kind === 'read' ? 'reads' : 'taps'}. Costs ${ENERGY.drill} energy and a week.` }),
+        el('p', { className: 'muted small', textContent: t ? `${t.sessions} session${t.sessions > 1 ? 's' : ''}, +${t.gain} ${STAT_LABEL[d.stat]} so far.` : 'Never trained here.' }),
+        el('button', { className: 'big primary', style: 'width:100%', disabled: !ok, textContent: ok ? 'Start drill' : 'Too tired. Rest first', onclick: () => { sfx.click(); beginDrill(key); } }));
+    }));
+  $('gym-foot').replaceChildren(el('button', { className: 'big', textContent: 'Back', onclick: () => { sfx.click(); show('career'); } }));
 }
 
 function beginDrill(key) {
-  const d = DRILLS[key], c = state.fighter.career;
-  const mk = el('i', { className: 'mk' }), bar = el('div', { className: 'drill-bar' }, mk);
+  const d = DRILLS[key];
   const count = el('div', { className: 'muted', style: 'text-align:center', textContent: `0 / ${d.hits}` });
-  const bag = el('div', { className: 'bag' });
-  const btn = el('button', { className: 'big primary hit-btn', style: 'width:100%', textContent: 'HIT' });
-  $('gym-body').replaceChildren(el('div', { className: 'tip-c', textContent: 'Hit when the marker is in the gold.' }), bag, bar, count);
-  $('gym-foot').replaceChildren(btn);
+  const tip = el('div', { className: 'tip-c', textContent: d.blurb });
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   stopDrill();
   drill = { t0: performance.now(), taps: [], raf: 0 };
-  const me = drill;
-  const frame = () => {
-    if (drill !== me) return;
-    mk.style.left = `${50 + 50 * markerAt((performance.now() - me.t0) / 1000, d.speed)}%`;
-    me.raf = requestAnimationFrame(frame);
-  };
-  frame();
-  btn.onpointerdown = (e) => {
-    e.preventDefault();
-    if (drill !== me || me.taps.length >= d.hits) return;
-    me.taps.push(markerAt((performance.now() - me.t0) / 1000, d.speed));
-    bag.classList.remove('hit'); void bag.offsetWidth; bag.classList.add('hit');
+  const me = drill, now = () => (performance.now() - me.t0) / 1000;
+  const push = (pos) => {
+    me.taps.push(pos);
     sfx.click();
     count.textContent = `${me.taps.length} / ${d.hits}`;
     if (me.taps.length === d.hits) finishDrill(key, me.taps);
   };
+  const press = (btn, fn) => { btn.onpointerdown = (e) => { e.preventDefault(); if (drill === me && me.taps.length < d.hits) fn(); }; };
+  const loop = (fn) => { const frame = () => { if (drill !== me) return; fn(); me.raf = requestAnimationFrame(frame); }; frame(); };
+  const flick = (n, cls) => { n.classList.remove(cls); void n.offsetWidth; n.classList.add(cls); };
+
+  if (d.kind === 'read') {
+    const gl = { L: el('i', { className: 'glove l' }), R: el('i', { className: 'glove r' }) };
+    const spar = el('div', { className: 'spar' }, gl.L, gl.R);
+    const bL = el('button', { className: 'big primary hit-btn half', textContent: '◀ SLIP' });
+    const bR = el('button', { className: 'big primary hit-btn half', textContent: 'SLIP ▶' });
+    $('gym-body').replaceChildren(tip, spar, count);
+    $('gym-foot').replaceChildren(bL, bR);
+    let i = 0, cue = null, shown = 0, timer = 0;
+    const next = () => {
+      if (drill !== me || i >= SPAR_CUES.length) return;
+      timer = setTimeout(() => {
+        if (drill !== me) return;
+        cue = SPAR_CUES[i]; shown = performance.now();
+        gl[cue.side].classList.add('load');
+        timer = setTimeout(() => answer(null), 1100);   // too slow: counts as a miss
+      }, SPAR_CUES[i].wait * 1000);
+    };
+    const answer = (side) => {
+      if (!cue) return;   // nothing loaded yet: ignore
+      clearTimeout(timer);
+      gl.L.classList.remove('load'); gl.R.classList.remove('load');
+      push(side ? sparPos(cue, side, performance.now() - shown) : 1);
+      cue = null; i++;
+      if (me.taps.length < d.hits) next();
+    };
+    me.stop = () => clearTimeout(timer);
+    press(bL, () => answer('L')); press(bR, () => answer('R'));
+    next();
+    return;
+  }
+
+  const bag = el('div', { className: 'bag' });
+  const btn = el('button', { className: 'big primary hit-btn', style: 'width:100%', textContent: d.kind === 'beat' ? 'STEP' : 'HIT' });
+  $('gym-foot').replaceChildren(btn);
+  if (d.kind === 'beat') {
+    const ring = el('i', { className: 'ring' }), core = el('i', { className: 'core' });
+    $('gym-body').replaceChildren(tip, el('div', { className: 'road' }, core, ring), count);
+    loop(() => {
+      const p = ((now() / d.period) % 1);
+      ring.style.transform = `scale(${reduced ? 1 : 2.2 - 1.2 * p})`;
+      ring.style.opacity = String(0.25 + 0.75 * p);
+    });
+    press(btn, () => { flick(core, 'hit'); push(beatAt(now(), d.period)); });
+    return;
+  }
+  const mk = el('i', { className: 'mk' }), bar = el('div', { className: 'drill-bar' }, mk);
+  $('gym-body').replaceChildren(tip, bag, bar, count);
+  if (key === 'speedbag') bag.classList.add('speedy');
+  loop(() => { mk.style.left = `${50 + 50 * markerAt(now(), d.speed)}%`; });
+  press(btn, () => { flick(bag, 'hit'); push(markerAt(now(), d.speed)); });
 }
 
 async function finishDrill(key, taps) {

@@ -388,7 +388,7 @@ test('settings: junk falls back to the defaults', () => {
 });
 
 // ─── Career mode (career.js) ───
-import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, ladder, rankOf, offersFor, rest, applyFight, DRILLS, markerAt, hitScore, drillResult, applyDrill, canDrill, tierIndex } from '../public/boxing/career.js';
+import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, ladder, rankOf, offersFor, rest, applyFight, DRILLS, SPAR_CUES, beatAt, sparPos, markerAt, hitScore, drillResult, applyDrill, canDrill, tierIndex } from '../public/boxing/career.js';
 
 test('career flow: Title to Career to Fight card to Fight to Result back to Career; Gym and decline return', () => {
   let s = 'title';
@@ -479,6 +479,26 @@ test('gym drill: the marker is deterministic, centre taps score best, gains shri
   assert.equal(canDrill({ ...c, energy: 19 }), false);
 });
 
+test('gym drills: speed bag, roadwork and sparring each train their own stat with deterministic scoring', () => {
+  assert.deepEqual(['speedbag', 'roadwork', 'sparring'].map((k) => DRILLS[k].stat), ['speed', 'stamina', 'ringIQ']);
+  assert.ok(DRILLS.speedbag.speed > DRILLS.heavybag.speed);
+  assert.equal(beatAt(0.62, 0.62), 0);
+  assert.ok(Math.abs(beatAt(0.62 * 3 - 0.01, 0.62)) < 0.05 && beatAt(0.62 * 1.5, 0.62) === -1);
+  assert.ok(beatAt(0.62 + 0.1, 0.62) > 0 && beatAt(0.62 - 0.1, 0.62) < 0);
+  const cue = SPAR_CUES[0], other = cue.side === 'L' ? 'R' : 'L';
+  assert.equal(sparPos(cue, cue.side, 300), 1);           // slipped into the glove
+  assert.equal(hitScore(sparPos(cue, other, 300)), 1);    // fast and correct
+  assert.ok(hitScore(sparPos(cue, other, 500)) < 1 && hitScore(sparPos(cue, other, 500)) > 0);
+  assert.equal(hitScore(sparPos(cue, other, 5000)), 0);
+  const stats = { speed: 50, power: 50, stamina: 50, ringIQ: 50 };
+  const good = drillResult('sparring', SPAR_CUES.map((c) => sparPos(c, c.side === 'L' ? 'R' : 'L', 300)), 50);
+  assert.deepEqual([good.grade, good.gain], ['Perfect', 3]);
+  assert.equal(drillResult('sparring', SPAR_CUES.map((c) => sparPos(c, c.side, 300)), 50).gain, 0);
+  const d = applyDrill(newCareer(1), stats, 'roadwork', drillResult('roadwork', Array(DRILLS.roadwork.hits).fill(0), 50));
+  assert.equal(d.stats.stamina, 53);
+  assert.equal(d.career.trained.stamina.sessions, 1);
+});
+
 test('normalizeCareer drops junk and clamps numbers', () => {
   assert.equal(normalizeCareer(null), null);
   const n = normalizeCareer({ week: -4, money: 'x', rep: 1e12, energy: 500, injury: 99, rivals: { Bad: { arch: 'nope' }, Ok: { arch: 'slugger', w: 2, grudge: 1 } }, log: [{ text: 5 }], trained: { power: { gain: 2, sessions: 1 }, evil: {} } });
@@ -490,7 +510,9 @@ test('normalizeCareer drops junk and clamps numbers', () => {
 test('trainer tip points at a stat the gym can train, tiredness first', async () => {
   const { trainerTip } = await import('../public/boxing/career.js');
   const stats = { speed: 10, power: 50, stamina: 50, ringIQ: 50 };
-  assert.match(trainerTip(stats, newCareer(1)), /heavy bag/);
+  assert.match(trainerTip(stats, newCareer(1)), /speed bag/);
+  assert.match(trainerTip({ ...stats, speed: 60, power: 20 }, newCareer(1)), /heavy bag/);
+  assert.match(trainerTip({ ...stats, speed: 60, ringIQ: 20 }, newCareer(1)), /Spar/);
   assert.match(trainerTip(stats, { ...newCareer(1), energy: 5 }), /Rest/);
   assert.match(trainerTip(stats, { ...newCareer(1), injury: 2 }), /hurt/);
 
@@ -606,4 +628,42 @@ test('the AI corner plan follows its fixed rules and says why', () => {
   assert.ok(['pressure', 'outbox', 'counter', 'body_attack'].includes(even.tactic));
   assert.ok(even.reason.length > 10);
   assert.equal(aiPlan(me(), me(), 2, 1).tactic, even.tactic, 'deterministic');
+});
+
+test('fight IQ: stat sources split camp from gym, tendencies and the log summary are plain counts', async () => {
+  const { statSources, tendencies, learnedFromLog, learnedLines, opponentKind } = await import('../public/boxing/fightiq.js');
+  const src = statSources({ speed: 58, power: 50, stamina: 47, ringIQ: 52 }, { trained: { speed: { gain: 3, sessions: 2 } } });
+  assert.equal(src.speed.gym, 3); assert.equal(src.speed.camp, 5);
+  assert.match(src.speed.text, /\+5 training camp · \+3 gym \(2 sessions\)/);
+  assert.match(src.stamina.text, /−3 below start/);
+  assert.equal(statSources({ speed: 50, power: 50, stamina: 50, ringIQ: 50 }).power.text, 'Start 50');
+  const t = tendencies({ speed: 80, power: 30, stamina: 50, ringIQ: 50 });
+  assert.match(t.lines[0], /^Fast hands/); assert.match(t.lines[1], /^Light hitter/); assert.match(t.style, /Box outside/);
+  assert.equal(opponentKind({ speed: 38, power: 82, stamina: 55, ringIQ: 42 }), 'puncher');
+  assert.equal(opponentKind(AVG), 'balanced');
+  assert.match(learnedLines(learnedFromLog([]))[0], /No rounds logged/);
+  const sim = fight(7, AVG, { speed: 38, power: 82, stamina: 55, ringIQ: 42 });
+  const rows = sim.rounds.map((r) => buildFightLogRow(r, { mode: 'single', seed: 7, fighters: { red: AVG, blue: { speed: 38, power: 82, stamina: 55, ringIQ: 42 } }, managerCorner: 'red' }));
+  const learned = learnedFromLog(rows);
+  assert.equal(learned.rounds, rows.length);
+  assert.equal(learned.tactics.reduce((n, x) => n + x.rounds, 0), rows.length);
+  assert.equal(learned.kinds[0].kind, 'puncher');
+  assert.ok(learnedLines(learned).some((l) => /Against heavy hitters/.test(l)));
+});
+
+test('fighterSummary and changeLines: plain counts', async () => {
+  const { fighterSummary, changeLines } = await import('../public/boxing/fightiq.js');
+  const f = { record: { w: 2, l: 1, d: 0 }, stats: { speed: 56, power: 50, stamina: 50, ringIQ: 50 }, points: 3 };
+  const none = fighterSummary(f, null);
+  assert.match(none[0], /2-1-0 over 3 fights/);
+  assert.match(none[1], /\+6 stat points/);
+  assert.match(none[2], /no career/);
+  const c = { energy: 30, injury: 2, trained: { speed: { gain: 4, sessions: 2 } } };
+  const lines = fighterSummary(f, c);
+  assert.match(lines[1], /\+2 stat points.*2 gym sessions/);
+  assert.match(lines[2], /10% lower/);
+  assert.match(lines[3], /2 weeks.*12%/);
+  const ch = changeLines({ outcome: 'w', before: { w: 1, l: 0, d: 0 }, after: { w: 2, l: 0, d: 0 }, gained: 6, pointsAfter: 9, unlocked: [{ label: 'Varsity' }] });
+  assert.match(ch[0], /1-0-0 → 2-0-0 \(win added\)/);
+  assert.match(ch[2], /Unlocked: Varsity/);
 });

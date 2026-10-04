@@ -4,6 +4,11 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): more gym drills (BOX-19)
+
+Three new `DRILLS` in `career.js`, each a phone mini-game scored through the same `hitScore`/`drillResult`/`applyDrill` path as the heavy bag: **Speed bag** (speed; fast marker, 14 taps), **Roadwork** (stamina; tap as a closing ring meets its core on a fixed beat, `beatAt`), **Sparring** (ring IQ; a glove loads, slip the other way fast, fixed `SPAR_CUES`, scored by `sparPos`). All deterministic, no randomness. The gym screen now lists every drill as a card with its own Start button; the trainer tip points at the weakest trainable stat, so it now names all four. Files: `career.js`, `index.html` (gym section and CSS), `test/boxing.test.js` (277 tests pass).
+- **Untested in a browser**: drill feel and timing windows (sweep speed 4.6, beat period 0.62 s, 1.1 s sparring window, 300 ms reaction baseline), ring animation, glove layout at 375 px, reduced-motion (ring stops pulsing in scale but still fades).
+
 ## Done (2026-10-03): the 3D view, stage 1 (procedural boxers)
 
 - `public/boxing/arena-babylon.js`: `createArena3D({ parent, sim, names })` lazily loads `/vendor/babylonjs/babylon.js`
@@ -365,3 +370,12 @@ Eyeballed hub, gym, fight card, corner and result at 375 px (career-e2e screensh
 ## Done (2026-10-04): BOX-9 slice 3, AI corner timeline (Boxing UI Dev)
 `flow.js` `aiPlan(me, opp, roundIndex, seed)` is the AI corner's old rule moved out of `index.html` (same order and outcomes) and now returns `{ tactic, reason }`; tested. The stats overlay and the result screen (single player only) have an "<opponent>'s corner" card: per round, its tactic against yours and why. **Finding**: the AI corner does not use the fight log and does not read the player's tactic; it is a fixed rule on stamina, health and stats. `retrieveTacticalPrecedents` only feeds the player's coach tip. The card says so, plus "Your coach's intel: N precedents retrieved from M logged rounds". `npm test` 274 pass; `demo-e2e.mjs` clean (`qa/game-7d-stats-corner-*.png`).
 - Not built: real in-fight adaptation (AI using precedents or reacting to the player's tactic). Proposed as a separate deterministic step in the BOX-9 comment. **Untested**: real phone, P2P (no AI there, card hidden).
+
+## Done (2026-10-04): BOX-21 Fight IQ panels (Boxing UI Dev)
+`fightiq.js` (pure, tested): `statSources` (start 50, + training camp, + gym sessions from `career.trained`), `tendencies` (plain words from the stats and `deriveAttributes`), `learnedFromLog` / `learnedLines` (counts from the player's own `fight_logs` rounds: favourite plan and its win rate, best plan with 2+ rounds, best plan per opponent kind). `index.html`: the Fighter screen shows what raised each stat under its bar and a "Fight IQ" card (How you fight, Learned from your fights, with a note that it is counting and lookup, not a trained model); the Training screen shows the same source line per stat plus "+N unsaved"; the fight HUD chip now reads "PLAN · <yours> · vs <theirs>". "What changed" after a career fight was already there. `npm test` 275 pass; checked at 375 px in headless Chromium with seeded log rows (`qa/box-21-fighter-iq.png`, `box-21-training.png`), no console errors.
+- **Untested**: real phone, the plan chip in a live fight (code path only), the card with a long career log, P2P (rows use `managerCorner`).
+- Not built: a stat-change line in the quick-fight result, the plan tag as a richer HUD element.
+
+## Done (2026-10-04): BOX-24 fighter card and What changed (Boxing UI Dev)
+Most of BOX-24 was BOX-21 (stat sources, tendencies, learned-from-log, plan chip). New here: `fightiq.js` `fighterSummary` (record, camp points and gym sessions, unspent points, energy and injury with the exact penalty) shown as "Record and condition" at the top of the Fight IQ card, and `changeLines` for a "What changed" card on quick-fight results (record before/after, points, unlocks; career fights keep their own card). `npm test` 276 pass; `demo-e2e.mjs` clean at 375 px (screenshots `qa/game-3-fighter.png`, `game-8-result-*.png` refreshed).
+- **Untested**: real phone, the card with a long career, P2P result card.
