@@ -354,6 +354,16 @@ and runs the safety tests. Each feature lives in its own module; only integratio
 is one session long. Exceptions: R2's tuning and playtest run in order after its parallel round, and R7's shared core
 is built alone. The R2 playtest is the gate: nothing from R3 on starts before it passes.
 
+## Marches as 3D regions (CLA-15, user, 2026-10-04)
+- One 3D region per March, reached by a gate at a road end of the hub (8 gate slots; more Marches than that wait: the
+  extra count is known to `hubGates` but nothing draws it yet). The game builds only the region you stand in and drops
+  it on leaving. Regions come from the ledger snapshot (`public/quest/regions.js`), so a Paperclip source and the local
+  ledger take the same path, and the renderer has no special case for either.
+- **Local ledger mode** (user, 2026-10-04): with no real March (a fresh ledger, or only Town news), `regionsOf` returns a
+  default set of four explorable regions (no Works); as soon as the ledger has a March, one region per March replaces them.
+- A region shows its Works as posts (at most 24, most urgent first); E reads one as plain text. Not built yet: Speaking
+  Stones, the Fallen Bridge, Keepers walking a March, an Ember Well in each region.
+
 ## Missions, Keepers and the Bridge (user, 2026-10-03)
 Prompted by a study of mnehmos/rpg.mcp and r/aigamedev's list of LLM games, and the user's verdict that fights are
 boring: "more fun and drama like Pokémon and DBZ, some story and milestone drive; it should be mostly missions". Not

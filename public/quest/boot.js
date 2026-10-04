@@ -21,6 +21,9 @@
 // the pressure gate hides lore quests and the lore tab and keeps the player in the old town ('quest:explore'); /work,
 // Riddles, the Lodge, the Recall Bell and saves are never gated. A summoned Keeper joins on its first approved Work.
 // A finished saga opens its Sealed Hall by itself (status.js sealedHalls).
+// CLA-15: Marches as regions. regionsOf (regions.js) turns the ledger into one region per March (or a default set when it
+// has none), sent to the scene as 'quest:regions'; the scene's gates and posts come from it. A post's E ('quest:post')
+// reads its Work aloud as plain text.
 import { openLedger } from './ledger-idb.js';
 import { mountLedgerPanel } from './ledger-panel.js';
 import { mountBeaconHud } from './beacon-hud.js';
@@ -42,6 +45,7 @@ import { keepersMessage } from './work-queue.js';
 import { missionsOf, begin, tickMission, hearBriefing, hearDebrief, gated } from './missions.js';
 import { mountMissionHud, hudView, talk as missionTalk } from './mission-hud.js';
 import { joinSummoned } from './keeper-controls.js';
+import { regionsOf, postLines } from './regions.js';
 import { place } from '../3d/clock.js';
 
 const store = await openLedger();
@@ -132,19 +136,20 @@ Object.assign(prompt.style, { position: 'fixed', left: '50%', bottom: '120px', t
 document.body.append(prompt);
 // near: a Riddle id, 'lodge' (the stats board), 'board' (the notice board) or null
 let near = null, talking = false, keeperCount = 0;
-const PLACES = { lodge: 'Stats board (E)', board: 'Notice board (E)', keeper: 'Start work (E)' };
-let nearSlot = null;
+const PLACES = { lodge: 'Stats board (E)', board: 'Notice board (E)', keeper: 'Start work (E)', post: 'Read the post (E)' };
+let nearSlot = null, nearWork = null;
 store.subscribe(l => { keeperCount = l.keepers.length; });
 keeperCount = (await store.snapshot()).keepers.length;
 addEventListener('quest:near', e => {
   nearSlot = e.detail?.keeper ?? null;
+  nearWork = e.detail?.workId ?? null;
   near = e.detail?.riddleId || (PLACES[e.detail?.place] ? e.detail.place : null)
     || (nearSlot != null && nearSlot < keeperCount ? 'keeper' : null); // a scene Keeper with no ledger Keeper stays quiet
   prompt.textContent = PLACES[near] || 'Talk (E)';
   prompt.hidden = !near || talking;
 });
 prompt.addEventListener('click', () => near && dispatchEvent(near === 'keeper' ? new CustomEvent('quest:keeper', { detail: { slot: nearSlot } })
-  : PLACES[near] ? new CustomEvent(`quest:${near}`) : new CustomEvent('quest:talk', { detail: { riddleId: near } })));
+  : near === 'post' ? new CustomEvent('quest:post', { detail: { workId: nearWork } }) : PLACES[near] ? new CustomEvent(`quest:${near}`) : new CustomEvent('quest:talk', { detail: { riddleId: near } })));
 
 const lock = locked => { talking = locked; prompt.hidden = locked || !near; dispatchEvent(new CustomEvent('quest:input', { detail: { locked } })); };
 
@@ -154,6 +159,25 @@ addEventListener('quest:lodge', async () => {
   if (talking || battle.open) return;
   lock(true);
   try { await board.show(realmStats(await store.snapshot())); } finally { lock(false); }
+});
+// ---------- CLA-15: Marches as regions ----------
+let lastRegions = '';
+const tellRegions = l => {
+  const list = regionsOf(l);
+  const key = JSON.stringify(list);
+  if (key === lastRegions) return;
+  lastRegions = key;
+  window.__questRegions = list; // read by the scene if it builds after the first event
+  dispatchEvent(new CustomEvent('quest:regions', { detail: list }));
+};
+store.subscribe(tellRegions);
+tellRegions(await store.snapshot());
+addEventListener('quest:post', async e => {
+  if (talking || battle.open) return;
+  const lines = postLines(await store.snapshot(), e.detail?.workId);
+  if (!lines) return;
+  lock(true);
+  try { await talk.say(lines, { name: 'Post' }); } finally { lock(false); }
 });
 // ---------- R3: Lore quests ----------
 const qs = new URLSearchParams(location.search);
