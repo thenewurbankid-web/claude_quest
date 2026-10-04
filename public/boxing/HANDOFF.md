@@ -193,6 +193,9 @@ The user's decisions (2026-10-03):
   and listens to `impact` / `exchange` / `round_end` events. It must never write to the simulation, or P2P lockstep breaks.
 - **Boxer models:** find the best free resources available. Check the licence of every asset and record it in
   `public/boxing/models/CREDITS.md`.
+- **Target is phones (2026-10-04):** "close to photo realistic, we target phones so small resolution is ok". Aim close to
+  photorealistic, but small textures and atlases are fine (size for a ~400 px wide view). Measure frame time with a
+  phone-sized canvas. The Blender people (`person.glb`) stay phone-friendly in poly count and texture size.
 
 Leads to verify (I haven't checked them; confirm licences and availability first):
 - Mixamo: free rigged humans plus boxing animations (jab, cross, hook, block, idle stance, hit reaction, knockdown).
