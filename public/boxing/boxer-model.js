@@ -9,7 +9,7 @@
  */
 import { v, add, sub, mul, len, norm, clamp, solveTwoBone } from './pose-math.js';
 
-const LOADER_SRC = '/vendor/babylonjs-loaders/babylon.glTF2FileLoader.min.js';
+const LOADER_SRC = 'https://cdn.jsdelivr.net/npm/babylonjs-loaders@7.54.3/babylon.glTF2FileLoader.min.js';
 let loaderPromise = null;
 
 export function loadGltfLoader(B) {
@@ -27,7 +27,7 @@ export function loadGltfLoader(B) {
  * Loads the character and anims.glb once per scene into asset containers. The MPFB person (person.glb, clothing options
  * as separate meshes) is preferred; if it won't load, the Quaternius boxer.glb is used and `person` is false.
  */
-export async function loadBoxerAssets(B, scene, base = '/boxing/models/') {
+export async function loadBoxerAssets(B, scene, base = new URL('models/', import.meta.url).href) {
   await loadGltfLoader(B);
   const anims = await B.SceneLoader.LoadAssetContainerAsync(base, 'anims.glb', scene);
   for (const g of anims.animationGroups) g.stop();

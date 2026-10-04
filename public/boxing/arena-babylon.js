@@ -13,7 +13,7 @@ import { RING_HALF_M, TICK_MS } from './physics-engine.js';
 import { loadBoxerAssets, loadGltfLoader, ModelBoxer, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
 import { v, add, sub, mul, dot, len, norm, lerp, bez, clamp, smooth, UP, rotateAbout, solveTwoBone } from './pose-math.js';
 
-const BABYLON_SRC = '/vendor/babylonjs/babylon.js';
+const BABYLON_SRC = 'https://cdn.jsdelivr.net/npm/babylonjs@7.54.3/babylon.js';
 let babylonPromise = null;
 
 /** Loads the UMD build once and resolves with the BABYLON global. */
@@ -101,7 +101,7 @@ function chainLinkTexture(B, scene) {
 /** Photo textures (Poly Haven, CC0; see textures/CREDITS.md), tiled every `tileM` metres over a `w` × `h` m surface. */
 function photoMaterial(B, scene, name, file, w, h, tileM, tint = '#ffffff') {
   const m = new B.StandardMaterial(name, scene);
-  const tex = (f) => { const t = new B.Texture(`/boxing/textures/${f}`, scene); t.uScale = w / tileM; t.vScale = h / tileM; return t; };
+  const tex = (f) => { const t = new B.Texture(new URL(`textures/${f}`, import.meta.url).href, scene); t.uScale = w / tileM; t.vScale = h / tileM; return t; };
   m.diffuseTexture = tex(`${file}_diff.webp`);
   m.bumpTexture = tex(`${file}_nor.webp`); m.bumpTexture.level = 0.6;
   m.diffuseColor = B.Color3.FromHexString(tint);
@@ -681,7 +681,7 @@ async function buildBakedCourt(B, scene, key, crowdAtlas = null) {
   // Keep the textures' bytes as they are: by default the loader uploads colour images as sRGB buffers, so the GPU would
   // linearise them on sampling, and StandardMaterial (which works in gamma space) would draw them far too dark.
   const plug = B.SceneLoader.OnPluginActivatedObservable.add((loader) => { if (loader.name === 'gltf') loader.useSRGBBuffers = false; });
-  const c = await B.SceneLoader.LoadAssetContainerAsync('/boxing/models/', 'court.glb', scene)
+  const c = await B.SceneLoader.LoadAssetContainerAsync(new URL('models/', import.meta.url).href, 'court.glb', scene)
     .finally(() => B.SceneLoader.OnPluginActivatedObservable.remove(plug));
   c.addAllToScene();
   const info = c.transformNodes.find((n) => n.name === 'court_info')?.metadata?.gltf?.extras ?? {};
@@ -726,7 +726,7 @@ async function buildBakedCourt(B, scene, key, crowdAtlas = null) {
   // The sky: the same HDRI, tone-mapped, on a dome that stays centred on the camera.
   const dome = B.MeshBuilder.CreateSphere('skyDome', { diameter: 180, segments: 24, sideOrientation: B.Mesh.BACKSIDE }, scene);
   const dm = new B.StandardMaterial('skyDomeM', scene);
-  dm.emissiveTexture = new B.Texture('/boxing/models/court_sky.webp', scene);
+  dm.emissiveTexture = new B.Texture(new URL('models/court_sky.webp', import.meta.url).href, scene);
   dm.emissiveTexture.uScale = -1;                         // seen from inside
   dm.disableLighting = true; dm.fogEnabled = false; dm.specularColor = new B.Color3(0, 0, 0);
   dome.material = dm; dome.infiniteDistance = true; dome.isPickable = false;
@@ -917,10 +917,10 @@ function buildCrowd(B, scene, atlas, opts) {
  */
 async function loadCrowdAtlas(B, scene) {
   try {
-    const meta = await (await fetch('/boxing/textures/crowd_atlas.json')).json();
+    const meta = await (await fetch(new URL('textures/crowd_atlas.json', import.meta.url))).json();
     if (!(meta.rows > 0 && meta.cols > 0 && meta.frameHeightM > 0 && meta.aspect > 0 && Array.isArray(meta.up))) throw new Error('bad crowd_atlas.json');
     const tex = await new Promise((ok, no) => {
-      const t = new B.Texture('/boxing/textures/crowd_atlas.webp', scene, false, true, B.Texture.TRILINEAR_SAMPLINGMODE, () => ok(t), (msg, e) => no(e || new Error(msg)));
+      const t = new B.Texture(new URL('textures/crowd_atlas.webp', import.meta.url).href, scene, false, true, B.Texture.TRILINEAR_SAMPLINGMODE, () => ok(t), (msg, e) => no(e || new Error(msg)));
     });
     tex.wrapU = tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
     return { meta, tex };

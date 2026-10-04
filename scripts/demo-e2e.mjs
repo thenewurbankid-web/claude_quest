@@ -1,5 +1,5 @@
 // End-to-end demo check at phone size: name a fighter, pick a look, fight day then night to the result; screenshots in public/boxing/qa/.
-//   node scripts/demo-e2e.mjs   (needs playwright: PLAYWRIGHT_DIR as in measure-boxing.mjs)
+//   node scripts/demo-e2e.mjs  (DEMO_URL=https://…/?debug to test a deployed copy)    (needs playwright: PLAYWRIGHT_DIR as in measure-boxing.mjs)
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_DIR || '/Users/shashank/Repositories/construct/node_modules/playwright');
@@ -13,7 +13,7 @@ try {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(`http://localhost:${PORT}/boxing/?debug`);
+  await page.goto(process.env.DEMO_URL || `http://localhost:${PORT}/boxing/?debug`);
   await page.fill('#fighter-name', 'Demo Kid');
   await page.waitForTimeout(4000);
   const chips = await page.locator('#look button').count();
