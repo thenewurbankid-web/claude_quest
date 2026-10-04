@@ -299,7 +299,7 @@ test('pressure crowds a defender, but not one who is also on pressure', () => {
 });
 
 // ─── Game flow (flow.js): screens, progression, unlocks, scorecards, corner tips, settings ───
-import { SCREENS, navigate, eventsFrom, statCost, REWARDS, outcomeOf, UNLOCKS, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, cornerTip, normalizeSettings, DEFAULT_SETTINGS } from '../public/boxing/flow.js';
+import { SCREENS, navigate, eventsFrom, statCost, REWARDS, outcomeOf, UNLOCKS, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, emptyDamage, recordDamage, zoneOf, zoneHeat, DAMAGE_ZONES, cornerTip, normalizeSettings, DEFAULT_SETTINGS } from '../public/boxing/flow.js';
 
 test('screen flow: Title to Fighter to Opponent to Fight to Result and back', () => {
   let s = 'title';
@@ -533,4 +533,24 @@ test('the sim output is pinned: contact data is read-only and no listener change
   };
   assert.equal(run(false), run(true));
   assert.equal(createHash('sha256').update(run(false)).digest('hex'), PINNED_SEED_11);
+});
+
+test('damage by zone adds up the sim impacts per defender', () => {
+  const sim = new CombatSimulation({ seed: 11, rounds: 3, red: fighter('red', AVG), blue: fighter('blue', AVG) });
+  const dmg = emptyDamage(), seen = [];
+  sim.on('impact', (p) => { seen.push(p); recordDamage(dmg, p); });
+  while (sim.phase !== 'fight_over') { sim.startRound({ red: 'pressure', blue: 'body_attack' }); sim.runRoundToEnd(); }
+  assert.ok(seen.length > 0);
+  for (const c of ['red', 'blue']) {
+    const expected = seen.filter((p) => p.defender === c).reduce((s, p) => s + p.damage, 0);
+    const tally = DAMAGE_ZONES.reduce((s, z) => s + dmg[c][z].damage, 0);
+    assert.ok(Math.abs(expected - tally) < 1e-9);
+  }
+  assert.ok(dmg.red.body.hits + dmg.blue.body.hits > 0, 'body_attack lands on the body');
+  assert.equal(zoneOf({ outcome: 'landed', target: 'body' }), 'body');
+  assert.equal(zoneOf({ outcome: 'landed', target: 'head' }), 'head');
+  assert.equal(zoneOf({ outcome: 'blocked', target: 'head' }), 'guard');
+  assert.equal(zoneOf({ outcome: 'slipped', target: 'head' }), null);
+  assert.equal(zoneHeat(0), 0);
+  assert.ok(zoneHeat(0.1) >= 0.25 && zoneHeat(500) === 1);
 });
