@@ -60,19 +60,57 @@
   .card h3 { margin: 0 0 8px; font: 400 15px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 
   /* ── Title ── */
-  #s-title { justify-content: flex-end; padding: 0 22px calc(var(--bottom) + 26px); overflow: hidden; }
-  #s-title .bg { position: absolute; inset: 0; background: radial-gradient(120% 80% at 50% 20%, #26324a, #0b0d12 70%); }
-  #s-title .bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,13,18,.55) 0%, rgba(11,13,18,.05) 28%, rgba(11,13,18,.7) 62%, #0b0d12 92%); }
-  .logo { position: relative; margin: 0 0 22px; font: 400 clamp(64px, 21vw, 110px)/.86 var(--display); letter-spacing: .02em; text-transform: uppercase; transform: rotate(-3deg);
+  #s-title { justify-content: flex-end; padding: 0 22px calc(var(--bottom) + 26px); overflow: hidden; background: #05070b; --sh: 0; }
+  #s-title .cam { position: absolute; inset: -6%; animation: drift 38s ease-in-out infinite alternate; will-change: transform; }
+  #s-title .cam svg { width: 100%; height: 100%; display: block; }
+  @keyframes drift { from { transform: scale(1.04) translate3d(-1.8%, 0, 0); } to { transform: scale(1.16) translate3d(1.8%, -1.2%, 0); } }
+  #s-title .rays { position: absolute; inset: -20% -10% 20%; mix-blend-mode: screen; opacity: .55; pointer-events: none;
+    background: conic-gradient(from 168deg at 70% -6%, transparent 0 4deg, rgba(255,214,150,.26) 6deg, transparent 12deg, rgba(255,214,150,.16) 17deg, transparent 22deg, rgba(255,214,150,.22) 27deg, transparent 33deg);
+    animation: rays 9s ease-in-out infinite alternate; filter: blur(5px); }
+  @keyframes rays { from { opacity: .35; transform: rotate(-1.5deg); } to { opacity: .7; transform: rotate(1.5deg); } }
+  #s-title .haze { position: absolute; left: -30%; right: -30%; height: 46%; pointer-events: none; filter: blur(26px); opacity: .5;
+    background: radial-gradient(50% 50% at 50% 50%, rgba(170,190,225,.35), transparent 70%); animation: haze 24s linear infinite; }
+  #s-title .haze.h1 { top: 34%; } #s-title .haze.h2 { top: 52%; animation-duration: 33s; animation-direction: reverse; opacity: .35; }
+  @keyframes haze { from { transform: translateX(-14%); } to { transform: translateX(14%); } }
+  #s-title canvas.fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #s-title .grain { position: absolute; inset: -50%; pointer-events: none; opacity: .16; mix-blend-mode: overlay; animation: grain .9s steps(6) infinite;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+  @keyframes grain { 0% { transform: translate(0,0); } 20% { transform: translate(-4%,3%); } 40% { transform: translate(3%,-5%); } 60% { transform: translate(-5%,-2%); } 80% { transform: translate(4%,4%); } 100% { transform: translate(0,0); } }
+  #s-title .vig { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 90% at 50% 40%, transparent 40%, rgba(0,0,0,.72) 100%), linear-gradient(180deg, rgba(5,7,11,.45) 0%, transparent 26%, rgba(5,7,11,.72) 62%, #05070b 94%); }
+  #s-title .fade-in { position: absolute; inset: 0; background: #000; pointer-events: none; animation: fadein 1.4s .1s ease-out both; }
+  @keyframes fadein { to { opacity: 0; visibility: hidden; } }
+  #s-title .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  #s-title .stage { position: relative; animation: shake .5s .95s cubic-bezier(.36,.07,.19,.97) both; }
+  @keyframes shake { 10%,90% { transform: translate(-1px,1px); } 20%,80% { transform: translate(3px,-2px); } 30%,50%,70% { transform: translate(-5px,3px); } 40%,60% { transform: translate(5px,-3px); } 100% { transform: none; } }
+  .logo { position: relative; margin: 0 0 14px; font: 400 clamp(64px, 21vw, 110px)/.86 var(--display); letter-spacing: .02em; text-transform: uppercase; transform: rotate(-3deg);
     text-shadow: 3px 4px 0 #000, 0 0 30px rgba(0,0,0,.6); }
-  .logo span { display: block; }
-  .logo em { font-style: normal; background: linear-gradient(180deg, #ffd45e, #ff6a2b 70%, #e5484d); -webkit-background-clip: text; background-clip: text; color: transparent;
-    text-shadow: none; filter: drop-shadow(3px 4px 0 #000); }
-  .tag { position: relative; margin: -8px 0 24px; color: #c7d0de; letter-spacing: .22em; text-transform: uppercase; font-size: 12px; text-shadow: 0 1px 4px #000; }
+  .logo span, .logo em { display: block; animation: slam .55s calc(.55s + var(--i) * .17s) cubic-bezier(.2,1.4,.4,1) both; transform-origin: 20% 60%; }
+  @keyframes slam { 0% { opacity: 0; transform: scale(2.8) translateY(-30px); filter: blur(10px); } 55% { opacity: 1; filter: blur(0); } 75% { transform: scale(.96); } 100% { opacity: 1; transform: none; } }
+  .logo em { font-style: normal; color: transparent; -webkit-background-clip: text; background-clip: text; filter: drop-shadow(3px 4px 0 #000);
+    background-image: linear-gradient(100deg, transparent 38%, rgba(255,255,255,.95) 50%, transparent 62%), linear-gradient(180deg, #ffd45e, #ff6a2b 70%, #e5484d);
+    background-size: 250% 100%, 100% 100%; background-repeat: no-repeat; background-position: 160% 0, 0 0; text-shadow: none; }
+  .logo em { animation: slam .55s calc(.55s + var(--i) * .17s) cubic-bezier(.2,1.4,.4,1) both, glint 5.5s 2.2s ease-in-out infinite; }
+  @keyframes glint { 0%, 60% { background-position: 160% 0, 0 0; } 85%, 100% { background-position: -60% 0, 0 0; } }
+  .tag { position: relative; margin: 0 0 22px; color: #c7d0de; letter-spacing: .22em; text-transform: uppercase; font-size: 12px; text-shadow: 0 1px 4px #000; animation: rise .7s 1.5s ease-out both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   .menu { position: relative; display: grid; gap: 12px; }
-  .menu .big { flex: none; }
+  .menu .big { flex: none; position: relative; overflow: hidden; animation: slidein .55s calc(1.6s + var(--i) * .12s) cubic-bezier(.2,.9,.3,1) both; transition: transform .15s, box-shadow .2s, filter .2s; }
+  @keyframes slidein { from { opacity: 0; transform: translateX(-60px) skewX(-8deg); } to { opacity: 1; transform: none; } }
+  .menu .big::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.35) 50%, transparent 65%); transform: translateX(-120%); }
+  @media (hover: hover) { .menu .big:hover:not(:disabled) { transform: translateX(6px); filter: brightness(1.12); box-shadow: 0 8px 28px rgba(255,154,60,.35); } .menu .big:hover:not(:disabled)::after { transform: translateX(120%); transition: transform .6s; } }
+  .menu .big:active:not(:disabled) { transform: scale(.96); filter: brightness(.9); transition-duration: .05s; }
   #s-title .menu .ghost { background: rgba(11,13,18,.55); backdrop-filter: blur(4px); }
-  .ver { position: relative; margin-top: 16px; text-align: center; font-size: 11px; color: var(--muted); }
+  .ver { position: relative; margin-top: 16px; text-align: center; font-size: 11px; color: var(--muted); animation: rise .7s 2.2s ease-out both; }
+  #s-title.leaving .stage { transition: transform .38s cubic-bezier(.6,0,.9,.4), opacity .38s; transform: scale(1.12); opacity: 0; }
+  #s-title.leaving .cam { transition: transform .45s ease-in; transform: scale(1.5); animation: none; }
+  #s-title.leaving .flash { animation: flash .42s ease-in forwards; }
+  @keyframes flash { 0% { opacity: 0; } 70% { opacity: .85; } 100% { opacity: 1; } }
+  #s-title.replay .fade-in { animation-duration: .5s; animation-delay: 0s; }
+  @media (prefers-reduced-motion: reduce) {
+    #s-title .cam, #s-title .rays, #s-title .haze, #s-title .grain, #s-title .stage, .logo span, .logo em, .tag, .menu .big, .ver, #s-title .fade-in { animation: none !important; }
+    #s-title.leaving .cam { transition: none; } #s-title.leaving .stage { transition: opacity .15s; transform: none; } #s-title.leaving .flash { animation: none; }
+  }
 
   /* ── Fighter ── */
   .preview { position: relative; flex: 0 0 min(36dvh, 300px); min-height: 190px; margin: 0 14px; border-radius: 14px; overflow: hidden; background: radial-gradient(90% 90% at 50% 30%, #2a3345, #12161e); }
@@ -264,15 +302,67 @@
 
 <!-- ─── Title ─── -->
 <section class="screen" id="s-title">
-  <div class="bg"></div>
-  <h1 class="logo" id="logo" aria-label="Bring the Ruckus"><span>Bring</span><span>The</span><em>Ruckus</em></h1>
-  <p class="tag">Street boxing · Uptown NYC</p>
-  <div class="menu">
-    <button class="big primary" id="t-career" data-go="career">Career<small id="t-career-sub"></small></button>
-    <button class="big" id="t-play" data-go="play">Quick fight</button>
-    <button class="big ghost" data-go="settings">Settings</button>
+  <div class="cam" aria-hidden="true">
+    <svg viewBox="0 0 400 700" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="tsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a0f1c"/><stop offset=".55" stop-color="#1d2740"/><stop offset="1" stop-color="#3a3340"/></linearGradient>
+        <radialGradient id="tlamp" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe2ab" stop-opacity=".95"/><stop offset=".25" stop-color="#ffb55a" stop-opacity=".35"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient>
+        <linearGradient id="tfloor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3a40"/><stop offset="1" stop-color="#0c0c10"/></linearGradient>
+        <pattern id="tfence" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0H9M0 0V9" stroke="#8c97aa" stroke-opacity=".28" stroke-width=".7" fill="none"/></pattern>
+        <pattern id="twin" width="22" height="26" patternUnits="userSpaceOnUse"><rect x="5" y="6" width="9" height="13" fill="#0a0d14"/><rect x="5" y="6" width="9" height="13" fill="#ffc46b" opacity=".0"/></pattern>
+      </defs>
+      <rect width="400" height="700" fill="url(#tsky)"/>
+      <g fill="#10141f"><rect x="-10" y="90" width="150" height="330"/><rect x="262" y="60" width="150" height="360"/><rect x="120" y="150" width="60" height="270" fill="#0c101a"/><rect x="215" y="170" width="60" height="250" fill="#0c101a"/></g>
+      <g fill="url(#twin)"><rect x="-10" y="90" width="150" height="330"/><rect x="262" y="60" width="150" height="360"/></g>
+      <g fill="#ffc46b">
+        <rect x="27" y="124" width="9" height="13" opacity=".9"/><rect x="71" y="176" width="9" height="13" opacity=".7"/><rect x="49" y="228" width="9" height="13" opacity=".85"/><rect x="93" y="280" width="9" height="13" opacity=".6"/>
+        <rect x="27" y="332" width="9" height="13" opacity=".8"/><rect x="115" y="124" width="9" height="13" opacity=".5"/><rect x="291" y="96" width="9" height="13" opacity=".8"/><rect x="335" y="148" width="9" height="13" opacity=".9"/>
+        <rect x="313" y="252" width="9" height="13" opacity=".7"/><rect x="357" y="304" width="9" height="13" opacity=".85"/><rect x="291" y="356" width="9" height="13" opacity=".6"/><rect x="379" y="200" width="9" height="13" opacity=".8"/>
+      </g>
+      <g fill="#070a10"><rect x="0" y="360" width="400" height="14"/></g>
+      <rect y="250" width="400" height="190" fill="url(#tfence)"/>
+      <g stroke="#06080d" stroke-width="3" fill="none"><path d="M0 250H400M0 250V440M400 250V440M100 250V440M300 250V440"/></g>
+      <g transform="translate(300 190)" fill="none" stroke="#0a0c12"><path d="M0 60V-6" stroke-width="5"/><path d="M0 -6H-18" stroke-width="4"/><rect x="-52" y="-34" width="38" height="26" fill="#1a1f2b" stroke-width="2"/><ellipse cx="-33" cy="2" rx="12" ry="3" stroke="#c8532b" stroke-width="2"/></g>
+      <g transform="translate(70 120)"><path d="M0 0v34" stroke="#0a0c12" stroke-width="3"/><rect x="-10" y="30" width="20" height="5" fill="#0a0c12"/></g>
+      <circle cx="280" cy="170" r="190" fill="url(#tlamp)"/><circle cx="70" cy="156" r="90" fill="url(#tlamp)" opacity=".55"/>
+      <rect y="430" width="400" height="270" fill="url(#tfloor)"/>
+      <g stroke="#d9d4c4" stroke-opacity=".35" stroke-width="1.6" fill="none"><path d="M-40 560Q200 500 440 560"/><path d="M60 700L170 436M340 700L230 436"/><ellipse cx="200" cy="560" rx="150" ry="34"/></g>
+      <ellipse cx="200" cy="540" rx="190" ry="40" fill="#ffd9a0" opacity=".1"/>
+      <!-- fighters -->
+      <g fill="#04060a" transform="translate(22 -175) scale(.92)">
+        <g transform="translate(116 380)">
+          <ellipse cx="14" cy="164" rx="52" ry="7" opacity=".6"/>
+          <circle cx="22" cy="14" r="15"/><path d="M10 26h24l8 12 22 6 8 22-26-4v24l10 48-10 6-12-38-8 38H10l6-58-18-12 6-30z"/>
+          <path d="M38 52l24-16 10 4-6 14-20 10z"/><circle cx="72" cy="38" r="9"/><path d="M18 54l-14 20 8 12 22-12z"/><circle cx="8" cy="86" r="9"/>
+          <path d="M6 124l-12 40h18l10-30zM30 126l18 38h18l-14-42z"/>
+        </g>
+        <g transform="translate(246 372) scale(-1 1)">
+          <ellipse cx="-14" cy="172" rx="52" ry="7" opacity=".6"/>
+          <circle cx="-22" cy="16" r="15"/><path d="M-10 28h-24l-8 12-22 6-8 22 26-4v24l-10 48 10 6 12-38 8 38h14l-6-58 18-12-6-30z"/>
+          <path d="M-38 54l-24-16-10 4 6 14 20 10z"/><circle cx="-72" cy="40" r="9"/><path d="M-18 56l14 20-8 12-22-12z"/><circle cx="-8" cy="88" r="9"/>
+          <path d="M-6 126l12 40h-18l-10-30zM-30 128l-18 38h-18l14-42z"/>
+        </g>
+      </g>
+      <g stroke="#ffcf8a" stroke-opacity=".5" stroke-width="1.2" fill="none" transform="translate(22 -175) scale(.92)"><path d="M140 394q-9 4-6 20M262 388q9 4 6 20"/></g>
+    </svg>
   </div>
-  <div class="ver" id="t-record"></div>
+  <div class="rays" aria-hidden="true"></div>
+  <div class="haze h1" aria-hidden="true"></div><div class="haze h2" aria-hidden="true"></div>
+  <canvas class="fx" id="t-fx" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vig" aria-hidden="true"></div>
+  <div class="stage">
+    <h1 class="logo" id="logo" aria-label="Bring the Ruckus"><span style="--i:0">Bring</span><span style="--i:1">The</span><em style="--i:2">Ruckus</em></h1>
+    <p class="tag">Street boxing · Uptown NYC</p>
+    <div class="menu">
+      <button class="big primary" id="t-career" data-go="career" style="--i:0"><span id="t-career-label">Play</span><small id="t-career-sub"></small></button>
+      <button class="big" id="t-play" data-go="play" style="--i:1">Quick fight</button>
+      <button class="big ghost" data-go="settings" style="--i:2">Settings</button>
+    </div>
+    <div class="ver" id="t-record"></div>
+  </div>
+  <div class="fade-in" aria-hidden="true"></div>
+  <div class="flash" aria-hidden="true"></div>
 </section>
 
 <!-- ─── Career ─── -->
@@ -493,8 +583,14 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-go]');
   if (!b || b.disabled) return;
   sfx.click();
-  go(b.dataset.go);
+  if (leaving) return;
+  if (state.screen !== 'title') return go(b.dataset.go);
+  const t = $('s-title');
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return go(b.dataset.go);
+  leaving = true; t.classList.add('leaving');
+  setTimeout(() => { leaving = false; go(b.dataset.go); }, 380);
 });
+let leaving = false;
 
 const recordText = (r) => `${r.w}-${r.l}-${r.d}`;
 
@@ -502,8 +598,57 @@ const recordText = (r) => `${r.w}-${r.l}-${r.d}`;
 
 function renderTitle() {
   const c = state.fighter.career;
+  $('t-career-label').textContent = c ? 'Continue' : 'Play';
+  restartTitleIntro();
   $('t-career-sub').textContent = c ? `${state.fighter.name} · ${TIERS[tierIndex(c.rep)].name} · week ${c.week}` : 'Rise from an unknown street fighter';
   $('t-record').textContent = state.hasSaved ? `${state.fighter.name} · ${recordText(state.fighter.record)}` : 'Create a fighter and fight your way up.';
+}
+
+let titleFirst = true;
+function restartTitleIntro() {
+  const t = $('s-title');
+  t.classList.remove('leaving', 'replay');
+  if (!titleFirst) t.classList.add('replay');
+  titleFirst = false;
+  for (const n of t.querySelectorAll('.stage *, .stage, .fade-in')) { n.style.animation = 'none'; }
+  void t.offsetWidth;
+  for (const n of t.querySelectorAll('.stage *, .stage, .fade-in')) { n.style.animation = ''; }
+  startTitleFx();
+}
+
+// Embers and dust over the title; stops itself when the title is hidden.
+let fxRaf = 0;
+function startTitleFx() {
+  const cv = $('t-fx');
+  if (fxRaf || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const ctx = cv.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let w = 0, h = 0;
+  const size = () => { w = cv.clientWidth; h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  size();
+  const mk = (spark) => ({ spark, x: Math.random() * w, y: spark ? h * (0.55 + Math.random() * 0.45) : Math.random() * h,
+    r: spark ? 0.8 + Math.random() * 1.6 : 0.6 + Math.random() * 1.8, vx: (Math.random() - 0.5) * (spark ? 18 : 8), vy: spark ? -(18 + Math.random() * 40) : -(2 + Math.random() * 8),
+    ph: Math.random() * 6.28, life: Math.random() });
+  const ps = Array.from({ length: 70 }, (_, i) => mk(i % 4 === 0));
+  let last = performance.now();
+  const frame = (now) => {
+    if (state.screen !== 'title') { fxRaf = 0; return; }
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (cv.clientWidth !== w || cv.clientHeight !== h) size();
+    ctx.clearRect(0, 0, w, h);
+    for (const p of ps) {
+      p.life += dt * (p.spark ? 0.35 : 0.1); p.ph += dt;
+      p.x += (p.vx + Math.sin(p.ph * 1.3) * 6) * dt; p.y += p.vy * dt;
+      if (p.life > 1 || p.y < -10 || p.x < -10 || p.x > w + 10) Object.assign(p, mk(p.spark), { y: p.spark ? h + 4 : h * Math.random(), life: 0 });
+      const a = Math.sin(Math.min(1, p.life) * Math.PI);
+      ctx.globalAlpha = a * (p.spark ? 0.95 : 0.35);
+      ctx.fillStyle = p.spark ? '#ffb347' : '#d8e0f0';
+      ctx.shadowColor = p.spark ? '#ff7a1a' : 'transparent'; ctx.shadowBlur = p.spark ? 8 : 0;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
+    }
+    fxRaf = requestAnimationFrame(frame);
+  };
+  fxRaf = requestAnimationFrame(frame);
 }
 
 // ─── Settings ───────────────────────────────────────────────────────────────

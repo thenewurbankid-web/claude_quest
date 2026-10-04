@@ -264,6 +264,11 @@ User (2026-10-04) asked for more natural street-style fighting and more moves (h
 - **Untested by eye**: that the pivot, rock and sway read as natural and not as a wobble; sway amounts are my guesses.
 - **Next for BOX-18**: animate the street moves once the Sim Dev's issue lands (needs the new action types in `snapshot()`); start/stop/turn transitions; CMU/Quaternius mocap (the CMU files need a download and retarget onto the straightened rig: not done); before/after clip; phone frame time.
 
+## Done (2026-10-04): BOX-13 landing screen (Boxing UI Dev)
+
+`public/boxing/index.html` only (title section, CSS, `restartTitleIntro`, `startTitleFx`, leave transition in the `[data-go]` click handler). Night-court SVG scene (tenements, fence, hoop, lamp glow, two fighter silhouettes) on a slow camera drift, light rays, drifting haze, film grain, vignette, a canvas of embers and dust. Logo lines slam in with a screen shake, then a glint sweeps "RUCKUS" every few seconds. Menu slides in staggered; hover/press micro-animations; the main button reads Play, or Continue once a career exists. Leaving the title zooms the camera, fades the stage and flashes white (380 ms) into the next screen. `prefers-reduced-motion` turns all of it off. Screenshots `qa/title-*.png` (Chromium at 375 px). `npm test` 269 pass, career-e2e passes, no console errors.
+Untested: real phones (grain/blur cost on low-end GPUs), Safari, the music toggle. Fighter silhouettes are static shapes, not a looping fight teaser yet.
+
 ## Next jobs
 
 0. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
