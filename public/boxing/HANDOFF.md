@@ -306,7 +306,7 @@ User: the fighters "look weak and crooked" (BOX-14). Before shots showed the Qua
 
 - Rendered 8 clips per corner in Blender/Cycles (`scripts/render-fighters.py`, `render-all-fighters.sh`): idle_guard, atk_jab/cross/hook, block, hit_head, stagger, ko. Packed by `scripts/pack-sprites.mjs` into `public/boxing/sprites2d/` (16 WebP atlases plus `manifest.json`, 2.99 MB total, 0.75 scale). Day plate: `plates/medium_day.webp` (`scripts/render-plate.mjs`). Shared camera: `camera2d.js`.
 - `arena-2d.js`: canvas compositor driven by `sim.snapshot()` and `impact` events only (render-only). Clip choice and timing from `clips2d.js`; unrendered clips fall back via `resolveClip` (uppercut to hook, body to jab, knockdown to ko). Blue is the mirrored red render.
-- Options, Fight options, View: "2D photoreal (beta)". 3D stays the default. 289 tests pass (2 new: `resolveClip`, `clipFrame`).
+- Options, Fight options, View: "2D photoreal (beta)". 3D stays the default. 287 tests pass (2 new: `resolveClip`, `clipFrame`).
 - Smoke: `node scripts/shot-arena2d.mjs` (dev page `dev-arena2d.html`) ran a round in headless Chromium at 375x667 with no console errors; shots in `qa/box-17-arena2d-*.png`.
 - Not done / untested: night plate (falls back to day), ground contact shadow barely visible, no post-pass or looks recolour, no close angles, no crowd animation (crowd is baked into the plate), no real-phone frame time, game flow (not just the dev page) in a browser, P2P with this view.
 - Next: slice 3 (post-pass and looks).
