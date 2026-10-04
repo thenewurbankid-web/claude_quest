@@ -78,10 +78,12 @@
   #s-title { justify-content: flex-end; padding: 0 22px calc(var(--bottom) + 26px); overflow: hidden; background: #05070b; --sh: 0; }
   #s-title .cam { filter: saturate(.18) contrast(1.08); position: absolute; inset: -6%; animation: drift 38s ease-in-out infinite alternate; will-change: transform; }
   #s-title .wall, #s-title .wall img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  #s-title .wall img { object-fit: cover; object-position: 60% 40%; filter: brightness(.72); }
+  #s-title .wall img { object-fit: cover; object-position: 60% 40%; filter: brightness(1.7) contrast(1.06); }
   #s-title .duel { position: absolute; top: 0; bottom: 0; left: 50%; width: min(100%, 520px); transform: translateX(-50%); pointer-events: none; }
   #s-title .fgt { position: absolute; top: 12%; height: 30%; aspect-ratio: 200 / 536; background-size: 800% 200%; background-repeat: no-repeat; background-position: 0 0;
-    filter: brightness(.58) contrast(1.06); -webkit-mask-image: linear-gradient(#000 70%, transparent 97%); mask-image: linear-gradient(#000 70%, transparent 97%); }
+    filter: brightness(.78) contrast(1.06); -webkit-mask-image: linear-gradient(#000 70%, transparent 97%); mask-image: linear-gradient(#000 70%, transparent 97%); }
+  #s-title .duel::before, #s-title .duel::after { content: ""; position: absolute; top: 37%; height: 9%; width: 30%; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,.62), rgba(0,0,0,.28) 55%, transparent 100%); filter: blur(6px); }
+  #s-title .duel::before { left: 14%; } #s-title .duel::after { left: 52%; }
   #s-title .fgt.red { left: 22%; background-image: url(sprites2d/red_idle_guard.webp); }
   #s-title .fgt.blue { left: 59%; transform: scaleX(-1); background-image: url(sprites2d/blue_idle_guard.webp); }
   @keyframes drift { from { transform: scale(1.04) translate3d(-1.8%, 0, 0); } to { transform: scale(1.16) translate3d(1.8%, -1.2%, 0); } }
@@ -98,7 +100,7 @@
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
   @keyframes grain { 0% { transform: translate(0,0); } 20% { transform: translate(-4%,3%); } 40% { transform: translate(3%,-5%); } 60% { transform: translate(-5%,-2%); } 80% { transform: translate(4%,4%); } 100% { transform: translate(0,0); } }
   #s-title .vig { position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(120% 90% at 50% 40%, transparent 40%, rgba(0,0,0,.72) 100%), linear-gradient(180deg, rgba(5,7,11,.45) 0%, transparent 26%, rgba(5,7,11,.72) 62%, #05070b 94%); }
+    background: radial-gradient(120% 90% at 50% 38%, transparent 50%, rgba(0,0,0,.5) 100%), linear-gradient(180deg, rgba(5,7,11,.18) 0%, transparent 18%, transparent 36%, rgba(5,7,11,.55) 52%, rgba(5,7,11,.8) 68%, rgba(5,7,11,.92) 100%); }
   #s-title .fade-in { position: absolute; inset: 0; background: #000; pointer-events: none; animation: fadein 1.4s .1s ease-out both; }
   @keyframes fadein { to { opacity: 0; visibility: hidden; } }
   #s-title .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }

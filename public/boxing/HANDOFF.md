@@ -4,6 +4,12 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): tag wall readable behind the title (BOX-35)
+
+- The wall was ~25% bright in the file, then `brightness(.72)` and a heavy vignette took it to ~15%. Now `#s-title .wall img` is `brightness(1.7) contrast(1.06)` (upper two thirds read ~31-43% incl. logo; was 13-23%), the vignette is lighter (edges .5, top .18) and the dark gradient only starts at 36% and is solid behind the menu. Fighters are brighter (.78) and have blurred contact-shadow ellipses at their feet (`.duel::before/::after`). All in `index.html`; the wall files are unchanged (the source photo is not in the repo, so no regrade).
+- Shots: `qa/box-35-{before,after}-{375,1440}.png`. 335 tests pass, no console errors.
+- **Untested**: real phones, Safari/Firefox, short or very wide windows (landscape crop checked at 1440x900 only).
+
 ## Done (2026-10-04): step-drag only follows body travel (BOX-33)
 
 - **`footwork.js`**: the step-drag `follow` rule now needs body travel (`vd && ...`), so an overshoot no longer marches the feet while the body is still; `followFrac` 0.3 -> 0.4 to bring blue under the target.
