@@ -542,7 +542,7 @@
   <div class="row"><b>Debug</b><span class="muted small" id="db-status" style="flex:1">opening database…</span><button id="dbg-close">Close</button></div>
   <h2>Fight options</h2>
   <div class="row">
-    <label class="field" style="flex:1"><span>View</span><select id="view"><option value="3d" selected>3D broadcast</option><option value="2d">2D top-down</option><option value="headless">Headless</option></select></label>
+    <label class="field" style="flex:1"><span>View</span><select id="view"><option value="3d" selected>3D broadcast</option><option value="2d">2D top-down</option><option value="photo2d">2D photoreal (beta)</option><option value="headless">Headless</option></select></label>
     <label class="field" style="flex:1"><span>Speed override</span><select id="speed-override"><option value="">Use setting</option><option value="0.5">½×</option><option value="16">16×</option><option value="instant">Instant</option></select></label>
   </div>
   <h2>Exchanges</h2><ul id="feed"></ul>
@@ -557,6 +557,7 @@
 import { FighterModel, CombatSimulation, createPhysicsGame, TACTICS, STAT_KEYS, TICK_MS, deriveAttributes, normalizeStats } from './physics-engine.js';
 import { GameDB, toLLMContext } from './game-db.js';
 import { createArena3D } from './arena-babylon.js';
+import { createArena2D } from './arena-2d.js';
 import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook, physiqueOf } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
 import { profileOf, receivedProfile } from './profile.js';
@@ -986,6 +987,10 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner, career =
       physiques: { red: physiqueOf(red.stats), blue: physiqueOf(blue.stats) }, sanctioned: isSanctioned(career), timeOfDay: state.settings.time })
       .then((arena) => { if (state.sim === sim) state.arena = arena; else arena.destroy(); })
       .catch((err) => { toast(`3D view failed to load: ${err.message}`); console.warn(err); });
+  } else if (view === 'photo2d') {
+    createArena2D({ parent: $('ring'), sim, timeOfDay: state.settings.time })
+      .then((arena) => { if (state.sim === sim) state.arena = arena; else arena.destroy(); })
+      .catch((err) => { toast(`2D photoreal view failed to load: ${err.message}`); console.warn(err); });
   }
 
   $('red-name').textContent = red.name;

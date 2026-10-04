@@ -302,6 +302,15 @@ User: the fighters "look weak and crooked" (BOX-14). Before shots showed the Qua
 - **Street moves are blocked on BOX-22** (Sim Dev; the sim has no haymaker, overhand, feint, clinch, shove or taunt yet). Animate them after it lands.
 - Still open in BOX-18: CMU mocap footwork, before/after clip, phone frame time.
 
+## Done (2026-10-04): BOX-17 slice 2, medium-angle fighters and the 2D arena (beta)
+
+- Rendered 8 clips per corner in Blender/Cycles (`scripts/render-fighters.py`, `render-all-fighters.sh`): idle_guard, atk_jab/cross/hook, block, hit_head, stagger, ko. Packed by `scripts/pack-sprites.mjs` into `public/boxing/sprites2d/` (16 WebP atlases plus `manifest.json`, 2.99 MB total, 0.75 scale). Day plate: `plates/medium_day.webp` (`scripts/render-plate.mjs`). Shared camera: `camera2d.js`.
+- `arena-2d.js`: canvas compositor driven by `sim.snapshot()` and `impact` events only (render-only). Clip choice and timing from `clips2d.js`; unrendered clips fall back via `resolveClip` (uppercut to hook, body to jab, knockdown to ko). Blue is the mirrored red render.
+- Options, Fight options, View: "2D photoreal (beta)". 3D stays the default. 289 tests pass (2 new: `resolveClip`, `clipFrame`).
+- Smoke: `node scripts/shot-arena2d.mjs` (dev page `dev-arena2d.html`) ran a round in headless Chromium at 375x667 with no console errors; shots in `qa/box-17-arena2d-*.png`.
+- Not done / untested: night plate (falls back to day), ground contact shadow barely visible, no post-pass or looks recolour, no close angles, no crowd animation (crowd is baked into the plate), no real-phone frame time, game flow (not just the dev page) in a browser, P2P with this view.
+- Next: slice 3 (post-pass and looks).
+
 ## BOX-17 plan: photoreal 2D projection (written 2026-10-04, before any rendering)
 
 Nothing is rendered yet. Built so far: `clips2d.js` (pure, render-only: clip catalogue, `reactionClip`, `clipRate` that lands a clip's impact frame on the sim's arrival tick, `planImpact`, `ShotDirector`, `LOOKS`/`postProfile`, `timecode`) and 4 tests (281 pass). The sim is unchanged; the 3D view stays as the fallback until 2D is better. All sizes below are estimates, not measurements.
@@ -331,7 +340,7 @@ Nothing is rendered yet. Built so far: `clips2d.js` (pure, render-only: clip cat
 
 ## Next jobs
 
-0. **BOX-17 slice 2**: render the medium-angle fighter clips and the compositor (needs ffmpeg for footage later, not for this slice).
+0. **BOX-17 slice 3**: post-pass and looks (see the plan above). Check slice 2 in the browser first: View, "2D photoreal (beta)".
 
 0b. **Play BOX-13 and the career on a phone** and tell me what feels off (see its untested list).
 

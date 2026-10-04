@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>2D arena smoke (BOX-17)</title>
+<style>html,body{margin:0;background:#000}</style>
+<div id="ring" style="width:100vw;height:100vh;position:relative"></div>
+<script type="module">
+// Dev tool, not part of the game: runs one round in real time under the 2D photoreal arena, for scripts/shot-arena2d.mjs.
+import { CombatSimulation, FighterModel, TICK_MS } from './physics-engine.js';
+import { createArena2D } from './arena-2d.js';
+const S = { power: 60, speed: 60, stamina: 60, chin: 60, technique: 60, defense: 60 };
+const sim = new CombatSimulation({ seed: 7, rounds: 1, red: new FighterModel({ corner: 'red', name: 'R', stats: S }), blue: new FighterModel({ corner: 'blue', name: 'B', stats: S }) });
+const events = [];
+sim.on('impact', (r) => events.push(r.knockout ? 'ko' : 'hit'));
+await createArena2D({ parent: document.getElementById('ring'), sim });
+sim.startRound({ red: 'pressure', blue: 'counter' });
+let last = performance.now(), acc = 0;
+const clips = new Set();
+(function tick(now) {
+  acc += now - last; last = now;
+  for (; acc >= TICK_MS && sim.phase === 'running'; acc -= TICK_MS) sim.step();
+  requestAnimationFrame(tick);
+})(last);
+globalThis.__events = events;
+globalThis.__sim = sim;
+globalThis.__ready = true;
+</script>

@@ -123,3 +123,22 @@ export function timecode(dateISO, round, clockMs) {
   const mm = String(Math.floor(s / 60)).padStart(2, '0'), ss = String(s % 60).padStart(2, '0');
   return { date: dateISO, clock: `R${round} ${mm}:${ss}` };
 }
+
+/** Stand-ins for clips that aren't rendered yet, so the compositor never shows nothing. */
+export const CLIP_FALLBACK = Object.freeze({
+  atk_uppercut: 'atk_hook', atk_body: 'atk_jab', hit_body: 'hit_head', slip: 'idle_guard', knockdown: 'ko',
+  step_in: 'idle_guard', step_out: 'idle_guard', get_up: 'idle_guard', celebrate: 'idle_guard',
+});
+
+/** The clip to play: `name` if rendered (in `have`), else its fallback chain, else idle_guard. */
+export function resolveClip(name, have) {
+  for (let n = name, i = 0; n && i < 4; n = CLIP_FALLBACK[n], i++) if (have.has(n)) return n;
+  return 'idle_guard';
+}
+
+/** Frame to show `elapsedMs` into a clip played at `rate`. Loops wrap; one-shots hold the last frame (done = true). */
+export function clipFrame(clip, elapsedMs, rate = 1, frames = clip.frames) {
+  const f = Math.max(0, Math.floor((elapsedMs / 1000) * clip.fps * rate));
+  if (clip.loop) return { frame: f % frames, done: false };
+  return { frame: Math.min(f, frames - 1), done: f >= frames };
+}

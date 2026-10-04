@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Plate shot (BOX-17)</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<div id="ring" style="width:100vw;height:100vh;position:relative"></div>
+<script type="module">
+// Dev tool, not part of the game: the baked day court from the fixed 2D medium camera, boxers hidden, for scripts/render-plate.mjs.
+import { CombatSimulation, FighterModel } from './physics-engine.js';
+import { createArena3D, loadBabylon } from './arena-babylon.js';
+import { CAMERA } from './camera2d.js';
+const B = await loadBabylon();
+const sim = new CombatSimulation({ seed: 1, rounds: 1, red: new FighterModel({ corner: 'red', name: 'R', stats: {} }), blue: new FighterModel({ corner: 'blue', name: 'B', stats: {} }) });
+const arena = await createArena3D({ parent: document.getElementById('ring'), sim, BABYLON: B, timeOfDay: new URLSearchParams(location.search).get('time') || 'day' });
+for (const b of Object.values(arena.boxers)) { for (const m of b.rig.meshes) m.setEnabled(false); for (const m of Object.values(b.extras)) m.setEnabled(false); }
+document.querySelectorAll('#ring > div').forEach((d) => { d.style.display = 'none'; });
+const scene = arena.scene;
+const cam = new B.UniversalCamera('plate', new B.Vector3(...CAMERA.pos), scene);
+cam.fovMode = B.Camera.FOVMODE_HORIZONTAL_FIXED; cam.fov = CAMERA.hfov; cam.minZ = 0.05; cam.maxZ = 120;
+cam.setTarget(new B.Vector3(...CAMERA.target));
+scene.activeCamera = cam;
+scene.onBeforeRenderObservable.add(() => { cam.position.set(...CAMERA.pos); cam.setTarget(new B.Vector3(...CAMERA.target)); });
+await new Promise((r) => setTimeout(r, 1500));
+globalThis.__ready = true;
+</script>

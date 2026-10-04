@@ -728,7 +728,7 @@ test('fighterSummary and changeLines: plain counts', async () => {
 });
 
 // ─── BOX-17: 2D clip mapping (render-only) ───
-import { CLIPS, ATTACK_CLIP, reactionClip, clipRate, planImpact, ShotDirector, postProfile, timecode } from '../public/boxing/clips2d.js';
+import { CLIPS, ATTACK_CLIP, reactionClip, clipRate, planImpact, ShotDirector, postProfile, timecode, resolveClip, clipFrame } from '../public/boxing/clips2d.js';
 
 test('2D: every punch type has an attack clip, every clip a sane definition, and reactions exist', () => {
   for (const t of Object.keys(PUNCHES)) assert.ok(CLIPS[ATTACK_CLIP[t]], t);
@@ -791,4 +791,22 @@ test('2D: looks and post profile: filmic default, camcorder for replay/intro, lo
   const low = postProfile('camcorder', { lowEnd: true });
   assert.deepEqual([low.bloom, low.grain, low.dof, low.wobble], [0, 0, false, 0]);
   assert.deepEqual(timecode('1994-07-04', 3, 75400), { date: '1994-07-04', clock: 'R3 01:15' });
+});
+
+test('2D clips: unrendered clips fall back to a rendered stand-in, never nothing', () => {
+  const have = new Set(['idle_guard', 'atk_jab', 'atk_hook', 'hit_head', 'ko']);
+  assert.equal(resolveClip('atk_jab', have), 'atk_jab');
+  assert.equal(resolveClip('atk_uppercut', have), 'atk_hook');
+  assert.equal(resolveClip('atk_body', have), 'atk_jab');
+  assert.equal(resolveClip('hit_body', have), 'hit_head');
+  assert.equal(resolveClip('knockdown', have), 'ko');
+  assert.equal(resolveClip('nonsense', have), 'idle_guard');
+});
+
+test('2D clips: clipFrame loops idle, holds one-shots on their last frame', () => {
+  assert.deepEqual(clipFrame(CLIPS.idle_guard, 0), { frame: 0, done: false });
+  assert.equal(clipFrame(CLIPS.idle_guard, 1000 * 17 / 15).frame, 1);
+  assert.deepEqual(clipFrame(CLIPS.atk_jab, 1000 * 4 / 30), { frame: 4, done: false });
+  assert.deepEqual(clipFrame(CLIPS.atk_jab, 5000), { frame: 9, done: true });
+  assert.equal(clipFrame(CLIPS.atk_jab, 1000 * 4 / 30, 2).frame, 8);   // double rate
 });

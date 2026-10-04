@@ -1,0 +1,113 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Pose dump (BOX-17 render pipeline)</title>
+<script type="module">
+// Dev tool, not part of the game. Poses the real ModelBoxer (the same straightening, IK and clip layers the 3D view uses)
+// through each 2D action clip and records every bone's matrix per frame, for scripts/render-fighters.py to replay in Blender.
+// scripts/dump-poses.mjs drives it; the result is read from globalThis.__poses.
+import { loadBabylon } from './arena-babylon.js';
+import { loadBoxerAssets, loadGltfLoader, ModelBoxer, ModelRig, PHOTO_OUTFITS, normalizeLook } from './boxer-model.js';
+import { CLIPS } from './clips2d.js';
+
+const B = await loadBabylon();
+const engine = new B.Engine(document.createElement('canvas'), true);
+const scene = new B.Scene(engine);
+await loadGltfLoader(B);
+const assets = await loadBoxerAssets(B, scene);
+const outfit = normalizeLook({ ...PHOTO_OUTFITS.red });
+
+let T = 0;                               // mocked clock (s): the hit and KO clips read performance.now()
+performance.now = () => T * 1000;
+
+const r5 = (m) => Array.from(m, (x) => Math.round(x * 1e5) / 1e5);
+const GAP = 1.1;
+const boxer = new ModelBoxer(B, scene, assets, 'red', { addShadowCaster() {} }, { glove: outfit.wraps, trunks: '#9e1c24', wraps: true, physique: { lean: 0, heavy: 0 }, outfit });
+const rig = boxer.rig;
+const rest = new ModelRig(B, scene, assets, 'rest');
+rest.root.computeWorldMatrix(true);
+for (const n of Object.values(rest.bones)) n.computeWorldMatrix(true);
+
+const inv = (m) => m.clone().invert();
+const bonesOf = (rg) => {
+  const ri = inv(rg.root.getWorldMatrix());
+  return Object.fromEntries(Object.entries(rg.bones).map(([k, n]) => [k, r5(n.getWorldMatrix().multiply(ri).m)]));
+};
+const EXTRAS = ['gloveL', 'gloveR', 'cuffL', 'cuffR', 'capDome', 'capBrim', 'chain', 'mouth'];
+const snap = () => {
+  rig.root.computeWorldMatrix(true);
+  const extras = {};
+  for (const k of EXTRAS) { const m = boxer.extras[k]; if (m?.isEnabled()) extras[k] = r5(m.computeWorldMatrix(true).m); }
+  return { bones: bonesOf(rig), holder: r5(rig.holder.getWorldMatrix().m), extras };
+};
+
+const mkState = (x, punch = null) => ({ x, y: 0, vx: 0, vy: 0, gasRatio: 1, health: 100, activePunch: punch });
+const reset = () => {
+  boxer.lastPunch = null; boxer.retract = null; boxer.hitAnim = null; boxer.koStart = null; boxer.knocked = false; boxer.fall = 0;
+};
+const DT = 1 / 60;
+const frame = (me, opp, tick, now, time) => { boxer.pose(me, opp, tick, now, DT, time); return snap(); };
+const warm = () => { for (let i = 0; i < 40; i++) { T += DT; boxer.pose(mkState(-GAP / 2), mkState(GAP / 2), 0, T * 1000, DT, 0); } };
+const secs = (clip) => rig.clips[clip].seconds;
+
+const punchClip = (type) => (name) => {
+  const c = CLIPS[name], out = [], im = c.impact, now0 = 1000;
+  for (let i = 0; i < c.frames; i++) {
+    T += DT;
+    if (i <= im) out.push(frame(mkState(-GAP / 2, { type, launchTick: 0, arriveTick: 100 }), mkState(GAP / 2), 100 * (i / im), now0, 0));
+    else out.push(frame(mkState(-GAP / 2), mkState(GAP / 2), 0, now0 + 40 * (i - im - 1) / (c.frames - im - 1), 0));
+  }
+  return out;
+};
+const GENERATORS = {
+  idle_guard: (name) => {                 // 2N frames; the packer cross-fades the second half into the first so the loop is seamless
+    const n = CLIPS[name].frames, out = [];
+    for (let i = 0; i < 2 * n; i++) { T += DT; out.push(frame(mkState(-GAP / 2), mkState(GAP / 2), 0, T * 1000, i * (0.4189 / n))); }
+    return out;
+  },
+  atk_jab: punchClip('jab'), atk_cross: punchClip('cross'), atk_hook: punchClip('hook'),
+  atk_uppercut: punchClip('uppercut'), atk_body: punchClip('body'),
+};
+// block: the opponent's blocked punch drives the guard; k = tick fraction. Written separately for clarity.
+GENERATORS.block = (name) => {
+  const c = CLIPS[name], out = [];
+  for (let i = 0; i < c.frames; i++) {
+    T += DT;
+    const k = i <= c.impact + 1 ? i / (c.impact + 1) : Math.max(0, 1 - (i - c.impact - 1) / (c.frames - c.impact - 2));
+    out.push(frame(mkState(-GAP / 2), mkState(GAP / 2, { type: 'jab', outcome: 'blocked', launchTick: 0, arriveTick: 100 }), 100 * k, 1000, 0));
+  }
+  return out;
+};
+const hitClip = (target, joules) => (name) => {
+  const c = CLIPS[name], out = [], clip = joules > 160 ? 'Hit_Knockback' : target === 'body' ? 'Hit_Chest' : 'Hit_Head';
+  boxer.hit({ outcome: 'landed', target, transferredJoules: joules });
+  const step = secs(clip) / c.frames;
+  for (let i = 0; i < c.frames; i++) {
+    T += step;
+    const k = Math.min(1, i / c.impact);
+    out.push(frame(mkState(-GAP / 2), mkState(GAP / 2, { type: 'cross', outcome: 'landed', launchTick: 0, arriveTick: 100 }), 100 * k, T * 1000, 0));
+  }
+  return out;
+};
+GENERATORS.hit_head = hitClip('head', 100);
+GENERATORS.hit_body = hitClip('body', 100);
+GENERATORS.stagger = hitClip('head', 220);
+GENERATORS.ko = (name) => {
+  const c = CLIPS[name], out = [], step = secs('Death01') / c.frames;
+  boxer.knocked = true;
+  for (let i = 0; i < c.frames; i++) { T += step; out.push(frame(mkState(-GAP / 2), mkState(GAP / 2), 0, T * 1000, 0)); }
+  return out;
+};
+
+const want = new URLSearchParams(location.search).get('clips')?.split(',') ?? Object.keys(GENERATORS);
+const actions = {};
+for (const name of want) {
+  reset(); warm();
+  actions[name] = { frames: CLIPS[name].frames, fps: CLIPS[name].fps, impact: CLIPS[name].impact ?? null, loop: !!CLIPS[name].loop, data: GENERATORS[name](name) };
+}
+globalThis.__poses = {
+  gap: GAP, restBones: bonesOf(rest),
+  rootScale: rig.root.scaling.asArray(), rootQuat: rig.root.rotationQuaternion?.asArray() ?? null,
+  actions,
+};
+globalThis.__ready = true;
+</script>
