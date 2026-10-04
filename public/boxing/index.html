@@ -218,16 +218,28 @@
   .meter.gas { height: 6px; border-radius: 2px; }
   .meter i, .meter b { position: absolute; inset: 0 auto 0 0; width: 100%; }
   .side.blue .meter i, .side.blue .meter b { inset: 0 0 0 auto; }
-  .meter i { background: linear-gradient(180deg, #7cf08a, #25a244); transition: width .12s linear; }
+  .meter i { background: linear-gradient(180deg, #fff, #c9c9ce); transition: width .12s linear; }
   .meter b { background: #fff; opacity: .85; transition: width .7s ease .35s; }
-  .meter.low i { background: linear-gradient(180deg, #ff8a8a, #d63031); }
-  .meter.gas i { background: linear-gradient(180deg, #ffe08a, #d9a12b); }
+  .meter.low { animation: lowpulse .8s ease-in-out infinite; }
+  .meter.low i { background: linear-gradient(180deg, #e0764f, var(--accent)); }
+  .meter.gas i { background: linear-gradient(180deg, #9a9aa0, #6b6b71); }
+  @keyframes lowpulse { 50% { box-shadow: 0 0 10px rgba(194,81,47,.9); border-color: var(--accent); } }
   .mid { text-align: center; font: 400 14px/1.1 var(--display); letter-spacing: .12em; text-shadow: 0 2px 4px #000; }
-  .mid #clock { font-size: 30px; letter-spacing: .04em; }
-  .hud-btns { position: absolute; right: 10px; top: calc(var(--top) + 74px); display: grid; gap: 8px; }
-  .hud-btns button { width: 44px; min-height: 40px; padding: 0; background: rgba(0,0,0,.55); border-color: rgba(255,255,255,.2); font: 700 13px var(--mono); }
+  .mid #clock { font-size: 30px; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .mid #clock.late { color: var(--accent); animation: tick 1s steps(1) infinite; }
+  @keyframes tick { 50% { opacity: .55; } }
+  .pips { display: flex; justify-content: center; gap: 4px; margin-top: 5px; }
+  .pips i { width: 14px; height: 4px; background: rgba(255,255,255,.2); transform: skewX(-20deg); }
+  .pips i.done { background: #8f8f94; } .pips i.now { background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.7); }
+  .hud-btns { position: absolute; left: 0; right: 0; bottom: calc(var(--bottom) + 84px); display: flex; justify-content: space-between; padding: 0 12px; pointer-events: none; }
+  .hud-btns button { pointer-events: auto; width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.3); font: 700 15px var(--body); backdrop-filter: blur(4px); transition: transform .12s, background .12s; }
+  .hud-btns button:active { transform: scale(.9); background: rgba(255,255,255,.18); }
+  #banner { position: absolute; left: 0; right: 0; top: 38%; text-align: center; pointer-events: none; font: 400 clamp(46px, 16vw, 84px)/1 var(--display); letter-spacing: .05em; text-transform: uppercase; text-shadow: 3px 4px 0 #000; opacity: 0; }
+  #banner small { display: block; font: 600 14px var(--body); letter-spacing: .3em; color: var(--muted); margin-top: 8px; text-shadow: none; }
+  #banner.show { animation: banner 1.5s cubic-bezier(.2,1,.3,1) forwards; }
+  @keyframes banner { 0% { opacity: 0; transform: scale(2) rotate(-3deg); } 14% { opacity: 1; transform: scale(1) rotate(-3deg); } 75% { opacity: 1; transform: scale(1.04) rotate(-3deg); } 100% { opacity: 0; transform: scale(1.12) rotate(-3deg); } }
   .strip { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 12px calc(var(--bottom) + 14px); text-align: center; pointer-events: none; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
-  .strip .chip { background: rgba(0,0,0,.6); font: 400 18px var(--display); letter-spacing: .12em; text-transform: uppercase; padding: 6px 16px; }
+  .strip .chip { background: rgba(0,0,0,.6); font: 400 15px var(--display); letter-spacing: .08em; display: inline-block; max-width: 100%; text-transform: uppercase; padding: 6px 16px; }
   .sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 14px calc(var(--bottom) + 14px); background: linear-gradient(180deg, rgba(14,17,24,.86), rgba(8,10,14,.97));
     border-top: 2px solid var(--accent); border-radius: 18px 18px 0 0; transform: translateY(0); transition: transform .35s cubic-bezier(.2,.9,.3,1); }
   .sheet[hidden] { display: block; transform: translateY(110%); pointer-events: none; }
@@ -500,10 +512,11 @@
   <div class="flash" id="flash"></div>
   <div class="hud" aria-label="Fight status">
     <div class="side red"><div class="nm" id="red-name">Red</div><div class="vit"><span id="red-sil"></span><div class="bars"><div class="meter hp" id="red-hpm"><b id="red-hpg"></b><i id="red-hp"></i></div><div class="meter gas"><i id="red-gas"></i></div></div></div></div>
-    <div class="mid"><div id="round-lbl">ROUND 1</div><div id="clock">3:00</div></div>
+    <div class="mid"><div id="round-lbl">ROUND 1</div><div id="clock">3:00</div><div class="pips" id="pips"></div></div>
     <div class="side blue"><div class="nm" id="blue-name">Blue</div><div class="vit"><span id="blue-sil"></span><div class="bars"><div class="meter hp" id="blue-hpm"><b id="blue-hpg"></b><i id="blue-hp"></i></div><div class="meter gas"><i id="blue-gas"></i></div></div></div></div>
   </div>
-  <div class="hud-btns"><button id="speed-btn" aria-label="Fight speed">4×</button><button id="quit-btn" aria-label="Leave the fight">II</button></div>
+  <div id="banner" aria-live="polite"></div>
+  <div class="hud-btns"><button id="quit-btn" aria-label="Leave the fight">II</button><button id="speed-btn" aria-label="Fight speed">4×</button></div>
   <div class="strip" id="strip"><span class="chip" id="tactic-chip"></span></div>
   <div class="sheet" id="corner" hidden>
     <h3 id="c-title">Corner</h3>
@@ -989,6 +1002,7 @@ function startMatch({ mode, seed, matchId, rounds, red, blue, myCorner, career =
   $('feed').replaceChildren();
   $('telemetry').textContent = 'No exchanges yet.';
   $('round-lbl').textContent = `ROUND 1 / ${rounds}`;
+  drawPips(rounds, 1);
   $('tactic-chip').textContent = '';
   $('speed-btn').textContent = `${speedValue() === 1 && $('speed-override').value === 'instant' ? '∞' : speedValue()}×`;
   awaitCorner();
@@ -1060,6 +1074,8 @@ function beginRound(actions) {
   sfx.bell(1);
   const mine = state.match.myCorner;
   $('round-lbl').textContent = `ROUND ${sim.roundIndex} / ${sim.totalRounds}`;
+  drawPips(sim.totalRounds, sim.roundIndex);
+  banner(`Round ${sim.roundIndex}`, 'Fight');
   const them = mine === 'red' ? 'blue' : 'red';
   $('tactic-chip').textContent = `PLAN · ${TACTICS[actions[mine]].label} · vs ${TACTICS[actions[them]].label}`;
   addFeed(el('li', { className: 'round', textContent: `── Round ${sim.roundIndex} · red ${actions.red} · blue ${actions.blue}` }));
@@ -1114,6 +1130,7 @@ async function onRoundEnd(round) {
   updateDbStatus();
   if (sim.phase === 'round_over') {
     sfx.bell(3); sfx.crowd(0.5);
+    banner(`End of round ${round.round_index}`);
     await wait(2800);                                 // the arena shows "End of round" meanwhile
     if (state.sim === sim) awaitCorner();
   }
@@ -1122,7 +1139,7 @@ async function onRoundEnd(round) {
 async function onFightEnd(result) {
   const m = state.match, sim = state.sim;
   const ko = /KO/.test(result.method);
-  if (ko) { sfx.ko(); flash('ko', 0.85); state.arena?.slowmo(0.28, 2600); } else { sfx.bell(3); sfx.crowd(0.8); }
+  if (ko) { sfx.ko(); flash('ko', 0.85); banner('K.O.', '', '#fff'); state.arena?.slowmo(0.28, 2600); } else { sfx.bell(3); sfx.crowd(0.8); }
   const before = { ...state.fighter.record }, pointsBefore = state.fighter.points;
   await db.logMatch(result, { mode: m.mode, seed: m.seed, fighters: m.fighters });
   const outcome = outcomeOf(result.winner, m.myCorner);
@@ -1480,6 +1497,17 @@ async function finishDrill(key, taps) {
 
 // ─── Live HUD (reads the simulation; never writes it) ───────────────────────
 
+function drawPips(total, now) {
+  const box = $('pips');
+  if (box.children.length !== total) box.replaceChildren(...Array.from({ length: total }, () => document.createElement('i')));
+  [...box.children].forEach((p, i) => { p.className = i + 1 < now ? 'done' : i + 1 === now ? 'now' : ''; });
+}
+function banner(text, sub = '', color = '') {
+  const b = $('banner');
+  b.textContent = text; b.style.color = color;
+  if (sub) b.append(el('small', { textContent: sub }));
+  b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+}
 const lastHp = { red: 100, blue: 100 };
 function hud() {
   const sim = state.sim;
@@ -1493,6 +1521,7 @@ function hud() {
     }
     const left = Math.max(0, sim.roundTicks - sim.tick) * TICK_MS / 1000;
     $('clock').textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+    $('clock').classList.toggle('late', left <= 10 && sim.phase === 'running');
   }
   requestAnimationFrame(hud);
 }
