@@ -252,6 +252,29 @@
   .sheet h3 { margin: 0; font: 400 28px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; }
   .sheet .last { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
   .sheet .tip { margin: 10px 0 12px; padding: 8px 12px; background: rgba(194,81,47,.12); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 14px; }
+  .sheet { max-height: 88%; overflow-y: auto; }
+  .talk { margin: 0 0 12px; }
+  .talk .reply { margin: 0 0 8px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; font-size: 14px; animation: bubble-in .28s cubic-bezier(.2,.9,.3,1); }
+  .talk .reply b { display: block; font: 400 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+  .talk .reply .tag { display: block; margin-top: 4px; font-size: 11px; color: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+  .talk .bubbles { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .talk .bubbles button { min-height: 44px; padding: 0 14px; border-radius: 999px; font-size: 14px; }
+  .talk .bubbles button:active { transform: scale(.96); }
+  .talk .say { display: flex; gap: 8px; }
+  .talk .say input { flex: 1; min-width: 0; min-height: 48px; padding: 0 14px; font-size: 16px; border-radius: 999px; }
+  .talk .say button { flex: none; min-height: 48px; padding: 0 22px; border-radius: 999px; }
+  .talk .src { margin-top: 6px; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+  .talk.busy .reply { opacity: .6; }
+  @keyframes bubble-in { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+  .ai-form [hidden], .ai-form[hidden] { display: none; }
+  .ai-form { display: grid; gap: 8px; margin-top: 10px; }
+  .ai-form input[type=text], .ai-form input[type=password], .ai-form input[type=url] { min-height: 44px; padding: 0 12px; width: 100%; font-size: 16px; font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+  .ai-form label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+  .ai-form .row2 { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ai-form .row2 button { flex: 1 1 0; min-height: 44px; padding: 0 10px; font-size: 14px; }
+  .ai-form code { font-size: 11px; color: var(--ink); word-break: break-all; }
+  .ai-form .status.ok { color: #9fd3a2; }
+  .ai-form .status.bad { color: var(--accent); }
   .tactics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 12px; }
   .tactics button { grid-column: span 2; min-height: 64px; padding: 6px 4px; line-height: 1.15; position: relative; }
   .tactics button:nth-child(n+4) { grid-column: span 3; }
@@ -468,6 +491,19 @@
     <div class="setting"><span>Sound effects</span><div class="seg" id="set-sfx"></div></div>
     <div class="setting"><span>Music</span><div class="seg" id="set-music"></div><p>Off by default. A loop made in your browser.</p></div>
     <div class="setting"><span>Time of day</span><div class="seg" id="set-time"></div><p>Night takes a little longer to load the first time.</p></div>
+    <div class="setting"><span>Your AI corner</span><div class="seg" id="ai-kind"></div>
+      <p>Optional. Connect your own model so your corner understands what you say. We run no model and keep no key: with none connected you get the basic corner.</p>
+      <div class="ai-form" id="ai-form" hidden>
+        <label>Address<input type="url" id="ai-url" autocomplete="off" spellcheck="false" autocapitalize="off"></label>
+        <label id="ai-key-l">API key (stays in this browser, sent only to the address above)<input type="password" id="ai-key" autocomplete="off" spellcheck="false"></label>
+        <label>Model<input type="text" id="ai-model" list="ai-models" autocomplete="off" spellcheck="false" autocapitalize="off"><datalist id="ai-models"></datalist></label>
+        <div class="row2"><button type="button" id="ai-find">Find models</button><button type="button" id="ai-test">Test connection</button></div>
+        <div class="row2"><button type="button" id="ai-forget">Forget key</button><button type="button" id="ai-off">Disconnect</button></div>
+        <div class="status" id="ai-status" role="status"></div>
+        <p id="ai-setup"></p>
+      </div>
+      <div class="status" id="ai-line"></div>
+    </div>
     <div class="setting"><span>Fight speed</span><div class="seg" id="set-speed"></div><p>Rounds are three minutes. Fast plays them in 45 seconds.</p></div>
   </div>
 </section>
@@ -531,6 +567,12 @@
     <h3 id="c-title">Corner</h3>
     <p class="last" id="c-last"></p>
     <div class="tip" id="c-tip"></div>
+    <div class="talk" id="talk">
+      <div class="reply" id="talk-reply" hidden aria-live="polite"></div>
+      <div class="bubbles" id="bubbles" role="group" aria-label="Suggestions for your fighter"></div>
+      <form class="say" id="say-form" autocomplete="off"><input type="text" id="say-in" maxlength="140" enterkeyhint="send" aria-label="Tell your fighter what to do" placeholder="Tell your fighter…"><button class="big" id="say-send" type="submit">Send</button></form>
+      <div class="src" id="talk-src"></div>
+    </div>
     <div class="tactics" id="tactics" role="group" aria-label="Tactic for the next round"></div>
     <button class="big" id="stats-btn" style="width:100%;margin-bottom:8px">Fight stats</button>
     <button class="big primary" id="start-round" style="width:100%">Ring the bell</button>
@@ -583,6 +625,7 @@ import { createArena2D } from './arena-2d.js';
 import { LOOK_OPTIONS, PHOTO_OUTFITS, normalizeLook, physiqueOf } from './boxer-model.js';
 import { createLookPreview } from './look-preview.js';
 import { profileOf, receivedProfile } from './profile.js';
+import * as cornerAI from './corner-ai.js';
 import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, aiPlan, emptyDamage, recordDamage, zoneHeat, DAMAGE_ZONES, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
 import { ENERGY, TIERS, isSanctioned, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, SPAR_CUES, markerAt, beatAt, sparPos, drillResult, applyDrill, trainerTip } from './career.js';
 import { createSfx } from './sfx.js';
@@ -644,6 +687,9 @@ const state = {
 };
 try { state.settings = normalizeSettings(JSON.parse(localStorage.getItem('bm.settings'))); } catch { state.settings = normalizeSettings(null); }
 state.speed = state.settings.speed;
+// The player's own model (corner-ai.js). The key lives only in this localStorage entry and goes only to the address they typed.
+try { state.ai = cornerAI.normalizeAI(JSON.parse(localStorage.getItem(cornerAI.AI_STORAGE_KEY))); } catch { state.ai = null; }
+const saveAI = () => { try { if (state.ai) localStorage.setItem(cornerAI.AI_STORAGE_KEY, JSON.stringify(state.ai)); else localStorage.removeItem(cornerAI.AI_STORAGE_KEY); } catch { /* private mode */ } };
 const saveSettings = () => { try { localStorage.setItem('bm.settings', JSON.stringify(state.settings)); } catch { /* private mode */ } };
 
 let toastTimer = 0;
@@ -773,7 +819,55 @@ function renderSettings() {
   segment($('set-music'), { on: 'On', off: 'Off' }, s.music ? 'on' : 'off', (k) => set({ music: k === 'on' }));
   segment($('set-time'), { day: 'Day', night: 'Night' }, s.time, (k) => set({ time: k }));
   segment($('set-speed'), SPEEDS, s.speed, (k) => set({ speed: Number(k) }));
+  renderAI();
 }
+
+// ─── Settings: your AI corner ───
+const AI_KIND_LABELS = { off: 'Basic', ollama: 'Ollama', lmstudio: 'LM Studio', api: 'Your API' };
+function renderAI() {
+  const cfg = state.ai, kind = cfg?.kind ?? 'off';
+  segment($('ai-kind'), AI_KIND_LABELS, kind, (k) => {
+    if (k === 'off') state.ai = null;
+    else if (k !== cfg?.kind) state.ai = cornerAI.normalizeAI({ kind: k, url: cornerAI.AI_KINDS[k].url, model: '' });
+    saveAI(); setStatus($('ai-status'), ''); renderAI();
+  });
+  $('ai-form').hidden = !cfg;
+  if (cfg) {
+    const info = cornerAI.AI_KINDS[cfg.kind];
+    $('ai-url').value = cfg.url; $('ai-model').value = cfg.model; $('ai-key').value = cfg.key;
+    $('ai-key-l').hidden = !info.key; $('ai-forget').hidden = !info.key;
+    $('ai-setup').textContent = info.setup;
+  }
+  $('ai-line').textContent = cornerAI.sourceLabel(cfg);
+}
+function aiFromForm() {
+  if (!state.ai) return null;
+  state.ai = cornerAI.normalizeAI({ kind: state.ai.kind, url: $('ai-url').value, model: $('ai-model').value, key: $('ai-key').value });
+  saveAI();
+  $('ai-line').textContent = cornerAI.sourceLabel(state.ai);
+  return state.ai;
+}
+for (const id of ['ai-url', 'ai-model', 'ai-key']) $(id).onchange = aiFromForm;
+async function aiAction(busyText, run) {
+  const cfg = aiFromForm();
+  if (!cfg) return;
+  setStatus($('ai-status'), busyText);
+  try { await run(cfg); } catch (e) { setStatus($('ai-status'), e.message, 'bad'); }
+}
+$('ai-find').onclick = () => aiAction('Looking for models…', async (cfg) => {
+  const names = await cornerAI.listModels(cfg);
+  $('ai-models').replaceChildren(...names.map((n) => el('option', { value: n })));
+  if (!names.length) return setStatus($('ai-status'), 'The endpoint answered but lists no models.', 'bad');
+  if (!names.includes(cfg.model)) { $('ai-model').value = names[0]; aiFromForm(); }
+  setStatus($('ai-status'), `${names.length} model${names.length === 1 ? '' : 's'} found. Pick one in the Model box.`, 'ok');
+});
+$('ai-test').onclick = () => aiAction('Testing…', async (cfg) => {
+  if (!cornerAI.aiReady(cfg)) return setStatus($('ai-status'), 'Choose a model first (Find models).', 'bad');
+  const r = await cornerAI.testConnection(cfg);
+  setStatus($('ai-status'), `Connected: ${r.model}, ${r.ms} ms`, 'ok');
+});
+$('ai-forget').onclick = () => { if (state.ai) { state.ai = { ...state.ai, key: '' }; saveAI(); $('ai-key').value = ''; setStatus($('ai-status'), 'Key forgotten. Nothing is stored in this browser.', 'ok'); } };
+$('ai-off').onclick = () => { state.ai = null; saveAI(); setStatus($('ai-status'), ''); renderAI(); };
 function applySettings() {
   sfx.setEnabled(state.settings.sfx);
   if (sfx.available) sfx.setMusic(state.settings.music && !!sfx.unlockedOnce);
@@ -1057,12 +1151,62 @@ async function awaitCorner() {
   $('start-round').textContent = sim.roundIndex === 0 ? 'Ring the bell' : 'Next round';
   setStatus($('corner-status'), m.mode === 'p2p' ? 'The round starts when both corners have called.' : '');
   renderTactics(tactic);
+  state.cornerNote = null;
+  initTalk(sim, mine, theirs, tactic);
   $('corner').hidden = false;
+}
+
+/** Corner talk: bubbles from the fight state, free text, the trainer's answer. Only ever sets the tactic for the next round. */
+function initTalk(sim, mine, theirs, coach) {
+  const token = state.talkToken = (state.talkToken ?? 0) + 1;
+  const m = state.match, f = (c) => ({ health: sim.fighters[c].health, gasRatio: sim.fighters[c].gasRatio, stats: sim.fighters[c].stats });
+  const ctx = cornerAI.buildContext({
+    round: sim.roundIndex + 1, totalRounds: sim.totalRounds, me: f(mine), opp: f(theirs), oppName: m.names[theirs],
+    damage: state.damage, rounds: sim.rounds, mine, theirs, last: state.lastActions ?? null,
+  });
+  const live = () => state.talkToken === token && state.sim === sim;
+  const reply = $('talk-reply'), input = $('say-in');
+  state.talkBusy = false;
+  reply.hidden = true;
+  input.value = ''; input.disabled = false; $('say-send').disabled = false;
+  $('talk').classList.remove('busy');
+  $('talk-src').textContent = cornerAI.sourceLabel(state.ai);
+
+  const showBubbles = (items) => $('bubbles').replaceChildren(...items.map((b) =>
+    el('button', { type: 'button', textContent: b.text, onclick: () => { sfx.click(); send(b.text); } })));
+  showBubbles(cornerAI.suggestBubbles(ctx));
+  if (cornerAI.aiReady(state.ai)) {
+    cornerAI.aiBubbles(state.ai, ctx).then((texts) => { if (texts && live() && !state.talkBusy) showBubbles(texts.map((text) => ({ text }))); });
+  }
+
+  async function send(text) {
+    text = String(text).trim();
+    if (!text || state.talkBusy || !live()) return;
+    state.talkBusy = true; input.value = ''; $('talk').classList.add('busy');
+    reply.hidden = false; reply.replaceChildren(el('b', { textContent: 'Your corner' }), 'Thinking…');
+    const r = await cornerAI.planFromText(state.ai, ctx, text).catch((e) => ({ plan: null, via: 'basic', note: e.message }));
+    if (!live()) return;
+    state.talkBusy = false;
+    $('talk').classList.remove('busy');
+    $('talk-src').textContent = cornerAI.sourceLabel(state.ai, r.via) + (r.note ? ` · ${r.note}` : '');
+    if (!r.plan) {
+      reply.replaceChildren(el('b', { textContent: 'Your corner' }),
+        `Did not catch a plan in that. Try "protect the body", "jab and move" or tap a bubble. Still on ${TACTICS[state.tactic].label}.`);
+      return;
+    }
+    state.tactic = r.plan.tactic;
+    renderTactics(coach);
+    state.cornerNote = { text, plan: r.plan, via: r.via };
+    const tag = `Plan: ${TACTICS[r.plan.tactic].label}${r.plan.focus !== 'none' ? ` · aim ${r.plan.focus}` : ''} · ${r.plan.aggression} aggression`;
+    reply.replaceChildren(el('b', { textContent: 'Your corner' }), r.plan.say, el('span', { className: 'tag', textContent: tag }));
+    reply.style.animation = 'none'; void reply.offsetWidth; reply.style.animation = '';
+  }
+  $('say-form').onsubmit = (e) => { e.preventDefault(); send(input.value); };
 }
 
 function renderTactics(coach) {
   $('tactics').replaceChildren(...Object.entries(TACTICS).map(([key, t]) => {
-    const b = el('button', { type: 'button', ariaPressed: String(key === state.tactic), onclick: () => { state.tactic = key; sfx.click(); renderTactics(coach); } },
+    const b = el('button', { type: 'button', ariaPressed: String(key === state.tactic), onclick: () => { state.tactic = key; state.cornerNote = null; sfx.click(); renderTactics(coach); } },
       el('b', { textContent: t.label }), el('span', { textContent: TACTIC_BLURB[key] }));
     if (key === coach) b.append(el('i', { className: 'coach', textContent: 'COACH' }));
     return b;
@@ -1074,6 +1218,7 @@ function lockCorner() {
   if (!sim || (sim.phase !== 'awaiting_corner' && sim.phase !== 'round_over')) return;
   const mine = state.match.myCorner, theirs = mine === 'red' ? 'blue' : 'red';
   $('start-round').disabled = true;
+  state.talkToken += 1; $('say-in').disabled = true; $('say-send').disabled = true;
   if (state.match.mode === 'single') {
     $('corner').hidden = true;
     const plan = aiCorner(sim, theirs);
@@ -1098,7 +1243,9 @@ function beginRound(actions) {
   drawPips(sim.totalRounds, sim.roundIndex);
   banner(`Round ${sim.roundIndex}`, 'Fight');
   const them = mine === 'red' ? 'blue' : 'red';
-  $('tactic-chip').textContent = `PLAN · ${TACTICS[actions[mine]].label} · vs ${TACTICS[actions[them]].label}`;
+  state.lastActions = { mine: actions[mine], theirs: actions[them] };
+  const said = state.cornerNote?.text ? ` · "${state.cornerNote.text.slice(0, 26)}"` : '';
+  $('tactic-chip').textContent = `PLAN · ${TACTICS[actions[mine]].label} · vs ${TACTICS[actions[them]].label}${said}`;
   addFeed(el('li', { className: 'round', textContent: `── Round ${sim.roundIndex} · red ${actions.red} · blue ${actions.blue}` }));
   if ($('speed-override').value === 'instant') sim.runRoundToEnd();
 }
