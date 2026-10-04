@@ -417,3 +417,7 @@ Most of BOX-24 was BOX-21 (stat sources, tendencies, learned-from-log, plan chip
 ## Done (2026-10-04): BOX-26 slice 2, scorecard reveal polish (Boxing UI Dev)
 `index.html` only. Scorecard cells now mark the round winner (bright, stamps in) and dim the loser; the Total row glows for the winner. Reduced motion: global rule makes it instant. `npm test` 281 pass.
 - **Untested**: by eye on a phone. **Remaining in BOX-26**: upgrade-screen polish, a 2D-swap check (the e2e script only drives the 3D view).
+
+## Done (2026-10-04): BOX-26 slice 3, upgrade-screen polish (Boxing UI Dev)
+`index.html` only. Training screen: points counter bumps when it changes, each raised stat shows an accent "+N" chip (pops in), saved rows flash on Confirm. Reduced motion: global rule makes it instant. `npm test` 281 pass.
+- **Untested**: by eye on a phone. **Remaining in BOX-26**: a 2D-swap check of the new HUD (e2e only drives the 3D view; needs a browser).

@@ -161,6 +161,12 @@
   .urow .btns { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 8px; }
   .urow .btns button { width: 52px; min-height: 52px; font-size: 26px; padding: 0; }
   .urow .cost { font-size: 11px; color: var(--muted); text-align: center; }
+  .urow .nm .gain { font: 700 13px var(--body); color: #000; background: var(--accent); border-radius: 6px; padding: 2px 6px; margin-left: 8px; letter-spacing: 0; animation: gainpop .28s ease-out; }
+  .points-big b.bump { animation: ptsbump .3s ease-out; }
+  .urow.saved { animation: rowsaved .7s ease-out; }
+  @keyframes gainpop { from { transform: scale(1.7); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes ptsbump { 40% { transform: scale(1.18); } }
+  @keyframes rowsaved { 0% { background: rgba(255,255,255,.22); } 100% { background: transparent; } }
 
   /* ── Opponent ── */
   .opp { display: grid; grid-template-columns: 76px 1fr; gap: 12px; padding: 10px; margin-bottom: 10px; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; width: 100%; text-align: left; height: auto; min-height: 96px; }
@@ -890,17 +896,19 @@ function renderUpgrade() {
     const minus = el('button', { textContent: '−', ariaLabel: `Lower ${STAT_LABEL[k]}`, disabled: cur[k] <= base[k], onclick: () => train(k, -1) });
     const plus = el('button', { textContent: '+', ariaLabel: `Train ${STAT_LABEL[k]}`, disabled: cur[k] >= 100 || statCost(cur[k]) > pointsLeft(), onclick: () => train(k, +1) });
     return el('div', { className: 'urow' },
-      el('div', { className: 'nm' }, STAT_LABEL[k], el('span', { textContent: cur[k] })),
+      el('div', { className: 'nm' }, STAT_LABEL[k], el('span', { textContent: cur[k] }), ...(cur[k] > base[k] ? [el('span', { className: 'gain', textContent: `+${cur[k] - base[k]}` })] : [])),
       bar,
       el('div', { className: 'fx', textContent: `${fighterFx(k, cur)} · next +1 costs ${statCost(cur[k])}` }),
       el('div', { className: 'fx', textContent: statSources(cur, state.fighter.career)[k].text + (state.pending && cur[k] > base[k] ? ` (+${cur[k] - base[k]} unsaved)` : '') }),
       el('div', { className: 'btns' }, minus, plus));
   }));
-  $('points').textContent = pointsLeft();
+  const pts = $('points'), left = String(pointsLeft());
+  if (pts.textContent !== left) { pts.textContent = left; pts.classList.remove('bump'); void pts.offsetWidth; pts.classList.add('bump'); }
   $('camp-confirm').disabled = !state.pending;
   $('camp-reset').disabled = !state.pending;
 }
 $('camp-confirm').onclick = async () => {
+  const changed = STAT_KEYS.filter((k) => state.pending[k] !== state.fighter.stats[k]);
   state.fighter.points = pointsLeft();
   state.fighter.stats = { ...state.pending };
   state.pending = null;
@@ -908,6 +916,7 @@ $('camp-confirm').onclick = async () => {
   state.hasSaved = true;
   toast('Training saved');
   renderUpgrade();
+  changed.forEach((k) => $('u-rows').children[STAT_KEYS.indexOf(k)]?.classList.add('saved'));
 };
 $('camp-reset').onclick = () => { state.pending = null; renderUpgrade(); };
 
