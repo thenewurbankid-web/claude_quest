@@ -123,3 +123,6 @@ Before: KO 0 / 0 / .17 / - / .69 at 1 / 2 / 3 / - / 5 rounds, 2-round draws 31 %
 ### Open
 - Untested in the browser: nothing here touches the UI. `index.html` still passes `rounds` from its select and no `roundSeconds`/`breakSeconds`, so it now runs 35 s rounds with the old round counts (option values 1-6). Wiring the format picker, corner timer, fast-forward and a sim-to-result button belongs to Boxing Dev. Both P2P peers must send the same `rounds`, `roundSeconds`, `breakSeconds`.
 - Not tried: other stat mixes, the sanctioned ruleset, tactic pair extremes (unchanged from BOX-22).
+
+## BOX-27: shipped to main (2026-10-04)
+Rebased BOX-20/22 onto origin/main (BOX-15 was already there). Conflict was test-only: both sides appended tests to `test/boxing.test.js`; kept both. One fix beyond the merge: Boxing Dev's BOX-17 test requires every `PUNCHES` key to have an `ATTACK_CLIP`, so `public/boxing/clips2d.js` now maps the seven BOX-22 punches onto existing clips (haymaker/check_hook -> hook, overhand -> cross, hook_body/shovel -> body, short_upper -> uppercut, cheap_shot -> jab). Placeholders: Boxing Dev should author or pick proper clips. `npm test` 302 pass. Untested in the browser.

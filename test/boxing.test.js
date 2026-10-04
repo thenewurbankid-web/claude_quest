@@ -734,6 +734,7 @@ test('2D: looks and post profile: filmic default, camcorder for replay/intro, lo
   const low = postProfile('camcorder', { lowEnd: true });
   assert.deepEqual([low.bloom, low.grain, low.dof, low.wobble], [0, 0, false, 0]);
   assert.deepEqual(timecode('1994-07-04', 3, 75400), { date: '1994-07-04', clock: 'R3 01:15' });
+});
 
 // ─── Street moveset (BOX-22) ────────────────────────────────────────────────
 
