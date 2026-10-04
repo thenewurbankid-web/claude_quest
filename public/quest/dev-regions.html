@@ -30,7 +30,7 @@ for (const [title, ledger] of cases) {
     p.append(`${r.name}${r.generated ? ' (generated)' : ''}: ${r.posts.length} post(s)${r.hidden ? `, ${r.hidden} more` : ''}; hub gate at ${g ? `${g.c},${g.r}` : 'none'}`);
   }
   const first = regions[0], map = regionMap(first);
-  el('p', `${first.name}, G = gate back, P = a Work's post:`);
+  el('p', `${first.name}, G = gate back, Q = a Work's post:`);
   el('pre', map.rows.join('\n'));
 }
 </script>

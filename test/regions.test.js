@@ -85,8 +85,8 @@ test('region map: fixed size, one gate, every post reachable from the start, sam
       assert.equal(m.rows.join('').split('G').length - 1, 1);
       assert.equal(m.rows[m.gate[1]][m.gate[0]], 'G');
       assert.equal(m.posts.length, n);
-      assert.equal(m.rows.join('').split('P').length - 1, n);
-      const ok = ch => !SOLID.has(ch) && ch !== 'P';
+      assert.equal(m.rows.join('').split('Q').length - 1, n);
+      const ok = ch => !SOLID.has(ch) && ch !== 'Q';
       const reach = walk(m.rows, m.start, ok);
       assert.ok(reach.has(m.gate.join(',')), `${id}: the gate is reachable`);
       for (const p of m.posts) {

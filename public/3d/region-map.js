@@ -1,5 +1,5 @@
 // A region's map and the hub's gates, as cells. Render-free (no three.js), so node tests can check them.
-// Region legend (the hub's, plus):  G gate back to the hub (walkable)   P a post that carries one Work (solid)
+// Region legend (the hub's, plus):  G gate back to the hub (walkable)   Q a post that carries one Work (solid; P is the hub's dock planks)
 // A region is 32x24: a road runs north from the gate and a cross road meets it, posts stand either side in a fixed
 // pattern (nearest first), a pond sits in one top corner, and trees ring the edge. The same region id always gives the
 // same map. Nothing here knows a source or a ledger: it takes a region's id and the number of posts it must hold.
@@ -30,7 +30,7 @@ export function regionMap(region) {
   for (const r of POST_ROWS) for (const c of POST_COLS) slots.push([c, r]);
   slots.sort((a, b) => Math.abs(a[0] - START[0]) + Math.abs(a[1] - START[1]) - Math.abs(b[0] - START[0]) - Math.abs(b[1] - START[1]) || a[1] - b[1] || a[0] - b[0]);
   const posts = [];
-  region.posts.slice(0, slots.length).forEach((p, i) => { const [c, r] = slots[i]; set(c, r, 'P'); posts.push({ workId: p.workId, c, r }); });
+  region.posts.slice(0, slots.length).forEach((p, i) => { const [c, r] = slots[i]; set(c, r, 'Q'); posts.push({ workId: p.workId, c, r }); });
   // scattered trees stay off roads, posts, the pond's edge and the start; the grass round a post stays open
   for (let r = 1; r < REGION_ROWS - 1; r++) for (let c = 1; c < REGION_COLS - 1; c++) {
     if (g[r][c] !== '.' || cellHash(c, r, 5) % 100 >= 7) continue;
@@ -47,8 +47,8 @@ export function regionMap(region) {
 // The hub's gate slots, in the order Marches take them: the four road ends first, then the second lane of each. Each
 // is { c, r } on the map's edge and `inward`, the cell the player stands on when coming back.
 export const GATE_SLOTS = [
-  { c: 22, r: 0, inward: [22, 1] }, { c: 22, r: 31, inward: [22, 30] }, { c: 0, r: 15, inward: [1, 15] }, { c: 47, r: 15, inward: [46, 15] },
-  { c: 24, r: 0, inward: [24, 1] }, { c: 24, r: 31, inward: [24, 30] }, { c: 0, r: 16, inward: [1, 16] }, { c: 47, r: 16, inward: [46, 16] },
+  { c: 46, r: 0, inward: [46, 1] }, { c: 46, r: 63, inward: [46, 62] }, { c: 0, r: 31, inward: [1, 31] }, { c: 95, r: 31, inward: [94, 31] },
+  { c: 48, r: 0, inward: [48, 1] }, { c: 48, r: 63, inward: [48, 62] }, { c: 0, r: 32, inward: [1, 32] }, { c: 95, r: 32, inward: [94, 32] },
 ];
 
 /** One gate per region, up to the slots; `hidden` counts the regions that found no gate (the sign says so). */
