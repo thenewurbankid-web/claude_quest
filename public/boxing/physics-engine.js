@@ -37,6 +37,9 @@ const EXCHANGE_IDLE_MS = 800;              // quiet time that closes an exchange
 const DAMAGE_DIVISOR = 475;                // joules per health point
 const BLOCK_MARGIN_MS = 35;                // late reactions within this are blocks
 const PERIPHERAL_MS = 30;                  // extra perception for punches from the side
+const HEAD_HEIGHT_M = 1.6;                 // contact height for head shots
+const BODY_HEIGHT_M = 1.15;                // contact height for body shots
+const ENERGY_REF_J = 170;                  // transferred joules that read as a full-strength hit (about p95 of landed punches)
 const ROPES_ZONE_M = 0.6;                  // within this of the ropes, a defender can't slip back
 
 /** Punch catalogue. Factors are relative to the fighter's base values. */
@@ -255,6 +258,28 @@ export function computePunch({ attacker, defender, type, tick, rng, isCounter = 
   };
 }
 
+/**
+ * Where a punch meets the defender, for renderers: a world point (x, y on the
+ * ring floor plus heightM), the unit direction of travel, and what it hit.
+ * Landed → the head or body surface; blocked → the guard, a little in front;
+ * slipped → the point the fist passes through, beside the head. Read-only.
+ */
+function contactOf(p, atk, def) {
+  const dx = def.pos.x - atk.pos.x, dy = def.pos.y - atk.pos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy) || 1e-6;
+  const dirX = dx / dist, dirY = dy / dist;
+  const region = p.outcome === 'landed' ? p.target : p.outcome === 'blocked' ? 'guard' : 'air';
+  const depth = region === 'guard' ? TARGET_DEPTH_M + 0.1 : TARGET_DEPTH_M;
+  const side = region === 'air' ? SLIP_DISTANCE_M * (p.type === 'hook' ? 1 : 0.5) : 0;
+  return {
+    region,
+    x: def.pos.x - dirX * depth - dirY * side,
+    y: def.pos.y - dirY * depth + dirX * side,
+    heightM: p.target === 'body' ? BODY_HEIGHT_M : HEAD_HEIGHT_M,
+    dirX, dirY,
+  };
+}
+
 // ─── CombatSimulation: the deterministic fight loop ─────────────────────────
 
 /**
@@ -382,6 +407,8 @@ export class CombatSimulation {
     const ux = dx / dist, uy = dy / dist;
     a.pos.x -= ux * push; a.pos.y -= uy * push;
     b.pos.x += ux * push; b.pos.y += uy * push;
+    const lim = RING_HALF_M - BODY_RADIUS_M;      // a push must not carry anyone through the ropes
+    for (const f of [a, b]) { f.pos.x = clamp(f.pos.x, -lim, lim); f.pos.y = clamp(f.pos.y, -lim, lim); }
   }
 
   // ── offence ──
@@ -453,7 +480,7 @@ export class CombatSimulation {
       def.health = Math.max(0, def.health - damage);
       if (atk.activePunch && atk.activePunch.launchTick === p.launchTick) atk.activePunch = null;
 
-      const record = { ...p, damage, resolvedTick: this.tick, healthAfter: { red: this.fighters.red.health, blue: this.fighters.blue.health }, gasAfter: { red: this.fighters.red.gas, blue: this.fighters.blue.gas } };
+      const record = { ...p, damage, contact: contactOf(p, atk, def), energy01: Math.min(1, p.transferredJoules / ENERGY_REF_J), knockout: def.health <= 0, resolvedTick: this.tick, healthAfter: { red: this.fighters.red.health, blue: this.fighters.blue.health }, gasAfter: { red: this.fighters.red.gas, blue: this.fighters.blue.gas } };
       if (this.exchange) { this.exchange.punches.push(record); this.exchange.lastTick = this.tick; }
       this._emit('impact', record);
 
