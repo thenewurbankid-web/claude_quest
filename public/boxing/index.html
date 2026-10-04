@@ -21,14 +21,14 @@
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 <script src="linkcrypto.js"></script>
 <style>
-  @font-face { font-family: 'Sedgwick Ave Display'; src: url(fonts/SedgwickAveDisplay.ttf) format('truetype'); font-weight: 400; font-display: swap; }
+  @font-face { font-family: 'Barlow Display'; src: url(fonts/BarlowCondensed-700.ttf) format('truetype'); font-weight: 400; font-display: swap; }
   @font-face { font-family: 'Barlow Condensed'; src: url(fonts/BarlowCondensed-500.ttf) format('truetype'); font-weight: 400 600; font-display: swap; }
   @font-face { font-family: 'Barlow Condensed'; src: url(fonts/BarlowCondensed-700.ttf) format('truetype'); font-weight: 700; font-display: swap; }
   :root {
     --bg: #000; --panel: #0d0d0e; --panel-2: #161617; --line: #2b2b2e;
     --ink: #f3f3f3; --muted: #8f8f94; --accent: #c2512f; --accent-2: #dcdcdc;
     --red: #b8402f; --blue: #a4a8ae; --ok: #cfcfcf; --warn: #a9a9ad;
-    --display: 'Sedgwick Ave Display', Impact, 'Arial Narrow Bold', sans-serif;
+    --display: 'Barlow Display', 'Barlow Condensed', Impact, 'Arial Narrow Bold', sans-serif;
     --body: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
     --mono: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
     --top: env(safe-area-inset-top, 0px); --bottom: env(safe-area-inset-bottom, 0px);
@@ -87,19 +87,11 @@
   #s-title .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
   #s-title .stage { position: relative; animation: shake .5s .95s cubic-bezier(.36,.07,.19,.97) both; }
   @keyframes shake { 10%,90% { transform: translate(-1px,1px); } 20%,80% { transform: translate(3px,-2px); } 30%,50%,70% { transform: translate(-5px,3px); } 40%,60% { transform: translate(5px,-3px); } 100% { transform: none; } }
-  .logo { position: relative; margin: 0 0 14px; font: 400 clamp(64px, 21vw, 110px)/.86 var(--display); letter-spacing: .02em; text-transform: uppercase; transform: rotate(-3deg);
-    text-shadow: 3px 4px 0 #000, 0 0 30px rgba(0,0,0,.6); }
-  .logo span, .logo em { display: block; animation: slam .55s calc(.55s + var(--i) * .17s) cubic-bezier(.2,1.4,.4,1) both; transform-origin: 20% 60%; }
-  @keyframes slam { 0% { opacity: 0; transform: scale(2.8) translateY(-30px); filter: blur(10px); } 55% { opacity: 1; filter: blur(0); } 75% { transform: scale(.96); } 100% { opacity: 1; transform: none; } }
-  .logo em { font-style: normal; color: transparent; -webkit-background-clip: text; background-clip: text; filter: drop-shadow(3px 4px 0 #000);
-    background-image: linear-gradient(100deg, transparent 38%, rgba(255,255,255,.95) 50%, transparent 62%), linear-gradient(180deg, #fff, #cfcfcf);
-    background-size: 250% 100%, 100% 100%; background-repeat: no-repeat; background-position: 160% 0, 0 0; text-shadow: none; }
-  .logo em { animation: slam .55s calc(.55s + var(--i) * .17s) cubic-bezier(.2,1.4,.4,1) both, glint 5.5s 2.2s ease-in-out infinite; }
-  @keyframes glint { 0%, 60% { background-position: 160% 0, 0 0; } 85%, 100% { background-position: -60% 0, 0 0; } }
-  .logo em { position: relative; }
-  .logo em::after { content: ''; position: absolute; left: 2%; bottom: -6px; width: 78%; height: 5px; background: var(--accent); border-radius: 3px; transform: skewX(-24deg) rotate(-1deg); filter: blur(.3px); }
-  .logo em::before { content: ''; position: absolute; left: 70%; bottom: -34px; width: 5px; height: 30px; background: linear-gradient(180deg, var(--accent), rgba(194,81,47,0)); border-radius: 3px 3px 5px 5px; transform-origin: top; animation: drip 3.2s 2.4s ease-in infinite both; z-index: 1; }
-  @keyframes drip { 0%, 20% { transform: scaleY(0); opacity: 1; } 70% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1.15); opacity: 0; } }
+  .logo { position: relative; margin: 0 0 18px; line-height: 0; }
+  .logo img { display: block; width: min(88%, 440px); max-height: 36dvh; height: auto; object-fit: contain; object-position: left top; filter: drop-shadow(0 8px 22px rgba(0,0,0,.65));
+    -webkit-mask: linear-gradient(100deg, #000 35%, transparent 55%) 100% 0 / 320% 100% no-repeat; mask: linear-gradient(100deg, #000 35%, transparent 55%) 100% 0 / 320% 100% no-repeat;
+    animation: spray 1.5s .55s cubic-bezier(.3,.7,.3,1) both; }
+  @keyframes spray { 0% { opacity: 0; filter: blur(7px) drop-shadow(0 8px 22px rgba(0,0,0,.65)); -webkit-mask-position: 100% 0; mask-position: 100% 0; } 25% { opacity: 1; } 100% { opacity: 1; filter: blur(0) drop-shadow(0 8px 22px rgba(0,0,0,.65)); -webkit-mask-position: 0 0; mask-position: 0 0; } }
   .tag { position: relative; margin: 0 0 22px; color: #c7d0de; letter-spacing: .22em; text-transform: uppercase; font-size: 12px; text-shadow: 0 1px 4px #000; animation: rise .7s 1.5s ease-out both; }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   .menu { position: relative; display: grid; gap: 12px; }
@@ -116,7 +108,8 @@
   @keyframes flash { 0% { opacity: 0; } 70% { opacity: .85; } 100% { opacity: 1; } }
   #s-title.replay .fade-in { animation-duration: .5s; animation-delay: 0s; }
   @media (prefers-reduced-motion: reduce) {
-    #s-title .cam, #s-title .rays, #s-title .haze, #s-title .grain, #s-title .stage, .logo span, .logo em, .logo em::before, .tag, .menu .big, .ver, #s-title .fade-in { animation: none !important; }
+    #s-title .cam, #s-title .rays, #s-title .haze, #s-title .grain, #s-title .stage, .logo img, .tag, .menu .big, .ver, #s-title .fade-in { animation: none !important; }
+    .logo img { -webkit-mask: none; mask: none; filter: drop-shadow(0 8px 22px rgba(0,0,0,.65)); }
     #s-title.leaving .cam { transition: none; } #s-title.leaving .stage { transition: opacity .15s; transform: none; } #s-title.leaving .flash { animation: none; }
   }
 
@@ -450,7 +443,7 @@
   <div class="grain" aria-hidden="true"></div>
   <div class="vig" aria-hidden="true"></div>
   <div class="stage">
-    <h1 class="logo" id="logo" aria-label="Bring the Ruckus"><span style="--i:0">Bring</span><span style="--i:1">The</span><em style="--i:2">Ruckus</em></h1>
+    <h1 class="logo" id="logo"><img src="img/logo-ruckus-1100.webp" srcset="img/logo-ruckus-640.webp 640w, img/logo-ruckus-1100.webp 1100w" sizes="(max-width: 520px) 88vw, 440px" alt="Bring The Ruckus" width="1100" height="956" decoding="async" draggable="false"></h1>
     <p class="tag">Street boxing · Uptown NYC</p>
     <div class="menu">
       <button class="big primary" id="t-career" data-go="career" style="--i:0"><span id="t-career-label">Play</span><small id="t-career-sub"></small></button>

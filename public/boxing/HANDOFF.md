@@ -4,6 +4,14 @@ Worktree `.claude/worktrees/boxing-manager-ai`, branch `worktree-boxing-manager-
 Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds `tasks/t01..t12`,
 `log/l01..l12`, `meta/status` and `meta/balance`; update them with ArtifactData and pin each write with `if_version`).
 
+## Done (2026-10-04): crafted spray-paint logo, no more graffiti webfont (BOX-29)
+
+- The landing logo is now a pre-rendered image, `public/boxing/img/logo-ruckus-640.webp` (128 KB, phones) and `-1100.webp` (333 KB), served with `srcset`. `scripts/build-logo.mjs` builds it (dev only; needs playwright-core and Chromium): Sedgwick Ave Display as the letter base, every glyph placed, tilted and scaled individually, thin grey outline, soft dark offset shadow, overspray speckle halo, uneven coverage showing the CC0 brick photo, five drips. White on transparent. The TTF now lives in `scripts/fonts/`; the game no longer loads it.
+- All other titles, buttons and banners (`--display`) use Barlow Condensed 700 (`Barlow Display` face alias in `index.html`), including the round and K.O. banners and the verdict text. No raw Sedgwick anywhere.
+- Landing animation: a spray wipe plus blur-to-sharp fade (CSS mask), removed under `prefers-reduced-motion`. The long-press-to-open-debug handler still sits on `#logo`.
+- Checked with headless Chromium (375x812 and 1440x900 screenshots, landing and K.O. banner). `npm test` 331 pass. Untested: real phones, Safari mask support (`-webkit-mask` is set), Firefox.
+- Not done: FIGHT NIGHT-style one-off posters do not exist as static titles in the UI, so none were pre-rendered.
+
 ## Done (2026-10-04): BOX-14 follow-up, stat-driven physique and boxing gear (BOX-25)
 
 - **Physique**: `build-mpfb-boxer.py --variant lean|heavy|balanced` now builds all three (same vertices), and `build-mpfb-models.mjs` merges lean and heavy into `person.glb` as glTF morph targets (`lean`, `heavy`) on every mesh (skin, garments, hair, eyes), 3.2 -> 4.0 MB. `boxer-model.js` `physiqueOf(stats)` (power vs mean of speed and stamina; a 30-point gap is the full shift; even stats = balanced) and `ModelBoxer.setPhysique`. The arena gets `physiques: {red, blue}` from each side's stats (so P2P needs nothing new), the Look preview follows the fighter's stats and updates when training changes them. Render-only, `FighterModel` never reads it. The skeleton stays the balanced one, so animations are unchanged.
