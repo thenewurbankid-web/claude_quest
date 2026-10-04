@@ -286,12 +286,23 @@ export class ModelRig {
 
 /** Which clip carries each punch's body motion, and where in the clip the fist lands (measured in dev-model.html). */
 const PUNCH_CLIP = {
-  jab: { clip: 'Punch_Jab', impact: 0.25, side: -1 },
-  cross: { clip: 'Punch_Cross', impact: 0.3, side: 1 },
-  hook: { clip: 'Melee_Hook', impact: 0.425, side: -1 },
-  uppercut: { clip: 'Punch_Cross', impact: 0.3, side: 1 },     // no free uppercut: cross body, IK arm on an upward path
-  body: { clip: 'Melee_Hook', impact: 0.425, side: -1 },        // no free body shot: hook body, IK arm to the ribs
+  jab: { clip: 'Punch_Jab', impact: 0.25, side: -1, as: 'jab' },
+  cross: { clip: 'Punch_Cross', impact: 0.3, side: 1, as: 'cross' },
+  hook: { clip: 'Melee_Hook', impact: 0.425, side: -1, as: 'hook' },
+  uppercut: { clip: 'Punch_Cross', impact: 0.3, side: 1, as: 'uppercut' },     // no free uppercut: cross body, IK arm on an upward path
+  body: { clip: 'Melee_Hook', impact: 0.425, side: -1, as: 'body' },        // no free body shot: hook body, IK arm to the ribs
 };
+// Street strikes (BOX-22) borrow a base punch's clip and IK path; `big` widens the swing and the foot pivot.
+Object.assign(PUNCH_CLIP, {
+  haymaker: { ...PUNCH_CLIP.hook, side: 1, as: 'hook', big: 1.6 },
+  overhand: { ...PUNCH_CLIP.hook, side: 1, as: 'hook', big: 1.25 },
+  check_hook: { ...PUNCH_CLIP.hook, as: 'hook', big: 0.7 },
+  hook_body: { ...PUNCH_CLIP.body, as: 'body' },
+  shovel: { ...PUNCH_CLIP.body, side: 1, as: 'body' },
+  short_upper: { ...PUNCH_CLIP.uppercut, side: -1, as: 'uppercut', big: 0.7 },
+  cheap_shot: { ...PUNCH_CLIP.jab, as: 'jab', big: 0.6 },
+});
+
 const STANCE = { clip: 'Punch_Jab', t: 0 };                       // the jab's first frame is a good orthodox guard
 // Guard hand positions relative to the head bone, in the boxer's own frame (x right, y up, z forward), measured on the
 // stance frame. Relative to the head so the guard follows the body down when a clip crouches.
@@ -653,7 +664,7 @@ export class ModelBoxer {
     if (theirs) {
       const k = clamp((tick - theirs.launchTick) / Math.max(1, theirs.arriveTick - theirs.launchTick), 0, 1);
       if (theirs.outcome === 'blocked') guardUp = smooth(clamp((k - 0.25) / 0.5, 0, 1));
-      else if (theirs.outcome === 'slipped') { slip = smooth(clamp((k - 0.3) / 0.6, 0, 1)); slipSide = PUNCH_CLIP[theirs.type].side > 0 ? 1 : -1; }
+      else if (theirs.outcome === 'slipped') { slip = smooth(clamp((k - 0.3) / 0.6, 0, 1)); slipSide = (PUNCH_CLIP[theirs.type]?.side ?? 1) > 0 ? 1 : -1; }
       else guardUp = 0.25 * k;
     }
 
@@ -669,7 +680,16 @@ export class ModelBoxer {
       const e = punch.back > 0 ? 1 - punch.back : smooth(punch.k);
       lunge = e * clamp(gap - 1.0, 0, 0.22);
     }
-    if (punch?.type === 'body') layers.push({ clip: 'Crouch_Idle_Loop', t: 0.2, w: 0.35 * (punch.back > 0 ? 1 - punch.back : smooth(punch.k)) });
+    if (pc?.as === 'body') layers.push({ clip: 'Crouch_Idle_Loop', t: 0.2, w: 0.35 * (punch.back > 0 ? 1 - punch.back : smooth(punch.k)) });
+    // Street moves from the sim's snapshot (render-only): smoothed weights so shell, clinch and taunt ease in and out.
+    const ac = me.action && !pc ? me.action : null;
+    const aw = this.aw ??= { shell: 0, clinch: 0, taunt: 0 }, ak = 1 - Math.exp(-dt * 10);
+    aw.shell += ((me.shell ? 1 : 0) - aw.shell) * ak;
+    aw.clinch += ((me.clinch ? 1 : 0) - aw.clinch) * ak;
+    aw.taunt += ((ac?.kind === 'taunt' ? 1 : 0) - aw.taunt) * ak;
+    const quick = ac && ['shove', 'push_off', 'feint'].includes(ac.kind) ? Math.sin(Math.PI * clamp((tick - ac.startTick) / Math.max(1, ac.endTick - ac.startTick), 0, 1)) : 0;
+    const shoving = ac && (ac.kind === 'shove' || ac.kind === 'push_off') ? quick : 0, feinting = ac?.kind === 'feint' ? quick : 0;
+    lunge += 0.1 * shoving + 0.04 * feinting + 0.08 * aw.clinch;
     let hitW = 0;
     if (this.hitAnim) {
       const clip = rig.clips[this.hitAnim.clip], u = (nowS - this.hitAnim.start) / clip.seconds;
@@ -689,14 +709,14 @@ export class ModelBoxer {
     // Punch weight transfer (render-only): the punching-side foot pivots toes toward the target, weight rocks onto the
     // lead leg, and body shots drop the knees.
     const pe = pc ? (punch.back > 0 ? 1 - punch.back : smooth(punch.k)) : 0;
-    const pivot = pc && punch.type !== 'jab' ? { foot: pc.side > 0 ? 'r' : 'l', yaw: -pc.side * 0.7 * pe } : null;
+    const pivot = pc && pc.as !== 'jab' ? { foot: pc.side > 0 ? 'r' : 'l', yaw: -pc.side * 0.7 * (pc.big ?? 1) * pe } : null;
     const rock = pc ? mul(r, -0.012 * pe * (pc.side > 0 ? 1 : -1)) : v(0, 0, 0);
     // Street looseness: the upper body sways and the guard bobs, wider as the boxer tires.
     const loose = 1 + 1.5 * tired, calm = 1 - clamp(speed / 1.2, 0, 1);
     const sway = add(mul(r, 0.016 * loose * calm * Math.sin(time * 2.1)), mul(f, 0.01 * loose * calm * Math.sin(time * 1.6 + 1)));
     // On the balls of the feet: a small bounce in the guard, a dip as each step lands. Render-only.
     const bob = -KNEE_BEND + (1 - clamp(speed / 1.2, 0, 1)) * 0.011 * Math.sin(time * 15) * (1 - 0.6 * tired) + (this.fwStepping ? -0.012 : 0)
-      - (punch?.type === 'body' ? 0.05 * pe : 0);
+      - (pc?.as === 'body' ? 0.05 * pe : 0) - 0.05 * aw.shell - 0.02 * aw.taunt;
     // Start/stop/turn: the body leans into a change of velocity (smoothed acceleration), so a start drives forward and a stop rocks back.
     const lv = this.lastVel ?? { x: me.vx, z: me.vy };
     const k = 1 - Math.exp(-dt * 8), ax = (me.vx - lv.x) / Math.max(dt, 1e-3), az = (me.vy - lv.z) / Math.max(dt, 1e-3);
@@ -723,19 +743,30 @@ export class ModelBoxer {
           z: (g.z - 0.06 * guardUp) * (0.55 + 0.45 * clamp((gap - 0.55) / 0.5, 0, 1)),
         });
         let target = guard, w = (1 - 0.6 * hitW) * ikW;
+        if (!pc) {
+          const chest = add(add(oppRoot, mul(UPV, 1.3)), mul(f, -0.2));
+          const cover = local({ x: side * 0.07, y: 0.03, z: 0.14 });
+          const open = local({ x: side * 0.4, y: -0.02, z: 0.05 });
+          const wrap = add(add(add(oppRoot, mul(UPV, 1.38)), mul(f, 0.1)), mul(r, side * 0.22));
+          target = lerpV(target, cover, aw.shell);
+          target = lerpV(target, open, aw.taunt);
+          target = lerpV(target, wrap, aw.clinch);
+          target = lerpV(target, chest, shoving);
+          if (side === -1 && feinting) target = add(target, add(mul(f, 0.18 * feinting), mul(UPV, 0.05 * feinting)));
+        }
         if (pc && pc.side === side) {
           const e = punch.back > 0 ? 1 - smooth(punch.back) : smooth(clamp((punch.k - 0.25) / 0.75, 0, 1));
           const head = add(add(oppRoot, mul(UPV, 1.48)), mul(f, -0.1));
           const ribs = add(add(oppRoot, mul(UPV, 1.08)), mul(f, -0.12));
-          if (punch.type === 'uppercut') {
+          if (pc.as === 'uppercut') {
             const ctrl = add(add(rig.pos(ARM[side].upper), mul(f, 0.1)), mul(UPV, -0.4));
             target = bez2(guard, ctrl, add(head, mul(UPV, -0.1)), e);
-          } else if (punch.type === 'body') {
+          } else if (pc.as === 'body') {
             const ctrl = add(add(rig.pos(ARM[side].upper), mul(r, side * 0.3)), mul(UPV, -0.3));
             target = bez2(guard, ctrl, ribs, e);
-          } else if (punch.type === 'hook') {
+          } else if (pc.as === 'hook') {
             // Round the side with the elbow up and out, into the side of the head.
-            const ctrl = add(add(rig.pos(ARM[side].upper), mul(r, side * 0.45 * (1 + 0.5 * tired))), mul(f, 0.2));
+            const ctrl = add(add(rig.pos(ARM[side].upper), mul(r, side * 0.45 * (pc.big ?? 1) * (1 + 0.5 * tired))), mul(f, 0.2));
             target = bez2(guard, ctrl, add(head, mul(r, side * 0.08)), e);
             rig.reach(side, target, add(mul(r, side), mul(UPV, 0.8)), ikW);
             continue;

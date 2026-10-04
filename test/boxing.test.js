@@ -354,6 +354,35 @@ test('punches pivot the punching-side foot without sliding it, and a tired boxer
   }
 });
 
+test('every street punch and move poses finite bones, incl. as the opponent slips it, and planted feet hold', async () => {
+  const { ModelBoxer, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  const { PUNCHES } = await import('../public/boxing/physics-engine.js');
+  const { B, scene, person } = await personWorld();
+  const boxer = new ModelBoxer(B, scene, person, 'red', SHADOW, { glove: '#c9343a', trunks: '#9e1c24', wraps: true, outfit: PHOTO_OUTFITS.red });
+  const dt = 1 / 60;
+  const finite = () => { for (const k of ['Head', 'hand_l', 'hand_r', 'foot_l', 'foot_r']) { const p = boxer.rig.pos(k); assert.ok([p.x, p.y, p.z].every(Number.isFinite), k); } };
+  for (const type of Object.keys(PUNCHES)) {
+    let worst = 0;
+    for (let i = 0; i < 80; i++) {
+      const k = i % 40, ap = k < 20 ? { type, launchTick: i - k, arriveTick: i - k + 20, outcome: 'slipped' } : null;
+      boxer.pose({ x: 0, y: 0, vx: 0, vy: 0, gasRatio: 0.6, activePunch: ap }, { x: 0, y: 1.2, activePunch: ap }, i, i * dt * 1000, dt, i * dt);
+      if (i > 10) worst = Math.max(worst, boxer.footSlip.l, boxer.footSlip.r);
+    }
+    finite();
+    assert.ok(worst < 0.0005, `${type}: planted foot slipped ${(worst * 100).toFixed(2)} cm`);
+  }
+  for (const kind of ['shove', 'push_off', 'feint', 'taunt', 'shell', 'clinch', 'pivot', 'ref_break']) {
+    let worst = 0;
+    for (let i = 0; i < 90; i++) {
+      const me = { x: 0, y: 0, vx: 0, vy: 0, gasRatio: 1, activePunch: null, action: { kind, startTick: 0, endTick: 90 }, shell: kind === 'shell', clinch: kind === 'clinch' };
+      boxer.pose(me, { x: 0, y: kind === 'clinch' ? 0.7 : 1.2, activePunch: null }, i, i * dt * 1000, dt, i * dt);
+      if (i > 10) worst = Math.max(worst, boxer.footSlip.l, boxer.footSlip.r);
+    }
+    finite();
+    assert.ok(worst < 0.0005, `${kind}: planted foot slipped ${(worst * 100).toFixed(2)} cm`);
+  }
+});
+
 test('boxer assets fall back to the Quaternius boxer when person.glb will not load', async () => {
   const { loadBoxerAssets } = await import('../public/boxing/boxer-model.js');
   const asked = [];
