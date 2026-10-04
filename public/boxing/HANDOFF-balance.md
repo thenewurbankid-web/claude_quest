@@ -154,3 +154,5 @@ Overall KO rate .16 -> .21 (band .10-.25). Recover stops being a dead tactic (.0
 
 ### Untested
 Anything in a browser; other stat mixes; sanctioned ruleset balance; the `--moves` rates (clinch/shove counts) before/after.
+
+Shipped: claude-quest main 369e8c1 (rebased on 93047f0, 335 tests pass), bring-the-ruckus 1f70c6b (live: https://thenewurbankid-web.github.io/bring-the-ruckus/). demo-e2e not run.
