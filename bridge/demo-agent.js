@@ -21,5 +21,5 @@ c.on('message', (_t, buf) => {
   console.log(`offered: ${offer.title}`);
   const report = (kind, summary, extra = {}) => c.publish(t('report'), JSON.stringify({ v: 1, queueId: offer.queueId, kind, summary, ...extra }), { qos: 1 });
   report('progress', 'Started the demo work', { branch: offer.branch });
-  setTimeout(() => { report('done', 'Finished the demo work', { branch: offer.branch }); console.log('reported done'); setTimeout(() => c.end(), 500); }, 1500);
+  setTimeout(() => { report('done', 'Finished the demo work', { branch: offer.branch }); console.log('reported done'); setTimeout(() => c.end(), 500); }, Number(process.env.DEMO_DELAY_MS) || 15000);
 });
