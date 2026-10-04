@@ -2,10 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { FighterModel, CombatSimulation, computePunch, mulberry32, PUNCHES, TACTICS, RING_HALF_M } from '../public/boxing/physics-engine.js';
+import { FighterModel, CombatSimulation, computePunch, mulberry32, PUNCHES, TACTICS, RULESETS, RING_HALF_M, TICK_MS, damageDivisorFor } from '../public/boxing/physics-engine.js';
 import { buildFightLogRow, rankPrecedents, similarity, profileTags, successScore, toLLMContext } from '../public/boxing/game-db.js';
 
-const PINNED_SEED_11 = '23f33a511243c1efa74eb1ebc68d7466f6605a642f3aa073e0f3c94470bbce02'; // from the engine before contact data was added;
+const PINNED_SEED_11 = '70cbbcde181741d10ecc1a40c0a3165752fdca008b5942dcdb466dd452c177c2'; // re-pinned for BOX-22 (street moveset changed the sim);
 const AVG = { speed: 50, power: 50, stamina: 50, ringIQ: 50 };
 const fighter = (corner, stats = AVG) => new FighterModel({ corner, name: corner, stats });
 const fight = (seed, red = AVG, blue = AVG, tactics = { red: 'pressure', blue: 'outbox' }) => {
@@ -320,7 +320,9 @@ test('pressure crowds a defender, but not one who is also on pressure', () => {
     const b = mk(defKey); r.pos = { x: -0.45, y: 0 }; b.pos = { x: 0.45, y: 0 };
     return computePunch({ attacker: r, defender: b, type: 'jab', tick: 0, rng: mulberry32(3) }).reaction.windowMs;
   };
-  assert.equal(run('outbox') - run('pressure'), TACTICS.pressure.crowdMs);
+  // The defender's own guard style (defendMs) also shifts the window; crowd is the rest.
+  const dm = (k) => TACTICS[k].defendMs || 0;
+  assert.ok(Math.abs(run('outbox') - run('pressure') - (TACTICS.pressure.crowdMs + dm('outbox') - dm('pressure'))) < 1e-9);
 });
 
 // ─── Game flow (flow.js): screens, progression, unlocks, scorecards, corner tips, settings ───
@@ -573,7 +575,7 @@ test('fighters stay inside the ropes and never overlap, tick by tick, across tac
 test('the sim output is pinned: contact data is read-only and no listener changes a result', () => {
   const run = (listen) => {
     const sim = new CombatSimulation({ seed: 11, rounds: 3, red: fighter('red', { ...AVG, speed: 70 }), blue: fighter('blue', { ...AVG, power: 70 }) });
-    if (listen) sim.on('impact', (r) => { r.contact.x = 99; r.energy01 = -1; });
+    if (listen) { sim.on('impact', (r) => { r.contact.x = 99; r.energy01 = -1; }); sim.on('action', (e) => { e.contact.x = 99; e.energy01 = -1; }); }
     const pos = [];
     while (sim.phase !== 'fight_over') { sim.startRound({ red: 'pressure', blue: 'outbox' }); while (sim.phase === 'running') { sim.step(); pos.push(sim.fighters.red.pos.x, sim.fighters.blue.pos.y); } }
     return JSON.stringify([sim.rounds, sim.result, pos]);
@@ -732,4 +734,281 @@ test('2D: looks and post profile: filmic default, camcorder for replay/intro, lo
   const low = postProfile('camcorder', { lowEnd: true });
   assert.deepEqual([low.bloom, low.grain, low.dof, low.wobble], [0, 0, false, 0]);
   assert.deepEqual(timecode('1994-07-04', 3, 75400), { date: '1994-07-04', clock: 'R3 01:15' });
+
+// ─── Street moveset (BOX-22) ────────────────────────────────────────────────
+
+const STREET_FAMILIES = ['jab', 'cross', 'hook', 'uppercut', 'body'];
+const setup = (ruleset = 'street', seed = 5, tactics = { red: 'outbox', blue: 'outbox' }) => {
+  const sim = new CombatSimulation({ seed, rounds: 3, roundSeconds: 35, ruleset, red: fighter('red'), blue: fighter('blue') });
+  sim.startRound(tactics);
+  sim.fighters.red.pos = { x: -0.35, y: 0 }; sim.fighters.blue.pos = { x: 0.35, y: 0 };
+  const actions = [], hits = [];
+  sim.on('action', (e) => actions.push(e)); sim.on('impact', (e) => hits.push(e));
+  const steps = (n) => { for (let i = 0; i < n && sim.phase === 'running'; i++) sim.step(); };
+  const ms = (m) => Math.ceil(m / TICK_MS);
+  return { sim, red: sim.fighters.red, blue: sim.fighters.blue, actions, hits, steps, ms };
+};
+// Every fight of a tactic pair over several seeds, collecting impacts and actions.
+const collect = (tactics, { ruleset = 'street', seeds = 8, seconds = 35 } = {}) => {
+  const hits = [], actions = [], sims = [];
+  for (let seed = 1; seed <= seeds; seed++) {
+    const sim = new CombatSimulation({ seed, rounds: 3, roundSeconds: seconds, ruleset, red: fighter('red'), blue: fighter('blue') });
+    sim.on('impact', (e) => hits.push({ ...e, seed })); sim.on('action', (e) => actions.push({ ...e, seed }));
+    while (sim.phase !== 'fight_over') { sim.startRound(tactics); sim.runRoundToEnd(); }
+    sims.push(sim);
+  }
+  return { hits, actions, sims };
+};
+
+test('street strikes: each is a legacy-shaped punch with a hand, and a haymaker is slow, heavy and easy to read', () => {
+  const street = ['haymaker', 'overhand', 'hook_body', 'shovel', 'short_upper', 'check_hook', 'cheap_shot'];
+  for (const k of [...Object.keys(PUNCHES)]) {
+    assert.ok(STREET_FAMILIES.includes(PUNCHES[k].family), k);
+    assert.ok(['lead', 'rear'].includes(PUNCHES[k].hand), k);
+  }
+  for (const k of street) assert.ok(PUNCHES[k], k);
+  const throwIt = (type) => { const r = fighter('red'), b = fighter('blue'); r.pos = { x: -0.45, y: 0 }; b.pos = { x: 0.45, y: 0 }; return computePunch({ attacker: r, defender: b, type, tick: 0, rng: mulberry32(2) }); };
+  const hay = throwIt('haymaker'), cross = throwIt('cross'), jab = throwIt('jab');
+  assert.equal(hay.type, 'hook'); assert.equal(hay.move, 'haymaker'); assert.equal(hay.hand, 'rear');
+  assert.ok(hay.telegraphMs > 2 * jab.telegraphMs, 'big wind-up');
+  assert.ok(hay.kineticJoules > 1.3 * cross.kineticJoules * 0.9 && hay.effectiveMassKg > cross.effectiveMassKg);
+  assert.equal(throwIt('hook_body').target, 'body'); assert.equal(throwIt('shovel').target, 'body');
+  assert.ok(PUNCHES.short_upper.reachFactor < PUNCHES.uppercut.reachFactor, 'short upper is the close one');
+  assert.ok(PUNCHES.check_hook.counterOnly && PUNCHES.cheap_shot.afterBreak && PUNCHES.cheap_shot.foul);
+});
+
+test('street strikes show up in fights as impacts with move, hand, target, energy and contact', () => {
+  const seen = new Set();
+  for (const t of [{ red: 'brawl', blue: 'dirty_boxing' }, { red: 'pressure', blue: 'body_attack' }, { red: 'outbox', blue: 'counter' }]) {
+    for (const h of collect(t, { seeds: 6 }).hits) {
+      seen.add(h.move);
+      assert.equal(h.type, PUNCHES[h.move].family); assert.equal(h.hand, PUNCHES[h.move].hand); assert.equal(h.target, PUNCHES[h.move].target);
+      assert.ok(h.contact && typeof h.contact.x === 'number' && h.energy01 >= 0 && h.energy01 <= 1);
+    }
+  }
+  for (const k of ['haymaker', 'overhand', 'hook_body', 'shovel', 'short_upper', 'jab', 'cross', 'hook', 'body']) assert.ok(seen.has(k), `${k} thrown`);
+});
+
+test('double jab and flurry: chained punches carry combo id, index and length, 2 for the double jab and 2-4 for a flurry', () => {
+  const { hits } = collect({ red: 'outbox', blue: 'brawl' }, { seeds: 10 });
+  const combos = new Map();
+  for (const h of hits) if (h.combo) { const key = `${h.seed}:${h.attacker}:${h.combo.id}`; (combos.get(key) ?? combos.set(key, []).get(key)).push(h); }
+  assert.ok(combos.size > 5);
+  let doubles = 0, flurries = 0;
+  for (const list of combos.values()) {
+    const L = list[0].combo.length;
+    assert.ok(L >= 2 && L <= 4);
+    assert.ok(list.every((h, i) => h.combo.index === i && h.combo.length === L && h.attacker === list[0].attacker));
+    assert.ok(list.every((h, i) => i === 0 || h.launchTick >= list[i - 1].arriveTick), 'a chain throws one punch after the other');
+    if (L === 2 && list.every((h) => h.move === 'jab')) doubles++;
+    if (L > 2) flurries++;
+  }
+  assert.ok(doubles > 0 && flurries > 0, `doubles ${doubles}, flurries ${flurries}`);
+});
+
+test('check hook is only ever thrown off a slip', () => {
+  const { hits } = collect({ red: 'counter', blue: 'brawl' }, { seeds: 14 });
+  const ch = hits.filter((h) => h.move === 'check_hook');
+  assert.ok(ch.length > 0);
+  assert.ok(ch.every((h) => h.isCounter));
+});
+
+test('clinch: both fighters lock up, forearm frame drains the other, and street ends with a push-off and a punch', () => {
+  const { sim, red, blue, actions, hits, steps, ms } = setup('street');
+  sim._startClinch(red, blue);
+  assert.deepEqual(actions.map((a) => a.kind), ['clinch', 'forearm_frame']);
+  assert.ok(red.clinch && blue.clinch && red.clinch.initiator && !blue.clinch.initiator);
+  const before = { r: { ...red.pos }, b: { ...blue.pos }, gas: blue.gas };
+  steps(ms(500));
+  assert.deepEqual(red.pos, before.r); assert.deepEqual(blue.pos, before.b);
+  assert.ok(sim.snapshot().red.clinch);
+  assert.ok(red.gas > 0 && blue.gas < before.gas + 5, 'the frame wears the other fighter down');
+  steps(ms(1900));
+  assert.ok(!red.clinch && !blue.clinch);
+  const kinds = actions.map((a) => a.kind);
+  assert.ok(kinds.includes('push_off') && !kinds.includes('ref_break'));
+  const push = actions.find((a) => a.kind === 'push_off');
+  assert.ok(push.energy01 > 0 && push.target === 'body');
+  // The pusher throws right after (push-off then punch).
+  steps(ms(600));
+  assert.ok(hits.some((h) => h.attacker === push.corner && h.launchTick >= push.tick), 'a punch follows the push-off');
+});
+
+test('clinch under sanctioned rules is shorter and the ref breaks it: no push-off, both step back', () => {
+  const a = setup('street'), b = setup('sanctioned');
+  a.sim._startClinch(a.red, a.blue); b.sim._startClinch(b.red, b.blue);
+  assert.ok(b.red.clinch.endTick < b.sim.tick + 1 + a.ms(RULESETS.sanctioned.clinchMs + 5));
+  assert.ok(a.red.clinch.endTick - a.sim.tick >= a.ms(RULESETS.street.clinchMs) - 1);
+  b.steps(b.ms(1000));
+  const kinds = b.actions.map((x) => x.kind);
+  assert.ok(kinds.includes('ref_break') && !kinds.includes('push_off'));
+  assert.ok(b.red.push || b.sim.tick > 0);
+  assert.ok(!b.red.clinch);
+});
+
+test('shove: street only; it pushes the other fighter back, staggers them and costs the shover time', () => {
+  const { sim, red, blue, actions, steps, ms } = setup('street');
+  const gap0 = blue.pos.x - red.pos.x;
+  blue.queue = ['jab'];
+  sim._shove(red, blue);
+  const ev = actions[0];
+  assert.equal(ev.kind, 'shove'); assert.equal(ev.target, 'body'); assert.ok(ev.energy01 > 0.2 && ev.contact.region === 'body');
+  assert.ok(blue.committedUntilTick > sim.tick && red.committedUntilTick > sim.tick && blue.queue.length === 0);
+  steps(ms(200));
+  assert.ok(blue.pos.x - red.pos.x > gap0 + 0.3, 'pushed back');
+  // Sanctioned fights never choose a shove; street fights do.
+  const sanctioned = collect({ red: 'pressure', blue: 'dirty_boxing' }, { ruleset: 'sanctioned', seeds: 6 }).actions;
+  const street = collect({ red: 'pressure', blue: 'dirty_boxing' }, { ruleset: 'street', seeds: 6 }).actions;
+  assert.equal(sanctioned.filter((e) => e.kind === 'shove').length, 0);
+  assert.ok(street.filter((e) => e.kind === 'shove').length > 3);
+});
+
+test('cheap shot: free in the street, a one-point foul under sanctioned rules, and a miss leaves the thrower open', () => {
+  const st = setup('street'), sa = setup('sanctioned');
+  st.sim._foul(st.red, st.blue, 'cheap_shot'); sa.sim._foul(sa.red, sa.blue, 'cheap_shot');
+  assert.equal(st.actions.length, 0);
+  assert.equal(sa.actions[0].kind, 'foul'); assert.equal(sa.actions[0].points, 1);
+  sa.sim.runRoundToEnd();
+  assert.equal(sa.sim.rounds[0].fouls.red, 1);
+  assert.ok(sa.sim.rounds[0].cards.red <= 9 && sa.sim.rounds[0].cards.red + sa.sim.rounds[0].cards.blue < 20);
+  assert.equal(st.sim.runRoundToEnd().fouls.red, 0);
+  // It is rare, and the thrower is exposed after a miss.
+  const { hits } = collect({ red: 'dirty_boxing', blue: 'brawl' }, { seeds: 12 });
+  const cheap = hits.filter((h) => h.move === 'cheap_shot');
+  const all = hits.length;
+  assert.ok(cheap.length > 0 && cheap.length < all * 0.03, `${cheap.length} of ${all}`);
+  assert.ok(cheap.every((h) => h.target === 'body'));
+  const x = setup('street'); x.red.tactic = TACTICS.dirty_boxing;
+  x.sim._launch(x.red, x.blue, 'cheap_shot', false);
+  const p = x.sim.pending[0]; p.outcome = 'slipped'; p.transferredJoules = 0;
+  x.sim.tick = p.arriveTick; x.sim._resolveArrivals();
+  assert.ok(x.red.exposedUntilTick > x.sim.tick && x.blue.counterUntilTick > x.sim.tick);
+});
+
+test('feint: shoulder and step both happen, and the follow-up punch is harder to read', () => {
+  const { sim, red, blue, actions } = setup('street');
+  const kinds = new Set();
+  for (let i = 0; i < 40; i++) { red.feintUntilTick = 0; sim._feint(red, blue); kinds.add(actions.at(-1).type); }
+  assert.deepEqual([...kinds].sort(), ['shoulder', 'step']);
+  assert.ok(actions.every((a) => a.kind === 'feint' && a.hand === 'lead'));
+  const win = (fe) => { const r = fighter('red'), b = fighter('blue'); r.pos = { x: -0.45, y: 0 }; b.pos = { x: 0.45, y: 0 }; r.feintUntilTick = fe; return computePunch({ attacker: r, defender: b, type: 'cross', tick: 0, rng: mulberry32(9) }).reaction.windowMs; };
+  const gain = win(100) - win(0);
+  assert.ok(gain > 10 && gain < 40, `feint adds ${gain} ms`);
+  assert.ok(win(100) - win(0) < win(100) + 1); // sanity
+  const smart = (iq) => { const r = fighter('red'), b = fighter('blue', { ...AVG, ringIQ: iq }); r.pos = { x: -0.45, y: 0 }; b.pos = { x: 0.45, y: 0 }; const w = (f) => { r.feintUntilTick = f; return computePunch({ attacker: r, defender: b, type: 'cross', tick: 0, rng: mulberry32(9) }).reaction.windowMs; }; return w(100) - w(0); };
+  assert.ok(smart(90) < smart(10), 'high Ring IQ reads a feint better');
+});
+
+test('taunt drains the other fighter\'s composure but leaves the taunter open; composure comes back', () => {
+  const { sim, red, blue, actions, steps, ms } = setup('street');
+  sim._taunt(red, blue);
+  const ev = actions[0];
+  assert.equal(ev.kind, 'taunt'); assert.ok(blue.composure < 100 && ev.energy01 > 0);
+  const win = (def) => { const r = fighter('red'); r.pos = { x: -0.45, y: 0 }; def.pos = { x: 0.45, y: 0 }; return computePunch({ attacker: r, defender: def, type: 'jab', tick: 0, rng: mulberry32(4) }).reaction.windowMs; };
+  const calm = fighter('blue'), rattled = fighter('blue'); rattled.composure = 60;
+  assert.ok(win(rattled) > win(calm), 'a rattled fighter reads slower');
+  const showboat = fighter('blue'); showboat.exposedUntilTick = 10;
+  assert.ok(Math.abs(win(showboat) - win(calm) - 45) < 1e-9, 'a showboating fighter is open');
+  const low = blue.composure; steps(ms(10000));
+  assert.ok(blue.composure > low);
+  assert.ok(red.exposedUntilTick > 0);
+});
+
+test('shell up: covered-up fighters take half damage from landed shots, and only the ropes bring it on', () => {
+  const dmg = (shell) => {
+    const { sim, red, blue } = setup('street');
+    for (let seed = 1; seed < 60; seed++) {
+      const r = fighter('red'), b = fighter('blue'); r.pos = { x: -0.4, y: 0 }; b.pos = { x: 0.4, y: 0 };
+      const p = computePunch({ attacker: r, defender: b, type: 'cross', tick: sim.tick, rng: mulberry32(seed) });
+      if (p.outcome !== 'landed') continue;
+      sim.pending.push({ ...p, attacker: 'red', defender: 'blue', arriveTick: sim.tick });
+      if (shell) blue.shellUntilTick = sim.tick + 10;
+      sim._resolveArrivals();
+      return 100 - blue.health;
+    }
+  };
+  assert.ok(Math.abs(dmg(true) / dmg(false) - 0.5) < 1e-9);
+  const { sim, red, blue, actions } = setup('street');
+  sim._shell(blue, red);
+  assert.equal(actions[0].kind, 'shell'); assert.equal(actions[0].contact.region, 'guard'); assert.ok(sim.snapshot().blue.shell);
+  const { actions: acts, sims } = collect({ red: 'counter', blue: 'counter' }, { seeds: 6 });
+  assert.ok(acts.some((a) => a.kind === 'shell'));
+});
+
+test('pivot out: from the ropes, a fighter slides sideways and ends nearer the middle', () => {
+  const { sim, red, blue, actions, steps, ms } = setup('street');
+  red.pos = { x: -2.7, y: 0.1 }; blue.pos = { x: -2.0, y: 0.9 };
+  const d0 = Math.hypot(red.pos.x, red.pos.y);
+  sim._pivot(red, blue);
+  assert.equal(actions[0].kind, 'pivot');
+  steps(ms(260));
+  assert.ok(Math.hypot(red.pos.x + 2.7, red.pos.y - 0.1) > 0.25, 'moved');
+  const ropeD = (f) => RING_HALF_M - Math.max(Math.abs(f.pos.x), Math.abs(f.pos.y));
+  assert.ok(Math.hypot(red.pos.x, red.pos.y) < d0 - 0.1, 'ends nearer the middle'); assert.ok(ropeD(red) > 0.3);
+});
+
+test('circle off is reported as an action with its direction; slips, rolls, parries and shells label every impact', () => {
+  const { actions, hits } = collect({ red: 'outbox', blue: 'counter' }, { seeds: 6 });
+  const circ = actions.filter((a) => a.kind === 'circle_off');
+  assert.ok(circ.length > 3 && circ.every((a) => a.dir === 1 || a.dir === -1));
+  const all = hits.concat(collect({ red: 'brawl', blue: 'pressure' }, { seeds: 6 }).hits);
+  const labels = new Set();
+  for (const h of all) {
+    if (h.outcome === 'slipped') assert.ok(['slip', 'roll', 'pull_back', 'pivot'].includes(h.defense), h.defense);
+    else if (h.outcome === 'blocked') assert.ok(['parry', 'block', 'shell'].includes(h.defense), h.defense);
+    else assert.ok(h.defense === null || h.defense === 'shell');
+    if (h.outcome === 'slipped') assert.equal(h.defense, h.type === 'jab' || h.type === 'cross' ? 'slip' : h.type === 'hook' ? 'roll' : h.type === 'uppercut' ? 'pull_back' : 'pivot');
+    if (h.defense) labels.add(h.defense);
+  }
+  for (const k of ['slip', 'roll', 'parry', 'block']) assert.ok(labels.has(k), k);
+});
+
+test('every action event has kind, type, corner, hand, target, energy and a contact point', () => {
+  const actions = [['dirty_boxing', 'brawl'], ['brawl', 'outbox'], ['outbox', 'counter'], ['counter', 'recover']].flatMap(([red, blue]) => collect({ red, blue }, { seeds: 6 }).actions);
+  const kinds = new Set(actions.map((a) => a.kind));
+  for (const k of ['clinch', 'forearm_frame', 'shove', 'push_off', 'taunt', 'feint', 'circle_off']) assert.ok(kinds.has(k), k);
+  for (const a of actions) {
+    assert.ok(a.kind && a.type && ['red', 'blue'].includes(a.corner) && ['lead', 'rear', 'both'].includes(a.hand), a.kind);
+    assert.ok(['head', 'body', 'none'].includes(a.target));
+    assert.ok(a.energy01 >= 0 && a.energy01 <= 1);
+    const c = a.contact;
+    assert.ok(['head', 'body', 'guard', 'air'].includes(c.region) && Number.isFinite(c.x) && Number.isFinite(c.y) && Number.isFinite(c.heightM));
+    assert.ok(Math.abs(Math.hypot(c.dirX, c.dirY) - 1) < 1e-9);
+    assert.ok(a.endTick > a.startTick && a.round >= 1);
+  }
+});
+
+test('rulesets: street by default, a bad name falls back to it, sanctioned never shoves; snapshot and round summary say which', () => {
+  assert.equal(new CombatSimulation({ red: fighter('red'), blue: fighter('blue') }).ruleset, 'street');
+  assert.equal(new CombatSimulation({ red: fighter('red'), blue: fighter('blue'), ruleset: 'x' }).ruleset, 'street');
+  assert.deepEqual(Object.keys(RULESETS), ['street', 'sanctioned']);
+  const { sims } = collect({ red: 'pressure', blue: 'dirty_boxing' }, { ruleset: 'sanctioned', seeds: 3 });
+  assert.equal(sims[0].snapshot().ruleset, 'sanctioned');
+  assert.equal(sims[0].rounds[0].ruleset, 'sanctioned');
+  assert.ok(Object.values(sims[0].rounds[0].actions.red).every(Number.isInteger));
+});
+
+test('Brawl throws more haymakers and overhands, Dirty boxing clinches and works close, and both beat nothing by default', () => {
+  assert.ok(TACTICS.brawl && TACTICS.dirty_boxing);
+  const count = (tactics, red, pred) => collect(tactics, { seeds: 8 }).hits.filter((h) => h.attacker === red && pred(h)).length;
+  const big = (h) => h.move === 'haymaker' || h.move === 'overhand';
+  assert.ok(count({ red: 'brawl', blue: 'outbox' }, 'red', big) > 3 * count({ red: 'outbox', blue: 'brawl' }, 'red', big) + 5);
+  const clinches = (t, who) => collect(t, { seeds: 8 }).actions.filter((a) => a.corner === who && a.kind === 'clinch').length;
+  assert.ok(clinches({ red: 'dirty_boxing', blue: 'outbox' }, 'red') > 3 * clinches({ red: 'outbox', blue: 'dirty_boxing' }, 'red') + 3);
+  assert.ok(TACTICS.dirty_boxing.rangeM < TACTICS.pressure.rangeM && TACTICS.brawl.defendMs < 0);
+});
+
+test('street fights are deterministic, actions included, and the short-round damage scale has a KO band', () => {
+  const run = () => { const out = []; const sim = new CombatSimulation({ seed: 21, rounds: 3, roundSeconds: 35, red: fighter('red'), blue: fighter('blue') }); sim.on('action', (e) => out.push(e)); while (sim.phase !== 'fight_over') { sim.startRound({ red: 'dirty_boxing', blue: 'brawl' }); sim.runRoundToEnd(); } return JSON.stringify([out, sim.rounds, sim.result]); };
+  assert.equal(run(), run());
+  assert.equal(damageDivisorFor(180), 475);
+  assert.ok(damageDivisorFor(35) < damageDivisorFor(60) && damageDivisorFor(60) < damageDivisorFor(180) && damageDivisorFor(10) === damageDivisorFor(35));
+  // 3 x 35 s fights, every tactic pair, 4 seeds: some KOs, mostly decisions.
+  const keys = Object.keys(TACTICS); let ko = 0, n = 0;
+  for (const a of keys) for (const b of keys) for (let seed = 1; seed <= 4; seed++) {
+    const sim = new CombatSimulation({ seed, rounds: 3, roundSeconds: 35, red: fighter('red'), blue: fighter('blue') });
+    while (sim.phase !== 'fight_over') { sim.startRound({ red: a, blue: b }); sim.runRoundToEnd(); }
+    n++; if (sim.result.method.startsWith('KO')) ko++;
+  }
+  assert.ok(ko / n >= 0.05 && ko / n <= 0.3, `KO rate ${ko / n}`);
 });
