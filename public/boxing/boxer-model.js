@@ -7,7 +7,8 @@
  * of the clips, two-bone IK on the real arm bones puts the gloves where the pose logic wants them (guard, uppercut,
  * body shot), since the free clips have no boxing guard, uppercut or body shot.
  */
-import { v, add, sub, mul, len, norm, clamp, solveTwoBone } from './pose-math.js';
+import { v, add, sub, mul, dot, len, norm, clamp, solveTwoBone } from './pose-math.js';
+import { Footwork } from './footwork.js';
 
 const LOADER_SRC = 'https://cdn.jsdelivr.net/npm/babylonjs-loaders@7.54.3/babylon.glTF2FileLoader.min.js';
 let loaderPromise = null;
@@ -52,6 +53,11 @@ const CLIP_REST = { root: [0, 0, 0], pelvis: [0, 0.043, 0.949] };
 const ARM = {
   [-1]: { upper: 'upperarm_l', lower: 'lowerarm_l', hand: 'hand_l' },
   [1]: { upper: 'upperarm_r', lower: 'lowerarm_r', hand: 'hand_r' },
+};
+
+const LEG = {
+  [-1]: { upper: 'thigh_l', lower: 'calf_l', foot: 'foot_l', ball: 'ball_l' },
+  [1]: { upper: 'thigh_r', lower: 'calf_r', foot: 'foot_r', ball: 'ball_r' },
 };
 
 /** One instanced character with a clip mixer and arm IK. */
@@ -188,6 +194,19 @@ export class ModelRig {
     const { mid, end } = solveTwoBone(sh, goal, lu, lf, pole);
     this.aim(a.upper, a.lower, mid);
     this.aim(a.lower, a.hand, end);
+  }
+
+  /** Leg IK: puts the ankle of `side` at `ankle` and the toes toward `ball`, the knee bending toward `pole`. */
+  plant(side, ankle, ball, pole, weight = 1) {
+    if (weight <= 0) return;
+    const L = LEG[side];
+    const hip = this.pos(L.upper), kn = this.pos(L.lower), an = this.pos(L.foot), bl = this.pos(L.ball);
+    const lu = len(sub(kn, hip)), lf = len(sub(an, kn));
+    const goal = add(an, mul(sub(ankle, an), weight));
+    const { mid, end } = solveTwoBone(hip, goal, lu, lf, pole);
+    this.aim(L.upper, L.lower, mid);
+    this.aim(L.lower, L.foot, end);
+    this.aim(L.foot, L.ball, add(this.pos(L.foot), mul(sub(add(bl, mul(sub(ball, bl), weight)), this.pos(L.foot)), 1)));
   }
 
   /** Numbers for the dev viewer: height, arm lengths, where the toes point. */
@@ -473,8 +492,40 @@ export class ModelBoxer {
 
     // Render-side state only.
     this.lastPunch = null; this.retract = null;
-    this.hitAnim = null; this.walkPhase = 0;
+    this.hitAnim = null; this.fw = null;
     this.fall = 0; this.knocked = false; this.koStart = null;
+  }
+
+  /** Captures the stance feet (offsets from the body, in its frame) so planting returns to the same stance. */
+  initFootwork(body, f) {
+    const rig = this.rig, r = v(f.z, 0, -f.x);
+    rig.place(body, f); rig.applyLayers([{ ...STANCE, w: 1 }]);
+    const inFrame = (p) => v(dot(sub(p, body), r), p.y, dot(sub(p, body), f));
+    const homes = {}, toes = {}, ankleY = {};
+    for (const [s, side] of [['l', -1], ['r', 1]]) {
+      const a = inFrame(rig.pos(LEG[side].foot)), b = inFrame(rig.pos(LEG[side].ball));
+      homes[s] = { x: a.x, z: a.z }; toes[s] = sub(b, a); ankleY[s] = a.y;
+    }
+    this.fw = new Footwork(homes); this.fwToes = toes; this.fwAnkleY = ankleY;
+  }
+
+  /** Locks planted feet to their world points with leg IK; `footSlip` is how far each planted ankle moved this frame. */
+  plantFeet(body, f, me, w, dt) {
+    const rig = this.rig, r = v(f.z, 0, -f.x);
+    const st = this.fw.update({ x: body.x, z: body.z }, { x: f.x, z: f.z }, { x: me.vx, z: me.vy }, dt);
+    this.fwStepping = !st.l.planted || !st.r.planted;
+    this.footSlip = { l: 0, r: 0 };
+    for (const [s, side] of [['l', -1], ['r', 1]]) {
+      const F = st[s], ff = v(Math.sin(F.yaw), 0, Math.cos(F.yaw)), fr = v(ff.z, 0, -ff.x), t = this.fwToes[s];
+      const ankle = v(F.x, this.fwAnkleY[s] + F.lift, F.z);
+      const toe = add(ankle, add(add(mul(fr, t.x), mul(UPV, t.y - 0.6 * F.lift)), mul(ff, t.z)));
+      const pole = add(mul(f, 1), mul(r, side * 0.25));
+      rig.plant(side, ankle, toe, pole, w);
+      const now = rig.pos(LEG[side].foot);
+      const prev = this.lastAnkle?.[s];
+      if (prev && F.planted && this.wasPlanted?.[s]) this.footSlip[s] = Math.hypot(now.x - prev.x, now.z - prev.z);
+      (this.lastAnkle ??= {})[s] = now; (this.wasPlanted ??= {})[s] = F.planted;
+    }
   }
 
   hit(record) {
@@ -521,10 +572,6 @@ export class ModelBoxer {
     // ── clip layers ──
     const layers = [{ ...STANCE, w: 1 }];
     const speed = Math.hypot(me.vx, me.vy);
-    if (speed > 0.05) {
-      this.walkPhase = (this.walkPhase + (speed * dt) / 1.1) % 1;
-      layers.push({ clip: 'Walk_Loop', t: this.walkPhase, w: clamp(speed / 1.6, 0, 0.45) });
-    }
     let lunge = 0;
     const pc = punch && PUNCH_CLIP[punch.type];
     if (pc) {
@@ -549,8 +596,13 @@ export class ModelBoxer {
     } else this.koStart = null;
 
     const slipOff = mul(r, slipSide * slip * 0.14);
-    rig.place(add(add(root, slipOff), mul(f, lunge)), f);
+    const body = add(add(root, slipOff), mul(f, lunge));
+    if (!this.fw) this.initFootwork(body, f);
+    // On the balls of the feet: a small bounce in the guard, a dip as each step lands. Render-only.
+    const bob = -KNEE_BEND + (1 - clamp(speed / 1.2, 0, 1)) * 0.011 * Math.sin(time * 15) * (1 - 0.6 * tired) + (this.fwStepping ? -0.012 : 0);
+    rig.place(add(body, v(0, bob, 0)), f);
     rig.applyLayers(layers);
+    this.plantFeet(body, f, me, 1 - (this.fall > 0 || this.knocked ? 1 : 0), dt);
 
     // ── arm IK on top of the clips ──
     const ikW = 1 - koW;
@@ -650,6 +702,8 @@ export class ModelBoxer {
 }
 
 const UPV = v(0, 1, 0);
+/** Hips drop this far below the clips' stance so planted legs have slack to reach and a step can land (m). */
+const KNEE_BEND = 0.05;
 /** Where the cap sits relative to the Head bone (metres along the head frame), tuned by eye. */
 const CAP = { up: 0.13, fwd: 0.01, brim: 0.13 };
 const smooth = (t) => t * t * (3 - 2 * t);

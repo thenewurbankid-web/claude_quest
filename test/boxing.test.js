@@ -225,6 +225,30 @@ test('the existing clips pose the person: finite bones, soles on the floor, head
   }
 });
 
+test('planted feet do not slip at walk, shuffle and pivot speeds, and the feet do step', async () => {
+  const { ModelBoxer, PHOTO_OUTFITS } = await import('../public/boxing/boxer-model.js');
+  const { B, scene, person } = await personWorld();
+  const boxer = new ModelBoxer(B, scene, person, 'red', SHADOW, { glove: '#c9343a', trunks: '#9e1c24', wraps: true, outfit: PHOTO_OUTFITS.red });
+  const dt = 1 / 60;
+  // [speed m/s, direction angle, turn rate rad/s] over 3 s each: forward walk, fast shuffle, side step, pivot around the opponent.
+  for (const [speed, dir, turn] of [[0.6, 0, 0], [1.2, 0, 0], [1.8, Math.PI / 2, 0], [0.9, Math.PI / 2, 1.2], [0, 0, 0]]) {
+    const before = boxer.fw?.steps ?? 0;
+    let x = 0, y = 0, a = 0, worst = 0;
+    for (let i = 0; i < 180; i++) {
+      a += turn * dt;
+      const vx = Math.sin(a + dir) * speed, vy = Math.cos(a + dir) * speed;
+      x += vx * dt; y += vy * dt;
+      const opp = { x: x + Math.sin(a) * 1.4, y: y + Math.cos(a) * 1.4, activePunch: null };
+      boxer.pose({ x, y, vx, vy, gasRatio: 1, activePunch: null }, opp, i, i * dt * 1000, dt, i * dt);
+      if (i > 10) worst = Math.max(worst, boxer.footSlip.l, boxer.footSlip.r);
+    }
+    const steps = boxer.fw.steps - before;
+    assert.ok(worst < 0.0005, `speed ${speed} dir ${dir} turn ${turn}: a planted foot slipped ${(worst * 100).toFixed(2)} cm in one frame`);
+    if (speed > 0.5) assert.ok(steps >= 3, `speed ${speed}: only ${steps} steps in 3 s`);
+    if (speed === 0) assert.ok(steps <= 2, `standing still took ${steps} steps`);
+  }
+});
+
 test('boxer assets fall back to the Quaternius boxer when person.glb will not load', async () => {
   const { loadBoxerAssets } = await import('../public/boxing/boxer-model.js');
   const asked = [];
