@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { memoryStore, applyChanges, validateLedger, validateBattle, DEFAULT_RULES } from '../public/quest/contract.js';
 import { answerRiddle, ASK_LATER } from '../public/quest/riddles.js';
 import { bossScore, whyLine, bossSize, hazeLevel, shouldSummon, summon, face, settle, retreat, unresolved,
-  emptyBossPlay, returnNote } from '../public/quest/boss.js';
+  emptyBossPlay, returnNote, headsOf, biteOf, beat, tend } from '../public/quest/boss.js';
 import { playtestRealm } from '../public/quest/playtest.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
@@ -135,4 +135,116 @@ test('a recalled answer takes its hit back', async () => {
   assert.equal(back.play.battle.hp, back.play.battle.maxHp);
   assert.ok(!back.play.battle.resolvedIds.includes('p1'));
   assert.deepEqual(validateBattle(back.play.battle), []);
+});
+
+// ---------- heads and the Lantern (PLAN-fight.md) ----------
+const resolveAll = async (l, ids) => {
+  for (const id of ids) l = await apply(l, answerRiddle(l, id, { text: ASK_LATER, by: 'player' }, T0));
+  return l;
+};
+
+test('heads: one per Work with its stuck Keeper, kind from why it is heavy, and a full Lantern', () => {
+  const b = summon(realm(), emptyBossPlay(), T0).play.battle;
+  assert.deepEqual(validateBattle(b), []);
+  const kinds = Object.fromEntries(b.heads.map(h => [h.riddleIds.join(), [h.kind, h.bite]]));
+  assert.deepEqual(kinds, { p1: ['snap', 1], p2: ['dim', 2], p3: ['dim', 3] });
+  assert.ok(b.heads.every(h => h.keeper)); // each head names who is stuck
+  assert.equal(b.lanternMax, DEFAULT_RULES.lanternBase + 3 * DEFAULT_RULES.lanternPerHead);
+  assert.equal(b.lantern, b.lanternMax);
+  const heavy = summon(realm({ heavier: true }), emptyBossPlay(), T0).play.battle;
+  const hk = Object.fromEntries(heavy.heads.map(h => [h.riddleIds.join(), [h.kind, h.bite]]));
+  assert.deepEqual(hk, { p1: ['echo', 3], p2: ['echo', 2], p3: ['dim', 3] }); // put off before: they echo
+});
+
+test('beat: living heads bite, freed Keepers guard, an echo head bites harder each beat', async () => {
+  let l = realm({ heavier: true });
+  let play = summon(l, emptyBossPlay(), T0).play;
+  l = await resolveAll(l, ['p1']);
+  play = settle(l, face(play, 'p1'), {}, T0).play;
+  assert.equal(headsOf(play.battle).cut.length, 1);
+  let r = beat(play, T0);
+  assert.deepEqual(r.bites.map(x => [x.kind, x.bite]), [['dim', 3], ['echo', 2]]);
+  assert.equal(r.guarded, DEFAULT_RULES.guardBlock);
+  assert.equal(r.play.battle.lantern, play.battle.lantern - (5 - DEFAULT_RULES.guardBlock));
+  const after = Object.fromEntries(headsOf(r.play.battle).living.map(h => [h.kind, biteOf(h)]));
+  assert.deepEqual(after, { dim: 3, echo: 3 }); // the echo grows, the dim one doesn't
+  assert.deepEqual(validateBattle(r.play.battle), []);
+});
+
+test('beat: only while fighting, never during a question or the Lodge', () => {
+  const { play } = summon(realm(), emptyBossPlay(), T0);
+  assert.throws(() => beat(face(play, 'p1'), T0));
+  assert.throws(() => beat(face(play, 'p2'), T0));
+});
+
+test('an empty Lantern pushes you back: answers kept, no strength penalty, a recalled answer grows its head back', async () => {
+  let l = realm();
+  let play = summon(l, emptyBossPlay(), T0).play;
+  play = { ...play, battle: { ...play.battle, lantern: 1 } };
+  const r = beat(play, T0);
+  assert.equal(r.pushed, true);
+  assert.equal(r.play.battle.phase, 'retreated');
+  assert.equal(r.play.retreats, 0);
+  assert.equal(r.events[0].kind, 'boss.pushed');
+  assert.deepEqual(validateBattle(r.play.battle), []);
+  const again = summon(l, r.play, T0).play.battle;
+  assert.equal(again.strength, 1);
+});
+
+test('tend: light goes to the Lantern instead of the next hit, never past full', () => {
+  const { play } = summon(realm(), emptyBossPlay(), T0);
+  const low = { ...play, battle: { ...play.battle, lantern: 3 } };
+  assert.equal(tend(low, 1).gained, DEFAULT_RULES.lanternFromLight);
+  assert.equal(tend(play, 1).gained, 0);
+  assert.throws(() => tend(face(play, 'p1'), 1));
+});
+
+test('order matters: cutting the heavy heads first costs less Lantern than leaving them for last', async () => {
+  const run = async order => {
+    let l = realm(), play = summon(l, emptyBossPlay(), T0).play, lost = 0;
+    for (const id of order) {
+      l = await resolveAll(l, [id]);
+      play = settle(l, face(play, id), {}, T0).play;
+      if (play.battle.phase !== 'fighting') break;
+      const r = beat(play, T0);
+      lost += r.lost;
+      play = r.play;
+    }
+    return { lost, phase: play.battle.phase };
+  };
+  const heavyFirst = await run(['p3', 'p2', 'p1']), lightFirst = await run(['p1', 'p2', 'p3']);
+  assert.equal(heavyFirst.phase, 'won');
+  assert.equal(lightFirst.phase, 'won');
+  assert.ok(heavyFirst.lost < lightFirst.lost, JSON.stringify({ heavyFirst, lightFirst }));
+});
+
+test('recalling an answer gives back the Lantern its bite took, as well as the hp', async () => {
+  let l = realm();
+  let play = summon(l, emptyBossPlay(), T0).play;
+  const answered = await resolveAll(l, ['p1']);
+  play = settle(answered, face(play, 'p1'), {}, T0).play;
+  const bit = beat(play, T0, DEFAULT_RULES, ['p1']);
+  assert.ok(bit.lost > 0);
+  const back = settle(l, bit.play, {}, T0); // p1 open again: recalled
+  assert.equal(back.healed[0].lantern, bit.lost);
+  assert.equal(back.play.battle.lantern, back.play.battle.lanternMax);
+  assert.deepEqual(validateBattle(back.play.battle), []);
+});
+
+test('losing is reachable: in the heavier session a careless order is pushed back, a good one wins', async () => {
+  const run = async order => {
+    let l = realm({ heavier: true }), play = summon(l, emptyBossPlay(), T0).play;
+    for (const id of order) {
+      l = await resolveAll(l, [id]);
+      play = settle(l, face(play, id), {}, T0).play;
+      if (play.battle.phase !== 'fighting') break;
+      play = beat(play, T0, DEFAULT_RULES, [id]).play;
+      if (play.battle.phase !== 'fighting') break;
+    }
+    return play.battle;
+  };
+  const careless = await run(['p2', 'p3', 'p1']), good = await run(['p1', 'p2', 'p3']);
+  assert.equal(careless.phase, 'retreated');
+  assert.equal(careless.pushed, true);
+  assert.equal(good.phase, 'won');
 });

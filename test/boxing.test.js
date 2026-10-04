@@ -1,9 +1,11 @@
 // Boxing Manager AI: deterministic physics, the collision rule, telemetry shape, and RAG ranking. Run with: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FighterModel, CombatSimulation, computePunch, mulberry32, PUNCHES, TACTICS } from '../public/boxing/physics-engine.js';
+import { createHash } from 'node:crypto';
+import { FighterModel, CombatSimulation, computePunch, mulberry32, PUNCHES, TACTICS, RING_HALF_M } from '../public/boxing/physics-engine.js';
 import { buildFightLogRow, rankPrecedents, similarity, profileTags, successScore, toLLMContext } from '../public/boxing/game-db.js';
 
+const PINNED_SEED_11 = '23f33a511243c1efa74eb1ebc68d7466f6605a642f3aa073e0f3c94470bbce02'; // from the engine before contact data was added;
 const AVG = { speed: 50, power: 50, stamina: 50, ringIQ: 50 };
 const fighter = (corner, stats = AVG) => new FighterModel({ corner, name: corner, stats });
 const fight = (seed, red = AVG, blue = AVG, tactics = { red: 'pressure', blue: 'outbox' }) => {
@@ -447,4 +449,69 @@ test('trainer tip points at a stat the gym can train, tiredness first', async ()
   assert.match(trainerTip(stats, newCareer(1)), /heavy bag/);
   assert.match(trainerTip(stats, { ...newCareer(1), energy: 5 }), /Rest/);
   assert.match(trainerTip(stats, { ...newCareer(1), injury: 2 }), /hurt/);
+
+});
+test('impact events say where and how hard: contact point, direction, energy01, knockout', () => {
+  const sim = new CombatSimulation({ seed: 3, rounds: 3, red: fighter('red', { ...AVG, power: 90 }), blue: fighter('blue', { ...AVG, power: 20 }) });
+  const hits = [];
+  sim.on('impact', (r) => hits.push(r));
+  while (sim.phase !== 'fight_over') { sim.startRound({ red: 'pressure', blue: 'outbox' }); sim.runRoundToEnd(); }
+  assert.ok(hits.length > 20);
+  for (const r of hits) {
+    const c = r.contact;
+    assert.equal(c.region, r.outcome === 'landed' ? r.target : r.outcome === 'blocked' ? 'guard' : 'air');
+    assert.ok(Math.abs(Math.hypot(c.dirX, c.dirY) - 1) < 1e-9);
+    assert.ok(r.energy01 >= 0 && r.energy01 <= 1);
+    assert.equal(r.energy01 === 0, r.transferredJoules === 0);
+    assert.ok(Math.abs(c.x) <= RING_HALF_M && Math.abs(c.y) <= RING_HALF_M);
+    assert.equal(c.heightM, r.target === 'body' ? 1.15 : 1.6);
+    assert.equal(r.knockout, r.healthAfter[r.defender] <= 0);
+  }
+  const landed = hits.filter((r) => r.outcome === 'landed');
+  const mean = (rs) => rs.reduce((s, r) => s + r.energy01, 0) / rs.length;
+  assert.ok(mean(landed.filter((r) => r.attacker === 'red')) > mean(landed.filter((r) => r.attacker === 'blue')));
+  assert.ok(hits.filter((r) => r.knockout).length <= 1);
+});
+
+test('the contact point sits on the defender surface, on the attacker side', () => {
+  const sim = new CombatSimulation({ seed: 5, rounds: 1, red: fighter('red'), blue: fighter('blue') });
+  const hits = [];
+  sim.on('impact', (r) => { if (r.outcome === 'landed') hits.push({ r, red: { ...sim.fighters.red.pos }, blue: { ...sim.fighters.blue.pos } }); });
+  sim.startRound({ red: 'pressure', blue: 'pressure' }); sim.runRoundToEnd();
+  assert.ok(hits.length > 3);
+  for (const { r, red, blue } of hits) {
+    const [atk, def] = r.attacker === 'red' ? [red, blue] : [blue, red];
+    assert.ok(Math.abs(Math.hypot(r.contact.x - def.x, r.contact.y - def.y) - 0.15) < 1e-9);
+    assert.ok(Math.hypot(r.contact.x - atk.x, r.contact.y - atk.y) < Math.hypot(def.x - atk.x, def.y - atk.y));
+  }
+});
+
+test('fighters stay inside the ropes and never overlap, tick by tick, across tactics and seeds', () => {
+  const lim = RING_HALF_M - 0.25;
+  for (const tactics of [{ red: 'pressure', blue: 'pressure' }, { red: 'pressure', blue: 'outbox' }, { red: 'outbox', blue: 'outbox' }]) {
+    for (let seed = 1; seed <= 6; seed++) {
+      const sim = new CombatSimulation({ seed, rounds: 2, red: fighter('red', { ...AVG, speed: 90 }), blue: fighter('blue', { ...AVG, power: 90 }) });
+      while (sim.phase !== 'fight_over') {
+        sim.startRound(tactics);
+        while (sim.phase === 'running') {
+          sim.step();
+          const { red, blue } = sim.fighters;
+          for (const f of [red, blue]) assert.ok(Math.abs(f.pos.x) <= lim + 1e-9 && Math.abs(f.pos.y) <= lim + 1e-9);
+          assert.ok(Math.hypot(red.pos.x - blue.pos.x, red.pos.y - blue.pos.y) >= 0.25 * 2.2 - 1e-9);
+        }
+      }
+    }
+  }
+});
+
+test('the sim output is pinned: contact data is read-only and no listener changes a result', () => {
+  const run = (listen) => {
+    const sim = new CombatSimulation({ seed: 11, rounds: 3, red: fighter('red', { ...AVG, speed: 70 }), blue: fighter('blue', { ...AVG, power: 70 }) });
+    if (listen) sim.on('impact', (r) => { r.contact.x = 99; r.energy01 = -1; });
+    const pos = [];
+    while (sim.phase !== 'fight_over') { sim.startRound({ red: 'pressure', blue: 'outbox' }); while (sim.phase === 'running') { sim.step(); pos.push(sim.fighters.red.pos.x, sim.fighters.blue.pos.y); } }
+    return JSON.stringify([sim.rounds, sim.result, pos]);
+  };
+  assert.equal(run(false), run(true));
+  assert.equal(createHash('sha256').update(run(false)).digest('hex'), PINNED_SEED_11);
 });

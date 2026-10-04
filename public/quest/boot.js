@@ -9,18 +9,44 @@
 // Gloamwyrm cuts in after a short warning (battle.js). After a fight ends it stays calm for a while, so retreating is a
 // real way out. The fight is play state, kept in localStorage ('quest-play'), never in the ledger.
 // ?playtest (or ?playtest=heavier) swaps in the R2 playtest backlog, after a confirm.
+// R3: Lore quests. Area lore for the player's geohash-4 cell and its neighbours (area-lore.js), or the built-in calendar,
+// becomes game-only Riddles in a Town news March. They are taken on from the hub's notice board ('quest:board'), not
+// carried by Keepers, and never feed the Beacon, the Haze, the boss or the stats.
+// R4: Bring your Keeper. E next to a Keeper with no Riddle ('quest:keeper', { slot }) opens Start work for the ledger
+// Keeper in that slot; the prompt then waits on the /work page (work.html). The Ember meter and the Recall Bell (B)
+// sit in a dock at the bottom left. ?lore=<folder/> reads a lore folder
+// (?lore alone: the sample cell, with &cell=gcpv to stand in it); with no folder yet, only the calendar is posted.
+// R5: Missions. The current mission (play.missions in 'quest-play', checked by playFromSave) follows the ledger: briefing
+// and debrief are spoken by the Work's Keeper, the HUD shows it, the notice board has a Missions tab. Past rules.pressureGate
+// the pressure gate hides lore quests and the lore tab and keeps the player in the old town ('quest:explore'); /work,
+// Riddles, the Lodge, the Recall Bell and saves are never gated. A summoned Keeper joins on its first approved Work.
+// A finished saga opens its Sealed Hall by itself (status.js sealedHalls).
+// CLA-15: Marches as regions. regionsOf (regions.js) turns the ledger into one region per March (or a default set when it
+// has none), sent to the scene as 'quest:regions'; the scene's gates and posts come from it. A post's E ('quest:post')
+// reads its Work aloud as plain text.
 import { openLedger } from './ledger-idb.js';
 import { mountLedgerPanel } from './ledger-panel.js';
 import { mountBeaconHud } from './beacon-hud.js';
+import { mountStatsBoard } from './stats-board.js';
 import { beacon } from './status.js';
-import { applyChanges, DEFAULT_RULES } from './contract.js';
-import { riddleNpcs, riddleContext, tickRiddles, trueSight } from './riddles.js';
+import { applyChanges, DEFAULT_RULES, isGameOnly, playFromSave } from './contract.js';
+import { riddleNpcs, riddleContext, tickRiddles, trueSight, riddleStanding } from './riddles.js';
 import { mountConversation } from './conversation.js';
 import { startOutbox, mountOutbox } from './outbox.js';
-import { mountDigest, trackSession } from './digest.js';
+import { mountDigest, trackSession, realmStats } from './digest.js';
 import { mountBattle, applyTalk } from './battle.js';
 import { bossScore, hazeLevel, shouldSummon, emptyBossPlay } from './boss.js';
 import { playtestRealm } from './playtest.js';
+import { geohash, cellAndNeighbours, fetchAreaLore, boardLore, loreChanges, riddleId as loreRiddleId, LORE_MARCH } from './area-lore.js';
+import { mountTownBoard } from './town-board.js';
+import { mountStartWork, mountEmberReadout, mountRecallBell } from './keeper-hud.js';
+import { mountBridgePanel } from './bridge-client.js';
+import { keepersMessage } from './work-queue.js';
+import { missionsOf, begin, tickMission, hearBriefing, hearDebrief, gated } from './missions.js';
+import { mountMissionHud, hudView, talk as missionTalk } from './mission-hud.js';
+import { joinSummoned } from './keeper-controls.js';
+import { regionsOf, postLines } from './regions.js';
+import { place } from '../3d/clock.js';
 
 const store = await openLedger();
 // An in-page prompt rather than confirm(): some embedded browsers block native dialogs and silently answer "no".
@@ -63,7 +89,7 @@ trackSession(store);
 
 let last;
 const tell = l => {
-  const color = l.marches.length ? beacon(l).color : null;
+  const color = l.marches.some(m => m.id !== LORE_MARCH.id) ? beacon(l).color : null; // dark until real work exists
   if (color === last) return;
   last = color;
   window.__questBeacon = color; // read by the scene if it builds after the first event
@@ -81,7 +107,8 @@ startOutbox(store);
 let lastRiddlers = '';
 const tellRiddlers = l => {
   const slots = new Map(l.keepers.map((k, i) => [k.id, i]));
-  const list = riddleNpcs(l).map(n => ({ riddleId: n.riddle.id, slot: n.keeper ? slots.get(n.keeper.id) ?? null : null }));
+  const list = riddleNpcs(l).filter(n => !isGameOnly(n.riddle)) // lore is taken on from the notice board
+    .map(n => ({ riddleId: n.riddle.id, slot: n.keeper ? slots.get(n.keeper.id) ?? null : null }));
   const key = JSON.stringify(list);
   if (key === lastRiddlers) return;
   lastRiddlers = key;
@@ -107,16 +134,150 @@ Object.assign(prompt.style, { position: 'fixed', left: '50%', bottom: '120px', t
   padding: '8px 16px', borderRadius: '999px', border: '1px solid rgba(255,255,255,.3)', background: 'rgba(14,16,24,.85)',
   color: '#eef0f4', font: '600 14px system-ui, sans-serif', cursor: 'pointer' });
 document.body.append(prompt);
-let near = null, talking = false;
-addEventListener('quest:near', e => { near = e.detail?.riddleId || null; prompt.hidden = !near || talking; });
-prompt.addEventListener('click', () => near && dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: near } })));
+// near: a Riddle id, 'lodge' (the stats board), 'board' (the notice board) or null
+let near = null, talking = false, keeperCount = 0;
+const PLACES = { lodge: 'Stats board (E)', board: 'Notice board (E)', keeper: 'Start work (E)', post: 'Read the post (E)' };
+let nearSlot = null, nearWork = null;
+store.subscribe(l => { keeperCount = l.keepers.length; });
+keeperCount = (await store.snapshot()).keepers.length;
+addEventListener('quest:near', e => {
+  nearSlot = e.detail?.keeper ?? null;
+  nearWork = e.detail?.workId ?? null;
+  near = e.detail?.riddleId || (PLACES[e.detail?.place] ? e.detail.place : null)
+    || (nearSlot != null && nearSlot < keeperCount ? 'keeper' : null); // a scene Keeper with no ledger Keeper stays quiet
+  prompt.textContent = PLACES[near] || 'Talk (E)';
+  prompt.hidden = !near || talking;
+});
+prompt.addEventListener('click', () => near && dispatchEvent(near === 'keeper' ? new CustomEvent('quest:keeper', { detail: { slot: nearSlot } })
+  : near === 'post' ? new CustomEvent('quest:post', { detail: { workId: nearWork } }) : PLACES[near] ? new CustomEvent(`quest:${near}`) : new CustomEvent('quest:talk', { detail: { riddleId: near } })));
 
 const lock = locked => { talking = locked; prompt.hidden = locked || !near; dispatchEvent(new CustomEvent('quest:input', { detail: { locked } })); };
+
+// The stats board in the Keeper's Lodge (success measures, from the local event log)
+const board = mountStatsBoard(document.body);
+addEventListener('quest:lodge', async () => {
+  if (talking || battle.open) return;
+  lock(true);
+  try { await board.show(realmStats(await store.snapshot())); } finally { lock(false); }
+});
+// ---------- CLA-15: Marches as regions ----------
+let lastRegions = '';
+const tellRegions = l => {
+  const list = regionsOf(l);
+  const key = JSON.stringify(list);
+  if (key === lastRegions) return;
+  lastRegions = key;
+  window.__questRegions = list; // read by the scene if it builds after the first event
+  dispatchEvent(new CustomEvent('quest:regions', { detail: list }));
+};
+store.subscribe(tellRegions);
+tellRegions(await store.snapshot());
+addEventListener('quest:post', async e => {
+  if (talking || battle.open) return;
+  const lines = postLines(await store.snapshot(), e.detail?.workId);
+  if (!lines) return;
+  lock(true);
+  try { await talk.say(lines, { name: 'Post' }); } finally { lock(false); }
+});
+// ---------- R3: Lore quests ----------
+const qs = new URLSearchParams(location.search);
+// The published lore folder: the user's `lore` branch on GitHub (CLA-16). The game server can override it
+// (config.json lore.base, a local folder or URL) and give a default cell for desktop use; ?lore=<folder/> wins over both.
+const LORE_BASE = 'https://raw.githubusercontent.com/thenewurbankid-web/claude_quest/lore/lore/';
+const serverLore = await fetch('/api/lore/config').then(r => (r.ok ? r.json() : null)).catch(() => null);
+const loreBase = qs.has('lore') ? new URL((qs.get('lore') || 'quest/sample-lore/').replace(/\/?$/, '/'), document.baseURI)
+  : new URL((serverLore?.base || LORE_BASE).replace(/\/?$/, '/'), document.baseURI);
+const CELL = /^[0-9b-hjkmnp-z]{4}$/;
+const loreCell = () => (CELL.test(qs.get('cell') || '') ? qs.get('cell')
+  : place().guessed && CELL.test(serverLore?.cell || '') ? serverLore.cell : geohash(place().lat, place().lon));
+let loreShown = { entries: [], calendar: true };
+const refreshLore = async () => {
+  const cell = loreCell(), p = place();
+  const area = loreBase ? (await fetchAreaLore(loreBase, cellAndNeighbours(cell)).catch(() => ({ entries: [] }))).entries : [];
+  const entries = boardLore(area, cell, new Date(), { lat: p.lat });
+  loreShown = { entries, calendar: !area.length };
+  const c = loreChanges(await store.snapshot(), entries, new Date());
+  if (c.puts.length || c.events.length) await applyChanges(store, c);
+};
+await refreshLore().catch(err => console.warn('area lore:', err.message));
+setInterval(() => refreshLore().catch(() => {}), 10 * 60e3);
+// between fetches, close lore Works whose Riddle got sealed or whose entry ended
+setInterval(async () => {
+  const c = loreChanges(await store.snapshot(), loreShown.entries, new Date());
+  if (c.puts.length || c.events.length) await applyChanges(store, c);
+}, 30_000);
+
+const townBoard = mountTownBoard(document.body);
+const boardRows = async () => {
+  const byId = new Map((await store.snapshot()).riddles.map(r => [r.id, r]));
+  return loreShown.entries.map(entry => {
+    const r = byId.get(loreRiddleId(entry));
+    return { entry, riddleId: r?.id ?? null, state: r?.state ?? null };
+  });
+};
+// Asked once, only from the board's button: a rough location (about 10 km), kept as quest.place like the weather's.
+const usePlace = () => new Promise((ok, no) => navigator.geolocation
+  ? navigator.geolocation.getCurrentPosition(g => ok({ lat: +g.coords.latitude.toFixed(1), lon: +g.coords.longitude.toFixed(1) }), no, { timeout: 15000, maximumAge: 36e5 })
+  : no(new Error('no geolocation')))
+  .then(async p => { try { localStorage.setItem('quest.place', JSON.stringify(p)); } catch {} await refreshLore(); return boardRows(); });
+addEventListener('quest:board', async () => {
+  if (talking || battle.open) return;
+  lock(true);
+  let pick = null;
+  try {
+    const l = await store.snapshot(), now = new Date();
+    pick = await townBoard.show(await boardRows(), { guessed: !!place().guessed && !qs.get('cell') && !CELL.test(serverLore?.cell || ''), calendar: loreShown.calendar,
+      onUsePlace: usePlace, missions: missionsOf(l, mp, now, rules), gated: gated(l, now, rules), gate: rules.pressureGate,
+      current: mp.current, onBegin: async id => { const r = begin(mp, await store.snapshot(), id, new Date()); if (!r.problem) await commitMp(r); } });
+  } finally { lock(false); }
+  settleMission();
+  if (pick && !gated(await store.snapshot(), new Date(), rules).gated) dispatchEvent(new CustomEvent('quest:talk', { detail: { riddleId: pick } }));
+});
+
+// ---------- R4: Bring your Keeper ----------
+const startWork = mountStartWork(document.body, store, { workUrl: 'work.html' });
+mountEmberReadout(document.body, store);
+// R4.5: the Bridge. Off by default; with it off nothing connects and the game runs on its own ledger and /work.
+const bridgeBox = document.createElement('div');
+Object.assign(bridgeBox.style, { position: 'fixed', top: '88px', left: '8px', right: '8px', maxWidth: '560px', maxHeight: 'calc(100vh - 104px)',
+  overflow: 'auto', zIndex: 1001, background: 'rgba(14,16,24,.95)', borderRadius: '12px', border: '1px solid rgba(255,255,255,.2)' });
+bridgeBox.hidden = true;
+const bridgeBtn = document.createElement('button');
+bridgeBtn.type = 'button'; bridgeBtn.textContent = 'Bridge'; bridgeBtn.setAttribute('aria-expanded', 'false');
+Object.assign(bridgeBtn.style, { position: 'fixed', top: '44px', left: '8px', zIndex: 1001, minHeight: '40px', padding: '8px 14px', borderRadius: '8px',
+  border: '1px solid rgba(255,255,255,.25)', background: 'rgba(14,16,24,.82)', color: '#f3e6c8', font: '600 13px system-ui, sans-serif', cursor: 'pointer' });
+bridgeBtn.onclick = () => { bridgeBox.hidden = !bridgeBox.hidden; bridgeBtn.setAttribute('aria-expanded', String(!bridgeBox.hidden)); };
+document.body.append(bridgeBtn, bridgeBox);
+let bridge = { ring() {}, refresh: async () => {} };
+try { bridge = mountBridgePanel(bridgeBox, { store, realmId: (await store.snapshot()).realm.id, storage: localStorage, rules,
+  connect: (url, opts) => globalThis.mqtt.connect(url, opts),
+  keepersOf: (l, now) => keepersMessage(l, l.keepers.map(k => k.id), now, rules) }); // the Bridge on is the opt-in: every Keeper is listed
+} catch (err) { console.warn('The Bridge panel did not mount:', err.message); }
+let bridgeKeepers = '';
+store.subscribe(l => { const k = JSON.stringify([l.keepers.map(x => [x.id, x.status]), l.queue.map(q => [q.id, q.state])]); if (k !== bridgeKeepers) { bridgeKeepers = k; bridge.refresh().catch(() => {}); } });
+mountRecallBell(document.body, store, { onRing: () => bridge.ring(), onKeepers: () => { if (!talking && !battle.open) openKeeper(null); } });
+const openKeeper = async keeperId => {
+  lock(true);
+  try { await startWork.open(keeperId ?? undefined); } finally { lock(false); }
+};
+addEventListener('quest:keeper', async e => {
+  if (talking || battle.open) return;
+  const k = (await store.snapshot()).keepers[e.detail?.slot];
+  if (k) await openKeeper(k.id);
+});
+
 addEventListener('quest:talk', async e => {
-  if (talking) return;
+  if (talking || battle.open) return; // a log click during a fight is ignored
   const l = await store.snapshot();
   const npc = riddleNpcs(l).find(n => n.riddle.id === e.detail?.riddleId);
-  if (!npc) return;
+  if (npc && isGameOnly(npc.riddle) && gated(l, new Date(), rules).gated) return; // lore quests are locked under pressure
+  if (!npc) {
+    // picked from the Beacon log but not answerable now: say where it stands instead
+    if (e.detail?.from !== 'log' || !l.riddles.some(r => r.id === e.detail.riddleId)) return;
+    lock(true);
+    try { await talk.say(riddleStanding(l, e.detail.riddleId), { name: 'Lumi' }); } finally { lock(false); }
+    return;
+  }
   lock(true);
   try {
     const speaker = { name: npc.keeper?.name || 'A villager' };
@@ -187,3 +348,54 @@ const maybeSummon = async () => {
 };
 setTimeout(maybeSummon, 8000);
 setInterval(maybeSummon, 15_000);
+
+// ---------- R5: Missions ----------
+const loaded = playFromSave({ play: loadPlay() });
+if (loaded.problems.length) {
+  console.warn('quest-play: the saved missions were unsound and start empty:', loaded.problems.map(p => `${p.path} ${p.problem}`).join('; '));
+  keep({ missions: loaded.play.missions });
+}
+let mp = loaded.play.missions;
+const missionHud = mountMissionHud(document.body);
+async function commitMp(r) {
+  mp = r.mp;
+  keep({ missions: mp });
+  if (r.events.length) await applyChanges(store, { puts: [], events: r.events });
+}
+let missionBusy = false;
+async function settleMission() {
+  if (missionBusy) return;
+  missionBusy = true;
+  try {
+    const l = await store.snapshot();
+    await commitMp(tickMission(mp, l, new Date()));
+    const run = mp.current && mp.runs[mp.current];
+    if (run && ['briefing', 'debrief'].includes(run.state) && !talking && !battle.open) {
+      lock(true);
+      try {
+        await missionTalk(talk, run.state, l, mp, run.id, new Date(), rules);
+        await commitMp(run.state === 'briefing' ? hearBriefing(mp, new Date()) : hearDebrief(mp, new Date()));
+      } finally { lock(false); }
+    }
+    missionHud.update(hudView(await store.snapshot(), mp, new Date(), rules));
+  } catch (err) { console.warn('mission:', err.message); } finally { missionBusy = false; }
+}
+let lastGate = null;
+async function tellGate() {
+  const l = await store.snapshot();
+  const locked = gated(l, new Date(), rules).gated;
+  if (locked === lastGate) return;
+  lastGate = locked;
+  window.__questExploreLocked = locked; // read by the scene if it builds after the first event
+  dispatchEvent(new CustomEvent('quest:explore', { detail: { locked } }));
+}
+let joining = false;
+async function joinKeepers() {
+  if (joining) return;
+  joining = true;
+  try { const c = joinSummoned(await store.snapshot(), new Date()); if (c.puts.length || c.events.length) await applyChanges(store, c); } finally { joining = false; }
+}
+const onLedger = () => { joinKeepers(); settleMission(); tellGate(); };
+store.subscribe(onLedger);
+onLedger();
+setInterval(onLedger, 30_000);

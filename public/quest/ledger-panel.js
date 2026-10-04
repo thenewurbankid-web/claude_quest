@@ -1,9 +1,11 @@
-// The Ledger panel (R0, PLAN-engine.md): add Marches, Halls and Works by hand, load the sample Realm, see problems.
+// The Ledger panel (R0, PLAN-engine.md): add Marches, Halls and Works by hand, raise Riddles on them, load the sample
+// Realm, see problems.
 // A self-contained DOM overlay for any page, the 3D view included: fixed at the top left, its own scoped styles
 // (prefix qlp-), and a toggle button. It talks only to a LedgerStore (contract.js) and re-renders on subscribe.
 // Ledger text is real text and goes in with textContent only, never innerHTML.
 // The pure helpers (groupLedger, newMarch, newHall, newWork) are exported for node:test.
-import { validateLedger, PRIORITY, SIZE } from './contract.js';
+import { validateLedger, applyChanges, PRIORITY, SIZE } from './contract.js';
+import { raiseRiddle } from './riddles.js';
 
 // ---------- pure helpers ----------
 const now = () => new Date().toISOString();
@@ -67,6 +69,9 @@ const CSS = `
   border:1px solid rgba(243,230,200,.25);border-radius:4px;padding:4px 6px;min-height:30px}
 .qlp-form input{flex:1 1 140px;min-width:0}
 .qlp-form select{flex:1 1 90px;min-width:0}
+.qlp-form textarea{flex:1 1 100%;min-height:52px;resize:vertical;font:inherit;color:#f3e6c8;
+  background:rgba(255,255,255,.08);border:1px solid rgba(243,230,200,.25);border-radius:4px;padding:4px 6px}
+.qlp-check{display:flex;align-items:center;gap:4px;font-size:12px;color:#cdbf9f}
 .qlp-panel button{cursor:pointer}
 .qlp-panel button:hover,.qlp-toggle:hover{background:rgba(255,255,255,.16)}
 .qlp-problems{list-style:none;margin:0;padding:0}
@@ -138,6 +143,20 @@ export function mountLedgerPanel(container, store, { sampleUrl = 'quest/sample-r
   workForm.append(workTitle, workMarch, workHall, workPri, workSize,
     Object.assign(el('button', null, 'Add Work'), { type: 'submit' }));
 
+  // raise a Riddle (by hand until R3's /work page brings the agents' questions)
+  const riddleForm = el('form', 'qlp-form');
+  const riddleWork = el('select');
+  riddleWork.setAttribute('aria-label', 'Work');
+  const riddleText = Object.assign(el('textarea'), { placeholder: 'The question, as the agent asked it', required: true });
+  riddleText.setAttribute('aria-label', 'Question');
+  const riddleOpts = Object.assign(el('input'), { placeholder: 'Choices, comma separated (optional)' });
+  riddleOpts.setAttribute('aria-label', 'Choices');
+  const riddleHigh = Object.assign(el('input'), { type: 'checkbox' });
+  const highLabel = el('label', 'qlp-check');
+  highLabel.append(riddleHigh, document.createTextNode('High risk (answered in the Lodge)'));
+  riddleForm.append(riddleWork, riddleText, riddleOpts, highLabel,
+    Object.assign(el('button', null, 'Raise Riddle'), { type: 'submit' }));
+
   const problems = el('ul', 'qlp-problems');
 
   panel.append(realm, sampleBtn, note,
@@ -145,6 +164,7 @@ export function mountLedgerPanel(container, store, { sampleUrl = 'quest/sample-r
     el('div', 'qlp-h', 'Add a March'), marchForm,
     el('div', 'qlp-h', 'Add a Hall'), hallForm,
     el('div', 'qlp-h', 'Add a Work'), workForm,
+    el('div', 'qlp-h', 'Raise a Riddle'), riddleForm,
     el('div', 'qlp-h', 'Problems'), problems);
   container.append(style, toggle, panel);
 
@@ -166,6 +186,9 @@ export function mountLedgerPanel(container, store, { sampleUrl = 'quest/sample-r
     fill(hallMarch, marches);
     fill(workMarch, marches);
     fillHalls();
+    const marchName = new Map(l.marches.map(m => [m.id, m.name]));
+    fill(riddleWork, l.works.filter(w => !['done', 'cancelled'].includes(w.status))
+      .map(w => [w.id, `${marchName.get(w.marchId) || '?'} › ${w.title}`]));
 
     const ps = validateLedger(l);
     problems.replaceChildren(...(ps.length ? ps.map(p => {
@@ -209,7 +232,7 @@ export function mountLedgerPanel(container, store, { sampleUrl = 'quest/sample-r
   }
 
   const act = async (fn, okMsg) => {
-    try { await fn(); say(okMsg); } catch (e) { say(`Could not save: ${e.message}`); }
+    try { await fn(); say(okMsg); return true; } catch (e) { say(`Could not save: ${e.message}`); return false; }
   };
 
   marchForm.onsubmit = e => {
@@ -231,6 +254,15 @@ export function mountLedgerPanel(container, store, { sampleUrl = 'quest/sample-r
     const w = newWork({ marchId: workMarch.value, hallId: workHall.value, title: workTitle.value,
       priority: workPri.value, size: workSize.value });
     act(() => store.put('works', w), 'Work added.').then(() => { workTitle.value = ''; });
+  };
+
+  riddleForm.onsubmit = e => {
+    e.preventDefault();
+    if (!riddleWork.value) return say('Add a Work that is still open first.');
+    if (!riddleText.value.trim()) return;
+    act(() => applyChanges(store, raiseRiddle(ledger, { workId: riddleWork.value, text: riddleText.value,
+      options: riddleOpts.value.split(','), high: riddleHigh.checked })), 'Riddle raised; its Work now waits on it.')
+      .then(ok => { if (ok) { riddleText.value = ''; riddleOpts.value = ''; riddleHigh.checked = false; } });
   };
 
   // loading the sample replaces the whole ledger, so a non-empty one asks for a second click

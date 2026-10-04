@@ -17,5 +17,11 @@ cp public/art.js dist/guide/art.js
 mkdir -p dist/vendor/three/build dist/vendor/three/examples/jsm
 cp node_modules/three/build/three.module.js node_modules/three/build/three.core.js dist/vendor/three/build/
 for d in loaders postprocessing shaders utils; do cp -R node_modules/three/examples/jsm/$d dist/vendor/three/examples/jsm/; done
+# Boxing (/boxing/) loads Dexie, Babylon.js and Phaser from /vendor/<name>/.
+mkdir -p dist/vendor/dexie/dist dist/vendor/phaser/dist dist/vendor/babylonjs dist/vendor/babylonjs-loaders
+cp node_modules/dexie/dist/dexie.mjs dist/vendor/dexie/dist/
+cp node_modules/phaser/dist/phaser.min.js dist/vendor/phaser/dist/
+cp node_modules/babylonjs/babylon.js dist/vendor/babylonjs/
+cp node_modules/babylonjs-loaders/babylon.glTF2FileLoader.min.js dist/vendor/babylonjs-loaders/
 touch dist/.nojekyll
 echo "built dist/ ($(ls dist | wc -l | tr -d ' ') files)"

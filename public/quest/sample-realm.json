@@ -7,8 +7,8 @@
   ],
   "halls": [
     { "id": "ferry-a", "marchId": "ferry", "name": "Hall of First Crossing", "status": "achieved", "order": 1 },
-    { "id": "ferry-b", "marchId": "ferry", "name": "Hall of the Tollkeeper", "status": "active", "order": 2, "council": true },
-    { "id": "orchard-a", "marchId": "orchard", "name": "Hall of Seedlings", "status": "active", "order": 1 },
+    { "id": "ferry-b", "marchId": "ferry", "name": "Hall of the Tollkeeper", "status": "active", "order": 2, "council": true, "dueAt": "2026-10-10T17:00:00Z" },
+    { "id": "orchard-a", "marchId": "orchard", "name": "Hall of Seedlings", "status": "active", "order": 1, "dueAt": "2026-10-17T17:00:00Z" },
     { "id": "orchard-b", "marchId": "orchard", "name": "Hall of the Harvest", "status": "planned", "order": 2 }
   ],
   "works": [
@@ -16,13 +16,13 @@
     { "id": "w2", "marchId": "ferry", "hallId": "ferry-a", "title": "Welcome email", "status": "done", "priority": "medium", "size": "S", "keeperId": null, "createdAt": "2026-09-21T09:00:00Z", "updatedAt": "2026-09-30T11:00:00Z", "resolvedAt": "2026-09-30T11:00:00Z",
       "decisions": [{ "riddleId": "r3", "question": "Send the welcome email from hello@ or from the founder's address?", "answer": "hello@", "sealed_by": "player", "at": "2026-09-29T10:00:00Z", "sent": null }] },
     { "id": "w3", "marchId": "ferry", "hallId": "ferry-b", "title": "Pricing page", "status": "in_progress", "priority": "high", "size": "M", "keeperId": "k1", "createdAt": "2026-09-29T09:00:00Z", "updatedAt": "2026-10-02T10:00:00Z" },
-    { "id": "w4", "marchId": "ferry", "hallId": "ferry-b", "title": "Payment provider", "status": "blocked", "priority": "critical", "size": "L", "risk": "high", "keeperId": "k2", "blockedBy": [], "failures": 1, "createdAt": "2026-09-29T09:00:00Z", "updatedAt": "2026-10-02T15:00:00Z" },
-    { "id": "w5", "marchId": "ferry", "hallId": "ferry-b", "title": "Invoice export", "status": "todo", "priority": "medium", "size": "S", "blockedBy": ["w4"], "createdAt": "2026-09-30T09:00:00Z", "updatedAt": "2026-09-30T09:00:00Z" },
+    { "id": "w4", "marchId": "ferry", "hallId": "ferry-b", "parentId": "w3", "title": "Payment provider", "status": "blocked", "priority": "critical", "size": "L", "risk": "high", "keeperId": "k2", "blockedBy": [], "failures": 1, "createdAt": "2026-09-29T09:00:00Z", "updatedAt": "2026-10-02T15:00:00Z" },
+    { "id": "w5", "marchId": "ferry", "hallId": "ferry-b", "parentId": "w3", "title": "Invoice export", "status": "todo", "priority": "medium", "size": "S", "blockedBy": ["w4"], "createdAt": "2026-09-30T09:00:00Z", "updatedAt": "2026-09-30T09:00:00Z" },
     { "id": "w6", "marchId": "orchard", "hallId": "orchard-a", "title": "Plant catalogue import", "status": "in_review", "priority": "high", "size": "M", "keeperId": "k3", "createdAt": "2026-09-25T09:00:00Z", "updatedAt": "2026-10-03T08:00:00Z" },
     { "id": "w7", "marchId": "orchard", "hallId": "orchard-a", "title": "Watering reminders", "status": "done", "priority": "low", "size": "S", "createdAt": "2026-09-22T09:00:00Z", "updatedAt": "2026-10-01T12:00:00Z", "resolvedAt": "2026-10-01T12:00:00Z" },
     { "id": "w8", "marchId": "orchard", "hallId": "orchard-b", "title": "Harvest calendar", "status": "backlog", "priority": "medium", "size": "L", "createdAt": "2026-10-01T09:00:00Z", "updatedAt": "2026-10-01T09:00:00Z" },
     { "id": "w9", "marchId": "orchard", "hallId": null, "title": "Fix the logo colours", "status": "todo", "priority": "low", "size": "S", "createdAt": "2026-10-02T09:00:00Z", "updatedAt": "2026-10-02T09:00:00Z" },
-    { "id": "w10", "marchId": "ferry", "hallId": "ferry-b", "title": "Refund policy copy", "status": "cancelled", "priority": "low", "size": "S", "createdAt": "2026-09-29T09:00:00Z", "updatedAt": "2026-10-01T09:00:00Z", "resolvedAt": "2026-10-01T09:00:00Z" }
+    { "id": "w10", "marchId": "ferry", "hallId": "ferry-b", "parentId": "w3", "title": "Refund policy copy", "status": "cancelled", "priority": "low", "size": "S", "createdAt": "2026-09-29T09:00:00Z", "updatedAt": "2026-10-01T09:00:00Z", "resolvedAt": "2026-10-01T09:00:00Z" }
   ],
   "keepers": [
     { "id": "k1", "name": "Bramble", "role": "builder", "skills": ["frontend"], "status": "busy" },

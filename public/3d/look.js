@@ -12,9 +12,9 @@ export const LOOK = {
   people: { keepers: 3, animSpeed: 1.75, turn: 14, blend: 0.55, idleAfter: 2.75 },
   // Pixel sprites (pixel people and the animals). "face" turns sprites fully toward the camera.
   sprite: { height: 1.35, facing: 'face', fps: 4, selfLight: 1, shadow: 'sun', blob: 0, receiveShadows: true },
-  animals: { count: 3, kinds: ['Chicken', 'Duck'], scale: 0.85, pace: 0.3, fps: 3 },
+  animals: { count: 6, kinds: ['Chicken', 'Duck'], scale: 0.85, pace: 0.3, fps: 3 },
   // contact: the tree's own ground shadow, kept separate from sprite.blob so trees never float.
-  trees: { kind: 'mixed', scale: 1.2, density: 0.27, ring: 4, inside: 4, fadeTo: 0.55, contact: 0.45 },
+  trees: { kind: 'mixed', scale: 1.2, density: 0.27, ring: 4, inside: 12, fadeTo: 0.55, contact: 0.45 },
   // Off: the crowns have no trunks, and near the ground (the lab's 0.5) they read as floating trees.
   canopy: { on: false, height: 0.5, scale: 1.15, density: 0.33, gap: 0, brightness: 0.9 },
   // Sunnyside's small houses, folded: scale 1 = 2 cells wide; roofTilt is the roof's lean back from upright, in degrees.

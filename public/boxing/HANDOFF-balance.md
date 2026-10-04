@@ -55,3 +55,18 @@ Follow-ups (not blockers):
 - **KO cliff:** divisor 500 gives KO 0.09, 475 gives 0.19, 450 gives 0.32. KOs are nearly all round-6 stoppages in lopsided pairs, so small divisor changes flip whole pairs. Re-measure after any tuning of damage or tactics.
 - **Counter still leads on scorecards:** counter wins about 85 % of decisions v pressure and 100 % v outbox even with landed counts near parity. Needs a later pass (counter window / `counter` weight / scoring weights).
 - Not tested: other stat mixes, per-round tactic changes, the browser.
+
+### BOX-15 sim side (2026-10-04): contact data in impact events
+User decision (2026-10-04, via the main session): BOX-15 option (a). The visual parts (contact, hit reactions, knockdown falls, footwork, fatigue visuals in `arena-babylon.js` / `boxer-model.js`) go to Boxing Dev after BOX-14. This issue is the sim side only, in `physics-engine.js`.
+
+Added to every `impact` event record (read-only; no state or rng change):
+- `contact: { region, x, y, heightM, dirX, dirY }`. `region` is the target (`head`/`body`) when landed, `guard` when blocked, `air` when slipped. `x`/`y` are ring metres on the defender's surface, `TARGET_DEPTH_M` (0.15) toward the attacker (guard +0.1; air offset sideways past the head, more for hooks). `heightM` is 1.6 for head shots, 1.15 for body (`HEAD_HEIGHT_M`, `BODY_HEIGHT_M`). `dirX`/`dirY` is the unit direction of travel, attacker to defender, at the arrival tick.
+- `energy01 = min(1, transferredJoules / 170)`. 170 J (`ENERGY_REF_J`) is about p95 of landed punches (landed range 44-225 J, median 101 J, n=9903), so a median hit reads about 0.6.
+- `knockout`: this hit took the defender to 0 health. The fight ends the same tick (`round_end` with reason `ko`), so a renderer should start the fall from this impact. There is no get-up in the sim; a KO ends the fight.
+`serializePunch` is unchanged, so `bm.exchange.v1` telemetry is identical.
+
+Spacing and ring bounds: both already existed (`_move` clamps to the ring minus `BODY_RADIUS_M`; `_separate` keeps centres at least 0.55 m apart). One gap closed: `_separate` now re-clamps both fighters to the ring, so a push can't carry anyone past the ropes. It never fired in 9.1M ticks (24 seeds x 3 tactic pairs x 3 stat mixes), and the full-run digest is identical before and after (4304305d...). Closest approach in that run was 0.78 m; ring excursion 0.
+
+Tests (`npm test`: 105 pass, was 101): impact events carry contact/energy/knockout and are consistent with outcome and health; the contact point lies 0.15 m from the defender centre on the attacker side; fighters stay inside the ropes and at least 0.55 m apart on every tick across 3 tactic pairs x 6 seeds; the sim is pinned: a seed-11 full-fight hash (rounds, result, positions every tick) equals the hash from the engine before this change, and a listener that mutates the event (`contact.x`, `energy01`) leaves the output unchanged.
+
+Not covered here (Boxing Dev, after BOX-14): all rendering of contact, reactions, falls and footwork; "contact timing matches sim events within a frame" can only be tested once the renderer reads `contact`. Untested in the browser: nothing was changed in rendering. Open question for the visual side: the sim has no get-up and no knockdown short of KO, so "get up or stay down" would need a sim design decision (user's call).

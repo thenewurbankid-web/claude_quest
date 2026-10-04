@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quest: Marches as regions (demo)</title>
+<style>
+  body { margin: 0; padding: 16px; font: 14px/1.4 system-ui, sans-serif; background: #12141c; color: #eef0f4; }
+  h1 { font-size: 18px; } h2 { font-size: 15px; margin: 20px 0 6px; }
+  pre { overflow: auto; padding: 8px; background: #0b0d14; border-radius: 8px; font-size: 11px; line-height: 1; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  button { min-height: 40px; padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: inherit; font: inherit; cursor: pointer; }
+</style>
+<h1>Marches as regions</h1>
+<p>The same path for both: the ledger snapshot goes through <code>regionsOf</code>, then <code>hubGates</code> and <code>regionMap</code>. Open <a href="../" style="color:#9cf">the 3D view</a> to walk it: with an empty ledger you get the four default regions; load the sample in the Ledger panel and you get one per March.</p>
+<div id="out"></div>
+<script type="module">
+import { emptyLedger } from './contract.js';
+import { regionsOf } from './regions.js';
+import { regionMap, hubGates } from '../3d/region-map.js';
+const sample = await (await fetch('sample-realm.json')).json();
+const cases = [['Local ledger, no Marches (defaults)', emptyLedger({ id: 'local', name: 'Local', owner: 'player' })], ['Sample Realm (one per March)', sample]];
+const out = document.getElementById('out');
+const el = (tag, text, parent = out) => { const e = document.createElement(tag); e.textContent = text; parent.append(e); return e; };
+for (const [title, ledger] of cases) {
+  el('h2', title);
+  const regions = regionsOf(ledger), { gates } = hubGates(regions);
+  for (const r of regions) {
+    const p = el('p', ''), sw = document.createElement('span');
+    sw.className = 'sw'; sw.style.background = r.banner; p.append(sw);
+    const g = gates.find(x => x.regionId === r.id);
+    p.append(`${r.name}${r.generated ? ' (generated)' : ''}: ${r.posts.length} post(s)${r.hidden ? `, ${r.hidden} more` : ''}; hub gate at ${g ? `${g.c},${g.r}` : 'none'}`);
+  }
+  const first = regions[0], map = regionMap(first);
+  el('p', `${first.name}, G = gate back, Q = a Work's post:`);
+  el('pre', map.rows.join('\n'));
+}
+</script>

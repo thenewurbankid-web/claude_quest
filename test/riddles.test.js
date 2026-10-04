@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RULES, memoryStore, applyChanges, validateLedger } from '../public/quest/contract.js';
-import { ASK_LATER, riskTier, trueSight, riddleNpcs, answerRiddle, tickRiddles, riddleWeight } from '../public/quest/riddles.js';
+import { ASK_LATER, riskTier, trueSight, riddleNpcs, answerRiddle, tickRiddles, riddleWeight, raiseRiddle, riddleStanding } from '../public/quest/riddles.js';
 
 const sample = () => JSON.parse(readFileSync(new URL('../public/quest/sample-realm.json', import.meta.url)));
 const NOW = new Date('2026-10-03T12:00:00Z');
@@ -199,4 +199,44 @@ test('riddleContext: project, milestone and task first, then the facts', async (
   assert.equal(f.Priority, 'critical');
   assert.equal(f.Keeper, 'Quill (builder)');
   assert.equal(f.Asked, '2026-10-02 (1 day ago)');
+});
+
+test('raiseRiddle: a new open Riddle on a live Work, logged as riddle.raised, that the rules then pick up', async () => {
+  const c = raiseRiddle(sample(), { workId: 'w3', text: '  Monthly or yearly toggle first? ',
+    options: ['Monthly', ' Yearly ', '', 'Monthly', ASK_LATER] }, NOW);
+  const r = c.puts[0].record;
+  assert.equal(r.text, 'Monthly or yearly toggle first?');
+  assert.deepEqual(r.options, ['Monthly', 'Yearly', ASK_LATER]);
+  assert.equal(r.marchId, 'ferry');
+  assert.deepEqual([r.state, r.risk, r.raisedAt], ['open', 'normal', NOW.toISOString()]);
+  assert.deepEqual(c.events, [{ at: NOW.toISOString(), kind: 'riddle.raised', ref: r.id },
+    { at: NOW.toISOString(), kind: 'agent.blocked', ref: 'w3' }]);
+  const after = await apply(sample(), c);
+  assert.equal(after.works.find(w => w.id === 'w3').status, 'blocked');
+  assert.ok(riddleNpcs(after, NOW).some(n => n.riddle.id === r.id));
+  assert.equal(riskTier(raiseRiddle(sample(), { workId: 'w3', text: 'Which?', high: true }, NOW).puts[0].record), 'confirm');
+});
+
+test('raiseRiddle leaves a Work already waiting as it is, and refuses a missing or finished Work and an empty question', () => {
+  const l = sample(), w = l.works.find(x => x.status === 'in_review' || x.status === 'blocked');
+  assert.equal(raiseRiddle(l, { workId: w.id, text: 'Ok?' }, NOW).puts.length, 1);
+  assert.throws(() => raiseRiddle(sample(), { workId: 'nope', text: 'x' }, NOW), /no Work/);
+  assert.throws(() => raiseRiddle(sample(), { workId: 'w1', text: 'x' }, NOW), /done/);
+  assert.throws(() => raiseRiddle(sample(), { workId: 'w3', text: '   ' }, NOW), /question/);
+});
+
+test('riddleStanding: the question, then where it stands, for each state a log row can show', () => {
+  const l = sample();
+  const r = (state, extra) => { const x = { ...l.riddles[0], id: 'x', state, ...extra }; l.riddles.push(x); return x; };
+  const ans = { text: 'Stripe', by: 'player', at: NOW.toISOString() };
+  r('deferred', { deferredUntil: '2026-10-04T12:00:00Z' });
+  assert.deepEqual(riddleStanding(l, 'x', NOW), [l.riddles[0].text, 'You put this off. It comes back in 24 hours.']);
+  l.riddles.pop(); r('answered', { answer: ans, outboxUntil: '2026-10-03T11:00:00Z' });
+  assert.match(riddleStanding(l, 'x', NOW)[1], /"Stripe".*any moment now/);
+  l.riddles.pop(); r('sealed', { answer: ans, sealed_by: 'player' });
+  assert.equal(riddleStanding(l, 'x', NOW)[1], 'Sealed by player: "Stripe".');
+  l.riddles.pop(); r('faded', { fadeNote: 'Gone stale.' });
+  assert.equal(riddleStanding(l, 'x', NOW)[1], 'Gone stale.');
+  l.riddles.pop(); r('open', { workId: 'w3' });
+  assert.match(riddleStanding(l, 'x', NOW)[1], /Pricing page, which isn't blocked/);
 });

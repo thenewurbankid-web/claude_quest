@@ -1,7 +1,7 @@
 // What the Realm looks like right now (PLAN-engine.md, R0 "The Beacon lights up"): the Beacon, the in-game log, the
 // Sealed Halls and the Keepers' benches. Pure functions over a Ledger snapshot (contract.js): no DOM, no store, so the
 // HUD, the 3D view and node:test all read the same answers.
-import { WORK_RESOLVED } from './contract.js';
+import { WORK_RESOLVED, isGameOnly } from './contract.js';
 
 const RANK = { gold: 0, amber: 1, red: 2 };
 const worse = (a, b) => (RANK[b] > RANK[a] ? b : a);
@@ -16,16 +16,17 @@ const newest = (a, b) => String(b.at || '').localeCompare(String(a.at || ''));
 // Per March: red when an unresolved Work is blocked at critical or high priority, or has failed at least once.
 // Amber when Riddles wait (open or deferred), any other Work is blocked, or Works are in review. Gold otherwise.
 // The Realm shows its worst March; its reasons are every March's reasons, red ones first.
+// Game-only Works and Riddles (R3 area lore) never colour it: an errand is not real work waiting.
 export function beacon(ledger) {
   const marches = {};
   for (const m of ledger.marches || []) {
     const red = [], amber = [];
-    for (const w of (ledger.works || []).filter(w => w.marchId === m.id && !resolved(w))) {
+    for (const w of (ledger.works || []).filter(w => w.marchId === m.id && !resolved(w) && !isGameOnly(w))) {
       if (w.status === 'blocked') (URGENT.includes(w.priority) ? red : amber).push(`${w.title} is blocked`);
       if (w.failures > 0) red.push(`${w.title} failed ${times(w.failures)}`);
       if (w.status === 'in_review') amber.push(`${w.title} is in review`);
     }
-    const waiting = (ledger.riddles || []).filter(r => r.marchId === m.id && WAITING_RIDDLE.includes(r.state)).length;
+    const waiting = (ledger.riddles || []).filter(r => r.marchId === m.id && WAITING_RIDDLE.includes(r.state) && !isGameOnly(r)).length;
     if (waiting) amber.unshift(`${plural(waiting, 'Riddle waits', 'Riddles wait')} for an answer in ${m.name}`);
     const color = red.length ? 'red' : amber.length ? 'amber' : 'gold';
     marches[m.id] = { color, reasons: [...red, ...amber] };
@@ -82,9 +83,13 @@ export function sealedHalls(ledger) {
 }
 
 // ---------- Keepers ----------
-// Capacity at the Lodge benches. A Keeper with an unknown status counts as resting.
+// Capacity at the Lodge benches. A summoned Keeper (on its trial Work) counts as busy; a released one is off the
+// benches entirely; any other unknown status (wandered included) counts as resting.
 export function keepers(ledger) {
   const out = { free: [], busy: [], resting: [] };
-  for (const k of ledger.keepers || []) (out[k.status] || out.resting).push(k);
+  for (const k of ledger.keepers || []) {
+    if (k.status === 'released') continue;
+    (out[k.status === 'summoned' ? 'busy' : k.status] || out.resting).push(k);
+  }
   return out;
 }

@@ -10,12 +10,14 @@
     "static": "node dev/static.js"
   },
   "dependencies": {
+    "aedes": "^1.2.0",
     "babylonjs": "^7.54.3",
     "babylonjs-loaders": "^7.54.3",
     "dexie": "^4.4.6",
     "mqtt": "^5.16.0",
     "phaser": "^3.90.0",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "websocket-stream": "^5.5.2"
   },
   "main": "app.js",
   "devDependencies": {

@@ -1,4 +1,4 @@
-# Claude Quest
+# A Vibe Called Quest
 
 A GBA-style overworld (Phaser 3) that works as your interface to Claude Code. Each project is a town.
 No Claude tokens are spent on communication: state comes from files, narration from a local Ollama model.

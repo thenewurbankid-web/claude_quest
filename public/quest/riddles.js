@@ -2,7 +2,7 @@
 // flags in the real text, and what answering, deferring, returning and fading do. Pure functions over a Ledger
 // snapshot (contract.js): they never touch a store and never mutate their input. Each move returns Changes
 // ({ puts, events }) that applyChanges writes, events last.
-import { DEFAULT_RULES, RIDDLE_MOVES, canMove, stewardOf, noChanges } from './contract.js';
+import { DEFAULT_RULES, RIDDLE_MOVES, canMove, stewardOf, noChanges, isGameOnly } from './contract.js';
 
 /** "Ask me later" counts as an answer: the Riddle is deferred and returns after rules.deferHours. */
 export const ASK_LATER = 'Ask me later';
@@ -81,6 +81,31 @@ const findRiddle = (ledger, id) => {
 const change = (record, kind, at) => ({ puts: [{ kind: 'riddles', record }], events: [{ at, kind, ref: record.id }] });
 
 /**
+ * Raises a new open Riddle on a Work (the Ledger panel by hand until R3's /work page brings agents' questions). The
+ * text is kept verbatim; options are trimmed, blanks and repeats dropped, and "Ask me later" is always offered last.
+ * A Work still in todo or in progress becomes blocked: it waits on the answer, which is what stands its Riddle in the
+ * world (riddleNpcs), and sealing unblocks it again (outbox.js). Throws if the Work is missing or resolved, or the
+ * text is empty.
+ */
+export function raiseRiddle(ledger, { workId, text, line = null, options = [], high = false } = {}, now = new Date()) {
+  const w = ledger.works.find(x => x.id === workId);
+  if (!w) throw new Error(`no Work ${workId}`);
+  if (['done', 'cancelled'].includes(w.status)) throw new Error(`Work ${workId} is ${w.status}`);
+  const words = typeof text === 'string' ? text.trim() : '';
+  if (!words) throw new Error('a Riddle needs its question');
+  const opts = [...new Set(options.map(o => String(o).trim()).filter(o => o && o !== ASK_LATER))];
+  const r = { id: crypto.randomUUID(), workId, marchId: w.marchId, text: words, line: line?.trim() || null,
+    options: [...opts, ASK_LATER], risk: high ? 'high' : 'normal', state: 'open', steward: null,
+    raisedAt: now.toISOString() };
+  const c = change(r, 'riddle.raised', r.raisedAt);
+  if (['todo', 'in_progress'].includes(w.status)) {
+    c.puts.push({ kind: 'works', record: { ...clone(w), status: 'blocked', updatedAt: r.raisedAt } });
+    c.events.push({ at: r.raisedAt, kind: 'agent.blocked', ref: w.id });
+  }
+  return c;
+}
+
+/**
  * Answers an open Riddle. "Ask me later" defers it; the steward's answer goes to the outbox; anyone else's answer is
  * kept as a proposal and the Riddle stays open (rule 10). Throws if it isn't open, the text is empty, or it is never-tier
  * (a never-tier Riddle can still be deferred).
@@ -129,7 +154,7 @@ export function tickRiddles(ledger, now = new Date(), rules = DEFAULT_RULES) {
 
 /** The Riddle's pull on R2's boss: grows with deferrals and age, so deferring can't dodge it. 0 once settled. */
 export function riddleWeight(riddle, now = new Date(), rules = DEFAULT_RULES) {
-  if (['sealed', 'faded'].includes(riddle.state)) return 0;
+  if (['sealed', 'faded'].includes(riddle.state) || isGameOnly(riddle)) return 0; // R3: lore never feeds the boss
   const age = Math.max(0, (now.getTime() - Date.parse(riddle.raisedAt)) / DAY) || 0;
   return 1 + (riddle.deferCount || 0) * rules.deferWeightGrowth + 0.1 * age;
 }
@@ -187,4 +212,27 @@ export function riddleContext(ledger, riddleId, now = new Date()) {
   facts.push(['Sealed by', r.steward || stewardOf(ledger, r.marchId) || 'nobody']);
   for (const d of w?.decisions || []) facts.push(['Decided before', `${d.question} → ${d.answer}`]);
   return { path: [m?.name, h?.name, w?.title].filter(Boolean), facts };
+}
+
+// ---------- where a Riddle stands ----------
+const until = (iso, now) => {
+  const h = Math.round((Date.parse(iso) - now.getTime()) / HOUR);
+  if (!(h > 0)) return 'any moment now';
+  return h < 48 ? `in ${h} hour${h === 1 ? '' : 's'}` : `in ${Math.round(h / 24)} days`;
+};
+
+/**
+ * Lines for the conversation box when a Riddle is picked from the Beacon log but can't be answered right now: the
+ * question, then where it stands. Plain text; the question and answer are real words and are shown verbatim.
+ */
+export function riddleStanding(ledger, riddleId, now = new Date()) {
+  const r = findRiddle(ledger, riddleId);
+  const work = (ledger.works || []).find(w => w.id === r.workId);
+  const lines = [r.text];
+  if (r.state === 'open') lines.push(`It waits on ${work?.title || 'its Work'}, which isn't blocked or in review, so no one stands with it in the world.`);
+  else if (r.state === 'deferred') lines.push(`You put this off. It comes back ${until(r.deferredUntil, now)}.`);
+  else if (r.state === 'answered') lines.push(`You answered "${r.answer.text}". It waits in the outbox, recallable, and seals ${until(r.outboxUntil, now)}.`);
+  else if (r.state === 'sealed') lines.push(`Sealed by ${r.sealed_by}: "${r.answer?.text ?? ''}".`);
+  else if (r.state === 'faded') lines.push(r.fadeNote);
+  return lines;
 }

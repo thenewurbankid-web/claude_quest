@@ -6,7 +6,10 @@
 //   - the LedgerStore interface (the IndexedDB store implements it; memoryStore below is the reference version),
 //   - the save format (the split save's parts, held as one object until R5 packs them into a zip),
 //   - the lore rules' defaults (R1: outbox seconds, defer and fade delays, the never-in-game list; R2: the boss),
-//   - R2's battle record and its phases (play state, kept in the save's play part, not in the ledger).
+//   - R2's battle record and its phases (play state, kept in the save's play part, not in the ledger),
+//   - R3's area-lore entry and cell index (shared per geohash-4 cell), and isGameOnly, which keeps lore out of the boss,
+//   - missions (a parent Work and its children; the saga is their Hall), Keepers summoned with Ember, and the event
+//     log's hash chain.
 // Change a shape here first, in its own commit, and only then in the slices that use it.
 
 export const LEDGER_VERSION = 1;
@@ -20,12 +23,20 @@ export const WORK_RESOLVED = ['done', 'cancelled'];
 export const HALL_STATUS = ['planned', 'active', 'achieved'];
 export const PRIORITY = ['critical', 'high', 'medium', 'low'];
 export const SIZE = ['S', 'M', 'L']; // pebble, stone, boulder
-export const KEEPER_STATUS = ['free', 'busy', 'resting'];
+// wandered: its lease lapsed (R4). summoned: called up with Ember, its first Work not approved yet; it joins the Lodge
+// (free) once one is. released: retired to the Hall of Champions; it keeps its record and gets no more work.
+export const KEEPER_STATUS = ['free', 'busy', 'resting', 'wandered', 'summoned', 'released'];
 export const BEACON = ['gold', 'amber', 'red'];
 
 // Every action and response carries a mark: where it is in its life, and where it came from.
 export const MARK_STATUS = ['sent', 'seen', 'working', 'answered', 'done', 'failed'];
-export const MARK_SOURCE = ['project', 'task', 'agent', 'player'];
+export const MARK_SOURCE = ['project', 'task', 'agent', 'player', 'lore'];
+
+/**
+ * Game-only records (R3 area lore, and any mark with real: false) never feed the Haze, the Gloamwyrm, the stats board
+ * or Renown: bossScore, shouldSummon, riddleWeight, realmStats and answerTimes skip them.
+ */
+export const isGameOnly = record => record?.mark?.real === false || record?.mark?.source === 'lore';
 
 // Riddle life: open → answered (sealed in the outbox, still recallable) → sealed (written back to its Work).
 // "Ask me later" is an answer: open → deferred, and it comes back to open after the lore rules' delay.
@@ -48,7 +59,7 @@ export const QUEUE_STATE = ['queued', 'leased', 'returned', 'lapsed', 'cancelled
 export const QUEUE_MOVES = {
   queued: ['leased', 'cancelled'],
   leased: ['leased', 'returned', 'lapsed', 'cancelled'],
-  lapsed: ['queued', 'cancelled'],
+  lapsed: ['queued', 'leased', 'returned', 'cancelled'], // a late paste while still lapsed: the Keeper found its way back
   returned: [],
   cancelled: [], // pasted results for a cancelled item are refused
 };
@@ -57,7 +68,31 @@ export const QUEUE_MOVES = {
 // R1 adds the Riddle's later moves; question-to-answer time is riddle.raised → riddle.answered for the same ref.
 export const EVENT_KIND = ['riddle.raised', 'riddle.answered', 'riddle.deferred', 'riddle.recalled', 'riddle.sealed',
   'riddle.returned', 'riddle.faded', 'riddle.proposed', 'agent.blocked', 'agent.unblocked', 'session.start',
-  'session.end', 'riddle.asked', 'riddle.replied', 'boss.summoned', 'boss.retreated', 'boss.defeated'];
+  'session.end', 'riddle.asked', 'riddle.replied', 'boss.summoned', 'boss.retreated', 'boss.defeated', 'boss.pushed',
+  // R4: the /work page and the Keeper controls (ref: the queue item, or the Keeper for rested/resumed)
+  'work.queued', 'work.leased', 'work.reported', 'work.returned', 'work.lapsed', 'work.cancelled',
+  'keeper.rested', 'keeper.resumed', 'bell.rung',
+  // missions (ref: the mission's parent Work) and Keepers summoned with Ember (ref: the Keeper)
+  'mission.begun', 'mission.cliffhanger', 'mission.resumed', 'mission.shelved', 'mission.debriefed', 'mission.done',
+  'keeper.summoned', 'keeper.joined', 'keeper.released'];
+
+// ---------- missions ----------
+// A mission is a parent Work and its child Works (Work.parentId, Paperclip's parent issue); its saga is their Hall (the
+// milestone), whose finale is the Sealed Hall. A Work with no parent and no children is a one-step side mission.
+// The player goes on one mission at a time. Mission progress is play state (the save's play.missions), never ledger
+// data: the real work still moves only through the /work queue and the Riddle rules.
+//   briefing: chosen, its Keeper's briefing not yet heard; active: under way; cliffhanger: one of its Works raised a
+//   Riddle that waits on the player; debrief: every Work resolved, the debrief not yet heard; done: heard;
+//   shelved: set aside for another mission, and picked up again where it was.
+export const MISSION_STATE = ['briefing', 'active', 'cliffhanger', 'debrief', 'done', 'shelved'];
+export const MISSION_MOVES = {
+  briefing: ['active', 'shelved'],
+  active: ['cliffhanger', 'debrief', 'shelved'],
+  cliffhanger: ['active', 'debrief', 'shelved'],
+  debrief: ['done'],
+  done: [],
+  shelved: ['active'],
+};
 
 // ---------- lore rules (defaults) ----------
 // A world's lore folder overrides these (PLAN-engine.md, "Customizable through lore files"); until Ink lore lands in
@@ -77,6 +112,28 @@ export const DEFAULT_RULES = {
   bossHpPerWeight: 10,     // maxHp = round(score * this * strength)
   bossReturnGrowth: 0.25,  // each retreat: strength + this, so it returns stronger
   mashBonus: 0.15,         // the most extra damage mashing adds to a hit, as a share of that hit
+  // Heads and the Lantern (PLAN-fight.md): one head per Work in the fight; after each turn that lands a hit, every
+  // living head bites the Lantern, and each Keeper freed by a cut head guards one point of it.
+  lanternBase: 3,          // lantern = lanternBase + lanternPerHead * heads (tuned so a careless order can lose)
+  lanternPerHead: 1,
+  dimHours: 12,            // a head whose question has waited this long is Dim: it bites 1 + one per started day, at most dimMax
+  dimMax: 3,
+  guardBlock: 1,           // what each freed Keeper takes off the Gloamwyrm's bite
+  lanternFromLight: 2,     // what a full light meter gives back to the Lantern when you tend it
+  // R4, Bring your Keeper (first guesses, tuned later like the fight numbers):
+  leaseHours: 4,           // copying a prompt leases the work this long; each pasted progress report renews it
+  emberMax: 100,           // the Well's fuel; at 0 the /work page offers no prompts (safety rule 5)
+  tokensPerEmber: 10000,   // reported tokens (input + output) per Ember
+  emberWindowHours: 24,    // Ember spent in this rolling window counts against emberMax
+  summonCost: 10,          // Ember spent to summon a Keeper; it counts against the window like reported tokens
+  // R5, backlog pressure (missions.js pressure()): a saga's open Work weight against the days left to its release date.
+  // A Work weighs its weight if set, else pressurePriority[priority] * pressureSize[size] + pressureFailure * failures.
+  pressurePriority: { critical: 4, high: 3, medium: 2, low: 1 },
+  pressureSize: { S: 1, M: 2, L: 3 },
+  pressureFailure: 1,
+  pressurePerDay: 4,       // open weight a saga clears in a day: pressure = open / (pressurePerDay * days left), at most 1
+  pressureFull: 24,        // with no release date, this much open weight is full pressure
+  pressureGate: 0.75,      // at or above it, side content locks (lore quests, the lore tab, past the hub); never real work
 };
 
 // ---------- R2: the battle ----------
@@ -84,9 +141,13 @@ export const DEFAULT_RULES = {
 // rules, and the battle only reads which Riddles got resolved. Phases:
 //   fighting: turns run; question: paused on a normal-tier Riddle, no timer, input locked until the box closes;
 //   lodge: paused because a confirm- or never-tier Riddle came up; it is answered in the Lodge, never in combat;
-//   won: every Riddle in the fight resolved (answered or deferred); retreated: the player fell back to the Lodge.
+//   won: every Riddle in the fight resolved (answered or deferred); retreated: the player fell back to the Lodge, or
+//   was pushed back there when the Lantern ran out (pushed: true; no strength penalty, answers kept).
 // Hits come only from resolving a Riddle (deferring counts). Mashing scales a hit by at most mashBonus and never
 // picks an answer. hp never reaches 0 while any of the fight's Riddles is unresolved.
+// Heads: one per Work, cut when all its Riddles are resolved, which frees its Keeper to guard. Heads only bite in the
+// beat after a hit, while fighting; never during a question or the Lodge, and never against a clock.
+export const HEAD_KIND = ['snap', 'dim', 'echo'];
 export const BATTLE_PHASE = ['fighting', 'question', 'lodge', 'won', 'retreated'];
 export const BATTLE_MOVES = {
   fighting: ['question', 'lodge', 'won', 'retreated'],
@@ -96,11 +157,402 @@ export const BATTLE_MOVES = {
   retreated: [],
 };
 
+// ---------- R3: area lore ----------
+// Shared lore for an area (PLAN-engine.md, "R3 Lore quests"): a geohash-4 cell, about 39x20 km. The generator writes
+// each entry once to lore/<cell>/<id>.json and lists it in lore/<cell>/index.json (and the cell in lore/cells.json); every player in the cell (and its 8
+// neighbours) reads the same files until the entry ends. Only these kinds are written; anything else is dropped at the
+// source, never filtered after the fact. 'calendar' is the built-in fallback (time of day, season, weekend), made in
+// the client and never published.
+export const AREA_LORE_VERSION = 1;
+export const AREA_LORE_KIND = ['festival', 'market', 'sports', 'music', 'seasonal', 'weather', 'calendar'];
+export const AREA_LORE_WRITER = ['ollama', 'template', 'calendar'];
+export const GEOHASH_CELL = /^[0-9b-hjkmnp-z]{4}$/; // geohash-4: base32 without a, i, l, o
+/**
+ * @typedef {{ id: string, cell: string, kind: string, line: string, hint: string, question: string,
+ *             options?: string[], startsAt: string, endsAt: string, writtenAt: string, writer: string,
+ *             source?: { name: string, url?: string|null }|null }} AreaLoreEntry
+ *   line: the in-world headline ("Bards gather at the Lodge tonight"), plain text;
+ *   hint: the tooltip naming the real event ("Live music at the Corn Exchange, 8pm"), plain text;
+ *   question: the game-only Riddle it becomes; options: its choices (an errand has none);
+ *   source: where the real event came from (a feed's name, or Open-Meteo for weather)
+ * @typedef {{ version: number, cell: string, updatedAt: string,
+ *             entries: { id: string, kind: string, startsAt: string, endsAt: string }[] }} AreaLoreIndex
+ *   lore/<cell>/index.json: what is live or coming in the cell, so a client fetches only the entries it needs
+ * @typedef {{ version: number, updatedAt: string, cells: string[] }} AreaLoreCells
+ *   lore/cells.json: every cell with an index, so a client asks only for cells that exist (no 404s in the console)
+ */
+
+const ISO = v => typeof v === 'string' && !Number.isNaN(Date.parse(v));
+const LORE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/; // also the file name, so no dots or slashes
+
+/** Problems with an area-lore entry, empty when sound. A client drops an entry with any problem. */
+export function validateAreaLore(e) {
+  const out = [];
+  const bad = (path, problem) => out.push({ path, problem });
+  if (!e || typeof e !== 'object') return [{ path: '', problem: 'not an area-lore entry' }];
+  if (typeof e.id !== 'string' || !LORE_ID.test(e.id)) bad('id', 'needs a lowercase id of letters, digits and dashes');
+  if (!GEOHASH_CELL.test(e.cell)) bad('cell', 'needs a geohash-4 cell');
+  if (!AREA_LORE_KIND.includes(e.kind)) bad('kind', `${JSON.stringify(e.kind)} is not one of ${AREA_LORE_KIND.join(', ')}`);
+  if (!AREA_LORE_WRITER.includes(e.writer)) bad('writer', `${JSON.stringify(e.writer)} is not one of ${AREA_LORE_WRITER.join(', ')}`);
+  for (const k of ['line', 'hint', 'question']) if (typeof e[k] !== 'string' || !e[k].trim()) bad(k, 'needs text');
+  if (e.options !== undefined && (!Array.isArray(e.options) || e.options.some(o => typeof o !== 'string' || !o.trim())))
+    bad('options', 'a list of plain-text choices');
+  for (const k of ['startsAt', 'endsAt', 'writtenAt']) if (!ISO(e[k])) bad(k, 'needs an ISO time');
+  if (ISO(e.startsAt) && ISO(e.endsAt) && Date.parse(e.endsAt) <= Date.parse(e.startsAt)) bad('endsAt', 'ends after it starts');
+  return out;
+}
+
+/** Problems with lore/cells.json, empty when sound. */
+export function validateAreaLoreCells(c) {
+  const out = [];
+  if (!c || typeof c !== 'object') return [{ path: '', problem: 'not an area-lore cell list' }];
+  if (c.version !== AREA_LORE_VERSION) out.push({ path: 'version', problem: `expected ${AREA_LORE_VERSION}, got ${c.version}` });
+  if (!ISO(c.updatedAt)) out.push({ path: 'updatedAt', problem: 'needs an ISO time' });
+  if (!Array.isArray(c.cells) || c.cells.some(x => !GEOHASH_CELL.test(x))) out.push({ path: 'cells', problem: 'a list of geohash-4 cells' });
+  return out;
+}
+
+/** Problems with a cell's index.json, empty when sound. */
+export function validateAreaLoreIndex(ix) {
+  const out = [];
+  const bad = (path, problem) => out.push({ path, problem });
+  if (!ix || typeof ix !== 'object') return [{ path: '', problem: 'not an area-lore index' }];
+  if (ix.version !== AREA_LORE_VERSION) bad('version', `expected ${AREA_LORE_VERSION}, got ${ix.version}`);
+  if (!GEOHASH_CELL.test(ix.cell)) bad('cell', 'needs a geohash-4 cell');
+  if (!ISO(ix.updatedAt)) bad('updatedAt', 'needs an ISO time');
+  if (!Array.isArray(ix.entries)) bad('entries', 'missing list');
+  else ix.entries.forEach((x, i) => {
+    if (typeof x?.id !== 'string' || !LORE_ID.test(x.id)) bad(`entries[${i}].id`, 'needs a lowercase id');
+    if (!AREA_LORE_KIND.includes(x?.kind) || x.kind === 'calendar') bad(`entries[${i}].kind`, 'not a published kind');
+    if (!ISO(x?.startsAt) || !ISO(x?.endsAt)) bad(`entries[${i}]`, 'needs startsAt and endsAt');
+  });
+  return out;
+}
+
 export const canMove = (moves, from, to) => (moves[from] || []).includes(to);
 
 /** Who seals a March's decisions: its steward, or the Realm owner when it has none. */
 export const stewardOf = (ledger, marchId) =>
   ledger.marches?.find(m => m.id === marchId)?.steward || ledger.realm?.owner || null;
+
+// ---------- R4: Bring your Keeper ----------
+// Agents get work only through the /work page (no server, no polling). The copied prompt ends with REPORT_INSTRUCTIONS,
+// asking the agent to close every reply with one fenced quest-report block. parseReport reads the last such block
+// (the prompt's own example comes first if an agent echoes it). With no valid block the player picks the kind by hand;
+// the paste is always kept verbatim. Agents work on branchFor(work) and never merge (safety rule 12).
+// Keeper controls are state changes on the ledger: wake = queue work for it; rest = Keeper resting, no prompts
+// offered; resume = back to free or busy; cancel = the queue item cancelled, later pastes refused; the Recall Bell =
+// every Keeper resting (released ones stay released) and every queued, leased or lapsed item cancelled. The game can't
+// stop a running agent; the player stops it.
+export const REPORT_KIND = ['progress', 'done', 'blocked'];
+export const LIVE_QUEUE = ['queued', 'leased', 'lapsed']; // queue states that still hold a Keeper to a Work
+export const REPORT_FENCE = 'quest-report';
+export const KEEPER_CONTROL = ['wake', 'rest', 'resume', 'cancel', 'bell'];
+export const branchFor = work => `quest/${work.id}`;
+export const REPORT_INSTRUCTIONS = [
+  'End every reply with exactly one block like this, filled in:',
+  '```' + REPORT_FENCE,
+  'kind: progress | done | blocked',
+  'summary: one line on what changed',
+  'question: only when blocked, the one question you need answered',
+  'branch: the branch you worked on',
+  'input_tokens: tokens read this run, if you know them',
+  'output_tokens: tokens written this run, if you know them',
+  '```',
+  'Work only on your branch and never merge it; a person merges.',
+].join('\n');
+
+const REPORT_KEYS = ['kind', 'summary', 'question', 'branch', 'input_tokens', 'output_tokens'];
+const FENCE_RE = new RegExp('```' + REPORT_FENCE + '[ \\t]*\\r?\\n([\\s\\S]*?)```', 'g');
+
+/** Edit distance between two strings (Levenshtein). */
+function distance(a, b) {
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++)
+      next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+
+/**
+ * Up to three words from vocab that input was probably meant to be, closest first (similarity 0.6 or more, ignoring
+ * case). Only ever offered to the player as "did you mean"; nothing is repaired with it.
+ */
+export function suggest(input, vocab) {
+  const x = String(input ?? '').trim().toLowerCase();
+  if (!x) return [];
+  return vocab.map(v => ({ v, sim: 1 - distance(x, v.toLowerCase()) / Math.max(x.length, v.length) }))
+    .filter(c => c.sim >= 0.6 && c.v !== input).sort((a, b) => b.sim - a.sim).slice(0, 3).map(c => c.v);
+}
+
+/**
+ * Reads the last quest-report block in a paste. Returns { report, problems }: report is null when there is no block or
+ * it has any problem (the page then asks the player to pick the kind). Never repairs a field; extra keys are problems.
+ * A problem may carry suggestions ("did you mean"): a misspelled field or kind names the likely one.
+ * @returns {{ report: { kind: string, summary: string, question: string|null, branch: string|null,
+ *             usage: { input: number, output: number }|null }|null,
+ *             problems: { field: string, problem: string, suggestions?: string[] }[] }}
+ */
+export function parseReport(pasted) {
+  const blocks = [...String(pasted ?? '').matchAll(FENCE_RE)];
+  if (!blocks.length) return { report: null, problems: [{ field: 'block', problem: `no ${REPORT_FENCE} block` }] };
+  const problems = [];
+  const bad = (field, problem, suggestions = []) =>
+    problems.push(suggestions.length ? { field, problem, suggestions } : { field, problem });
+  const f = {};
+  for (const raw of blocks.at(-1)[1].split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^([A-Za-z_ -]+?)\s*:\s*(.*)$/);
+    if (!m) { bad('block', `not a "key: value" line: ${line.slice(0, 40)}`); continue; }
+    if (!REPORT_KEYS.includes(m[1])) { bad(m[1], 'unknown field', suggest(m[1], REPORT_KEYS)); continue; }
+    if (m[1] in f) { bad(m[1], 'given twice'); continue; }
+    f[m[1]] = m[2].trim();
+  }
+  if (!REPORT_KIND.includes(f.kind)) bad('kind', `must be one of ${REPORT_KIND.join(', ')}`, suggest(f.kind, REPORT_KIND));
+  if (!f.summary) bad('summary', 'needs one line');
+  if (f.kind === 'blocked' && !f.question) bad('question', 'a blocked report asks its question');
+  if (f.kind === 'done' && f.question) bad('question', 'a done report asks nothing; report blocked instead');
+  const num = k => {
+    if (f[k] === undefined || f[k] === '') return null;
+    if (!/^\d+$/.test(f[k])) { bad(k, 'a whole number'); return null; }
+    return Number(f[k]);
+  };
+  const input = num('input_tokens'), output = num('output_tokens');
+  if ((input === null) !== (output === null) && !problems.some(p => p.field.endsWith('_tokens')))
+    bad(input === null ? 'input_tokens' : 'output_tokens', 'give both token counts or neither');
+  if (problems.length) return { report: null, problems };
+  return { report: { kind: f.kind, summary: f.summary, question: f.question || null, branch: f.branch || null,
+    usage: input === null ? null : { input, output } }, problems };
+}
+
+/**
+ * Ember left now: emberMax less what was spent in the last emberWindowHours, never below 0. Spent: the tokens agents
+ * reported, and summonCost for each Keeper summoned in the window. Keepers are made of Ember, so it comes back as the
+ * window moves on.
+ */
+export function emberLeft(ledger, now = new Date(), rules = DEFAULT_RULES) {
+  const since = new Date(now).getTime() - rules.emberWindowHours * 3600e3;
+  let tokens = 0, summons = 0;
+  for (const q of ledger.queue || []) for (const r of q.reports || [])
+    if (r.usage && Date.parse(r.at) > since) tokens += r.usage.input + r.usage.output;
+  for (const k of ledger.keepers || []) if (k.summonedAt && Date.parse(k.summonedAt) > since) summons++;
+  return Math.max(0, rules.emberMax - tokens / rules.tokensPerEmber - summons * rules.summonCost);
+}
+
+// ---------- R4.5: the Bridge ----------
+// One optional local process (bridge/: aedes MQTT broker, the Paperclip reader and comment writer). With it off the game
+// runs on the Local Ledger and /work copy-paste exactly as before. Everything on the wire is data: plain strings that
+// are shown as plain text with True Sight and never obeyed. Topics are quest/<realmId>/...; who may publish or
+// subscribe where is fixed here (topicAllowed), so an agent can only speak for itself.
+//   game → bridge:  bell (stop handing out work), open (the player lets it hand out work again), keepers (retained: the
+//                   opted-in Keepers and their status, nothing else of the ledger); offers are built by the bridge
+//   agent → bridge: register (the Keeper registration record), report (one report per message)
+//   bridge → agent: work (one offer for that Keeper), status
+// The Bell halts the Bridge until the player opens it again; an agent can never open it.
+export const BRIDGE_VERSION = 1;
+export const BRIDGE_HOST = '127.0.0.1'; // the only address it binds to and answers
+export const BRIDGE_TOPIC = ['register', 'work', 'report', 'status', 'bell', 'open', 'keepers'];
+export const BRIDGE_REPORT_KEYS = ['v', 'queueId', 'kind', 'summary', 'question', 'branch', 'input_tokens', 'output_tokens'];
+export const BRIDGE_CREDENTIAL = ['mqtt', 'webhook', 'paperclip'];
+export const PAPERCLIP_WRITES = ['comment']; // write-back is comments only (user, 2026-10-04); status changes stay manual
+const BRIDGE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const ONE_LINE = v => typeof v === 'string' && v.length > 0 && v.length <= 500 && !/[\r\n\0]|```/.test(v);
+
+/** quest/<realmId>/<kind> for game-wide topics, quest/<realmId>/<kind>/<keeperId> for a Keeper's own. */
+export function bridgeTopic(kind, realmId, keeperId = null) {
+  if (!BRIDGE_TOPIC.includes(kind)) throw new Error(`no Bridge topic ${kind}`);
+  if (!BRIDGE_ID.test(realmId || '')) throw new Error('bad realm id');
+  const own = ['register', 'work', 'report'].includes(kind);
+  if (own !== Boolean(keeperId)) throw new Error(`${kind} ${own ? 'needs' : 'takes no'} keeper id`);
+  if (keeperId && !BRIDGE_ID.test(keeperId)) throw new Error('bad keeper id');
+  return ['quest', realmId, kind, ...(keeperId ? [keeperId] : [])].join('/');
+}
+
+/** @returns {{ kind: string, realmId: string, keeperId: string|null }|null} null for anything not a Bridge topic */
+export function parseBridgeTopic(topic) {
+  const [root, realmId, kind, keeperId, ...rest] = String(topic ?? '').split('/');
+  if (root !== 'quest' || rest.length || !BRIDGE_TOPIC.includes(kind) || !BRIDGE_ID.test(realmId || '')) return null;
+  const own = ['register', 'work', 'report'].includes(kind);
+  if (own !== (keeperId !== undefined) || (own && !BRIDGE_ID.test(keeperId))) return null;
+  return { kind, realmId, keeperId: keeperId ?? null };
+}
+
+/**
+ * May this client publish or subscribe to this topic? who: { role: 'game'|'agent'|'bridge', keeperId?, realmId }.
+ * The game rings the Bell and opens the Bridge and listens to reports; an agent registers, reports and listens for work,
+ * only under its own Keeper id; the Bridge sends work and status and listens to the rest. Nothing else is allowed.
+ */
+export function topicAllowed(who, topic, action) {
+  const t = parseBridgeTopic(topic);
+  if (!t || t.realmId !== who.realmId || !['publish', 'subscribe'].includes(action)) return false;
+  const pub = action === 'publish';
+  if (who.role === 'game') return pub ? ['bell', 'open', 'keepers'].includes(t.kind) : ['report', 'register', 'status', 'work'].includes(t.kind);
+  if (who.role === 'bridge') return pub ? ['work', 'status'].includes(t.kind) : ['register', 'report', 'bell', 'open', 'keepers'].includes(t.kind);
+  if (who.role === 'agent') {
+    if (!who.keeperId || !BRIDGE_ID.test(who.keeperId)) return false;
+    if (t.kind === 'status') return !pub;
+    if (t.kind === 'keepers') return false;
+    return t.keeperId === who.keeperId && (pub ? ['register', 'report'].includes(t.kind) : t.kind === 'work');
+  }
+  return false;
+}
+
+/**
+ * The Keeper registration record an agent publishes on its register topic. Registering never creates a Keeper: it only
+ * claims one the ledger already has, by id and name (registeredKeeper).
+ * @typedef {{ v: number, keeperId: string, name: string, skills: string[], client?: string }} Registration
+ */
+export function validateRegistration(r) {
+  const p = [], bad = (field, problem) => p.push({ field, problem });
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return [{ field: 'record', problem: 'not an object' }];
+  for (const k of Object.keys(r)) if (!['v', 'keeperId', 'name', 'skills', 'client'].includes(k)) bad(k, 'unknown field');
+  if (r.v !== BRIDGE_VERSION) bad('v', `must be ${BRIDGE_VERSION}`);
+  if (!BRIDGE_ID.test(r.keeperId || '')) bad('keeperId', 'a letter or digit first, then letters, digits, - or _');
+  if (!ONE_LINE(r.name)) bad('name', 'one line of plain text');
+  if (!Array.isArray(r.skills) || r.skills.length > 20 || !r.skills.every(ONE_LINE)) bad('skills', 'up to 20 one-line strings');
+  if (r.client !== undefined && !ONE_LINE(r.client)) bad('client', 'one line of plain text');
+  return p;
+}
+
+/** The ledger Keeper a valid registration claims, or null: it must exist, match by name, and not be released. */
+export function registeredKeeper(ledger, registration) {
+  if (validateRegistration(registration).length) return null;
+  const k = (ledger.keepers || []).find(x => x.id === registration.keeperId);
+  return k && k.name === registration.name && k.status !== 'released' ? k : null;
+}
+
+/**
+ * Safety (R4.5): may the Bridge hand work to this Keeper right now? Only a registered Keeper (registeredKeeper), never
+ * while the Bridge is halted by the Bell, never a resting or released one. { ok, why } so the game can say why not.
+ */
+export function bridgeMayOffer(ledger, registration, halted) {
+  if (halted) return { ok: false, why: 'the Recall Bell halted the Bridge' };
+  const k = registeredKeeper(ledger, registration);
+  if (!k) return { ok: false, why: 'not a registered Keeper' };
+  if (['resting', 'released'].includes(k.status)) return { ok: false, why: `${k.name} is ${k.status}` };
+  return { ok: true, why: null };
+}
+
+/**
+ * The retained Keeper list the game publishes on the keepers topic: only the Keepers the player opted in (the caller
+ * passes those), and only id, name and status. No Work text, no skills, no credential.
+ * @returns {{ v: number, keepers: { id: string, name: string, status: string }[] }}
+ */
+export const keeperList = keepers =>
+  ({ v: BRIDGE_VERSION, keepers: (keepers || []).filter(k => k && BRIDGE_ID.test(k.id || '') && ONE_LINE(k.name))
+    .map(k => ({ id: k.id, name: k.name, status: String(k.status ?? '') })) });
+
+/**
+ * The retained message the game publishes on the keepers topic: the Keepers the player opted in (being listed IS the
+ * opt-in; nobody else is ever offered work), their status, and each live queue item of theirs. offer is the finished
+ * WorkOffer for a queued item the game's own rules (offerable) allow now, else null.
+ * @typedef {{ v: number, keepers: { id: string, name: string, status: string }[],
+ *             queue: { queueId: string, keeperId: string, state: string, offer: WorkOffer|null }[] }} KeepersMessage
+ */
+export function validateKeepersMessage(m) {
+  const p = [], bad = (field, problem) => p.push({ field, problem });
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return [{ field: 'record', problem: 'not an object' }];
+  for (const k of Object.keys(m)) if (!['v', 'keepers', 'queue'].includes(k)) bad(k, 'unknown field');
+  if (m.v !== BRIDGE_VERSION) bad('v', `must be ${BRIDGE_VERSION}`);
+  if (!Array.isArray(m.keepers) || m.keepers.length > 200) return [...p, { field: 'keepers', problem: 'up to 200 Keepers' }];
+  if (!Array.isArray(m.queue) || m.queue.length > 500) return [...p, { field: 'queue', problem: 'up to 500 items' }];
+  m.keepers.forEach((k, i) => {
+    if (!k || !BRIDGE_ID.test(k.id || '') || !ONE_LINE(k.name) || !ONE_LINE(k.status)) bad(`keepers[${i}]`, 'id, name and status are required');
+  });
+  m.queue.forEach((q, i) => {
+    if (!q || !BRIDGE_ID.test(q.queueId || '') || !BRIDGE_ID.test(q.keeperId || '') || !ONE_LINE(q.state)) bad(`queue[${i}]`, 'queueId, keeperId and state are required');
+    else if (q.offer !== null && (typeof q.offer !== 'object' || q.offer?.queueId !== q.queueId || typeof q.offer.prompt !== 'string')) bad(`queue[${i}].offer`, 'must be null or the offer for this item');
+  });
+  return p;
+}
+
+/** Halt state: the Bell halts it; only the game's open message clears it. Nothing an agent sends reaches here. */
+export const bridgeHalt = (halted, kind) => kind === 'bell' ? true : kind === 'open' ? false : halted;
+
+/**
+ * One work offer, bridge → agent, on that Keeper's work topic. prompt is buildPrompt's text (it ends with
+ * REPORT_INSTRUCTIONS); the agent answers with a report naming queueId.
+ * @typedef {{ v: number, queueId: string, workId: string, title: string, branch: string, prompt: string }} WorkOffer
+ */
+export const workOffer = (work, item, prompt) =>
+  ({ v: BRIDGE_VERSION, queueId: item.id, workId: work.id, title: work.title, branch: branchFor(work), prompt });
+
+/**
+ * A report as an agent publishes it, JSON on its report topic: the quest-report fields, plus the queue item it answers.
+ * @typedef {{ v: number, queueId: string, kind: string, summary: string, question?: string, branch?: string,
+ *             input_tokens?: number, output_tokens?: number }} BridgeReport
+ * It maps onto the R4 Report by the same rules as a paste: the fields become a quest-report block and go through
+ * parseReport, so every rule there holds (kinds progress/done/blocked, a blocked report asks its question, token counts
+ * come in pairs, no extra keys). The Report keeps relayed: 'bridge' and manual: false; text is the block, verbatim.
+ * @returns {{ queueId: string|null, report: object|null, problems: { field: string, problem: string, suggestions?: string[] }[] }}
+ */
+export function reportFromBridge(payload) {
+  const p = [];
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return { queueId: null, report: null, problems: [{ field: 'record', problem: 'not an object' }] };
+  for (const k of Object.keys(payload)) if (!BRIDGE_REPORT_KEYS.includes(k)) p.push({ field: k, problem: 'unknown field', suggestions: suggest(k, BRIDGE_REPORT_KEYS) });
+  if (payload.v !== BRIDGE_VERSION) p.push({ field: 'v', problem: `must be ${BRIDGE_VERSION}` });
+  if (!BRIDGE_ID.test(payload.queueId || '')) p.push({ field: 'queueId', problem: 'the queue item this answers' });
+  const lines = ['summary', 'question', 'branch', 'kind'];
+  for (const k of lines) if (payload[k] !== undefined && payload[k] !== '' && !ONE_LINE(payload[k])) p.push({ field: k, problem: 'one line of plain text' });
+  for (const k of ['input_tokens', 'output_tokens'])
+    if (payload[k] !== undefined && !(Number.isInteger(payload[k]) && payload[k] >= 0)) p.push({ field: k, problem: 'a whole number' });
+  if (p.length) return { queueId: null, report: null, problems: p };
+  const text = ['```' + REPORT_FENCE, ...REPORT_KEYS.filter(k => payload[k] !== undefined && payload[k] !== '').map(k => `${k}: ${payload[k]}`), '```'].join('\n');
+  const { report, problems } = parseReport(text);
+  return { queueId: payload.queueId, report: report && { ...report, text, relayed: 'bridge', manual: false }, problems };
+}
+
+/**
+ * The per-Realm credential record. It lives only in the Bridge's own file and the browser's settings (never in the
+ * ledger, a save, a prompt, a Riddle or a Bridge message), and is shown only as placeholders (credentialPlaceholder).
+ * mqtt is the broker login the game and agents use; webhook the token for the polling/webhook fallback; paperclip the
+ * Paperclip URL and key, which only the Bridge holds.
+ * @typedef {{ v: number, realmId: string, mqtt?: { username: string, password: string },
+ *             webhook?: { token: string }, paperclip?: { url: string, key: string } }} Credential
+ */
+export function validateCredential(c) {
+  const p = [], bad = (field, problem) => p.push({ field, problem });
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return [{ field: 'record', problem: 'not an object' }];
+  for (const k of Object.keys(c)) if (!['v', 'realmId', ...BRIDGE_CREDENTIAL].includes(k)) bad(k, 'unknown field');
+  if (c.v !== BRIDGE_VERSION) bad('v', `must be ${BRIDGE_VERSION}`);
+  if (!BRIDGE_ID.test(c.realmId || '')) bad('realmId', 'the Realm this belongs to');
+  const str = (obj, k, path) => { if (!ONE_LINE(obj?.[k])) bad(path, 'a one-line string'); };
+  if (c.mqtt !== undefined) { str(c.mqtt, 'username', 'mqtt.username'); str(c.mqtt, 'password', 'mqtt.password'); }
+  if (c.webhook !== undefined) str(c.webhook, 'token', 'webhook.token');
+  if (c.paperclip !== undefined) {
+    str(c.paperclip, 'url', 'paperclip.url'); str(c.paperclip, 'key', 'paperclip.key');
+    if (ONE_LINE(c.paperclip?.url) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(c.paperclip.url) && !/^https:\/\//.test(c.paperclip.url))
+      bad('paperclip.url', 'http only for this machine, else https');
+  }
+  if (!BRIDGE_CREDENTIAL.some(k => c[k] !== undefined)) bad('record', 'holds no credential');
+  return p;
+}
+
+/** Every secret value in the record (passwords, tokens, keys), for checking that none leaked. */
+export const credentialSecrets = c => [c?.mqtt?.password, c?.webhook?.token, c?.paperclip?.key].filter(Boolean);
+/** True when text contains any secret of the record: used to keep credentials out of prompts and Bridge messages. */
+export const credentialLeaks = (text, c) => credentialSecrets(c).some(s => String(text ?? '').includes(s));
+/** What a help panel shows in place of each secret. */
+export const credentialPlaceholder = c => ({ v: c.v, realmId: c.realmId,
+  ...(c.mqtt && { mqtt: { username: c.mqtt.username, password: '<mqtt password>' } }),
+  ...(c.webhook && { webhook: { token: '<webhook token>' } }),
+  ...(c.paperclip && { paperclip: { url: c.paperclip.url, key: '<paperclip key>' } }) });
+
+/**
+ * Where the Bridge may listen: 127.0.0.1 only. Anything else (0.0.0.0, a LAN address, localhost, which can resolve
+ * elsewhere) throws. Returns the host to bind.
+ */
+export function bridgeBindHost(host = BRIDGE_HOST) {
+  if (host !== BRIDGE_HOST) throw new Error(`the Bridge only listens on ${BRIDGE_HOST}, not ${host}`);
+  return host;
+}
+/** True for a connection that comes from this machine's loopback address; the Bridge drops every other peer. */
+export const isOwnMachine = address => address === BRIDGE_HOST || address === `::ffff:${BRIDGE_HOST}`;
 
 // ---------- record shapes ----------
 // Ids are strings, unique within their kind. Times are ISO strings. Optional fields may be null or missing.
@@ -108,17 +560,26 @@ export const stewardOf = (ledger, marchId) =>
  * @typedef {{ id: string, name: string, owner: string }} Realm   owner: the fallback steward for every March
  * @typedef {{ id: string, name: string, banner: string, steward: string|null }} March   banner: a CSS colour
  * @typedef {{ id: string, marchId: string, name: string, status: string, order: number,
- *             weight?: number|null, council?: boolean }} Hall
+ *             weight?: number|null, council?: boolean, dueAt?: string|null }} Hall
  *   council: big milestone, accepted by a council vote (quest:council) rather than the steward
- * @typedef {{ id: string, marchId: string, hallId: string|null, title: string, status: string, priority: string,
+ *   dueAt: the release date the milestone ships on (the saga's clock); deadlines are on work, never on answering
+ * @typedef {{ id: string, marchId: string, hallId: string|null, parentId?: string|null, title: string, status: string, priority: string,
  *             size?: string|null, weight?: number|null, risk?: 'high'|null, keeperId?: string|null,
  *             blockedBy?: string[], failures?: number, createdAt: string, updatedAt: string,
- *             resolvedAt?: string|null, decisions?: Decision[], mark?: Mark }} Work
+ *             resolvedAt?: string|null, decisions?: Decision[], mark?: Mark, endsAt?: string|null,
+ *             dueAt?: string|null }} Work
  *   hallId null is allowed but is a repair quest ("this Work belongs to no Hall")
+ *   parentId: the mission's parent Work, in the same Hall; one level only (a parent has no parent of its own)
+ *   dueAt: its deadline (a mission's is its parent's); unlike endsAt it closes nothing, it only sets the clock
+ *   endsAt: R3 lore only, when its area-lore entry ends; the Work closes then and its open Riddle fades
  * @typedef {{ riddleId: string, question: string, answer: string, sealed_by: string, at: string,
  *             sent?: { to: 'paperclip', at: string, ref?: string|null }|null }} Decision
  *   a sealed Riddle written back to its Work (rule 9); sent: set once the connector has posted it as a comment
- * @typedef {{ id: string, name: string, role: string, skills: string[], status: string }} Keeper
+ * @typedef {{ id: string, name: string, role: string, skills: string[], status: string,
+ *             summonedAt?: string|null, joinedAt?: string|null, releasedAt?: string|null }} Keeper
+ *   Keepers are agents, and everything about one beyond these fields is read from its work (Works, reports, events);
+ *   the game invents no stats. summonedAt: when Ember was spent on it; joinedAt: its first approved Work;
+ *   releasedAt: when it was retired. Keepers from before summoning existed have none of these.
  * @typedef {{ status: string, source: string, sourceId: string, real: boolean, at: string }} Mark
  *   real: true for real work, false for game-only actions
  * @typedef {{ id: string, workId: string, marchId: string, text: string, line?: string|null, options?: string[],
@@ -140,12 +601,32 @@ export const stewardOf = (ledger, marchId) =>
  *   "while you were away", counted from the event log after the last session.end
  * @typedef {{ id: string, keeperId: string, workId: string, prompt: string, state: string,
  *             leaseUntil?: string|null, result?: { text: string, usage?: { input: number, output: number },
- *             at: string }|null, createdAt: string }} QueueItem
- * @typedef {{ at: string, kind: string, ref?: string|null }} Event
+ *             at: string }|null, createdAt: string, copiedAt?: string|null, reports?: Report[],
+ *             cancelledAt?: string|null }} QueueItem
+ *   leaseUntil is null once returned; a leased item may be copied again, which renews it (leased → leased)
+ *   prompt: what the player copies (the Work, the branch, REPORT_INSTRUCTIONS); copiedAt: when the lease started
+ *   result: the final pasted text once returned (verbatim, plain text); reports: every paste, oldest first
+ * @typedef {{ kind: string, summary: string, question?: string|null, branch?: string|null,
+ *             usage?: { input: number, output: number }|null, text: string, relayed: 'player'|'bridge', manual: boolean,
+ *             at: string }} Report
+ *   R4: one paste on /work. text: the whole paste, verbatim; manual: no valid quest-report block was found, so the
+ *   player picked the kind by hand (summary is then the paste's first line). A question raises a Riddle on the Work.
+ * @typedef {{ at: string, kind: string, ref?: string|null, seq?: number, prevHash?: string|null, hash?: string }} Event
+ *   seq, prevHash, hash: stamped by the store as the event is written (chainEvent), so a lost or changed event shows
+ *   (verifyEvents). Events from before the chain have none and count as its unchained start.
+ * @typedef {{ id: string, state: string, startedAt: string, endedAt?: string|null }} MissionRun
+ *   id: the mission's parent Work (or the lone Work of a side mission)
+ * @typedef {{ current: string|null, runs: Record<string, MissionRun> }} MissionPlay   the save's play.missions
  * @typedef {{ id: string, startedAt: string, phase: string, score: number, strength: number, hp: number, maxHp: number,
  *             riddleIds: string[], lodgeIds: string[], resolvedIds: string[], current: string|null, turn: number,
  *             endedAt?: string|null, weights?: Record<string, number>,
- *             dealt?: Record<string, number> }} Battle
+ *             dealt?: Record<string, number>, heads?: Head[], lantern?: number, lanternMax?: number,
+ *             pushed?: boolean, bitten?: Record<string, number> }} Battle
+ *   bitten: the Lantern each hit's beat cost, given back with the hp if that answer is recalled
+ * @typedef {{ workId: string, workTitle: string, keeperId: string|null, keeper: string|null, riddleIds: string[],
+ *             kind: string, bite: number, beats: number }} Head
+ *   kind: snap (a plain question), dim (waited dimHours or more), echo (put off before: bites harder each beat alive);
+ *   bite: its base bite; beats: beats it has bitten so far (an echo head adds one per beat)
  *   dealt: the hp each resolved Riddle took off, given back if its answer is recalled from the outbox
  *   weights: each fight Riddle's weight when it was summoned, so a hit's size is its share of maxHp
  *   riddleIds: normal-tier Riddles asked in the fight; lodgeIds: confirm/never ones that pause it for the Lodge;
@@ -204,6 +685,7 @@ export function validateLedger(l) {
     ref(`${p}.marchId`, h.marchId, 'marches');
     text(`${p}.name`, h.name);
     oneOf(`${p}.status`, h.status, HALL_STATUS);
+    if (h.dueAt !== null && h.dueAt !== undefined && !ISO(h.dueAt)) bad(`${p}.dueAt`, 'needs an ISO time');
   });
   l.works.forEach((w, i) => {
     const p = `works[${i}]`;
@@ -225,11 +707,25 @@ export function validateLedger(l) {
       text(`${p}.decisions[${j}].answer`, d.answer);
     });
     (w.blockedBy || []).forEach((b, j) => ref(`${p}.blockedBy[${j}]`, b, 'works'));
+    if (w.dueAt !== null && w.dueAt !== undefined && !ISO(w.dueAt)) bad(`${p}.dueAt`, 'needs an ISO time');
+    if (w.parentId !== null && w.parentId !== undefined) {
+      const parent = l.works.find(x => x.id === w.parentId);
+      if (w.parentId === w.id) bad(`${p}.parentId`, `"${w.title}" is its own parent`, true);
+      else if (!parent) ref(`${p}.parentId`, w.parentId, 'works');
+      else if (parent.hallId !== w.hallId) bad(`${p}.parentId`, `"${w.title}" and its parent are in different Halls`, true);
+      else if (parent.parentId) bad(`${p}.parentId`, `"${parent.title}" is already a child; missions are one level deep`, true);
+    }
     mark(`${p}.mark`, w.mark);
   });
   l.keepers.forEach((k, i) => {
-    text(`keepers[${i}].name`, k.name);
-    oneOf(`keepers[${i}].status`, k.status, KEEPER_STATUS);
+    const p = `keepers[${i}]`;
+    text(`${p}.name`, k.name);
+    oneOf(`${p}.status`, k.status, KEEPER_STATUS);
+    for (const t of ['summonedAt', 'joinedAt', 'releasedAt'])
+      if (k[t] !== null && k[t] !== undefined && !ISO(k[t])) bad(`${p}.${t}`, 'needs an ISO time');
+    if (k.status === 'summoned' && !k.summonedAt) bad(`${p}.summonedAt`, 'a summoned Keeper records when Ember was spent');
+    if (k.status === 'summoned' && k.joinedAt) bad(`${p}.status`, 'a Keeper that has joined is no longer only summoned');
+    if (k.status === 'released' && !k.releasedAt) bad(`${p}.releasedAt`, 'a released Keeper records when it was retired');
   });
   l.riddles.forEach((r, i) => {
     const p = `riddles[${i}]`;
@@ -258,9 +754,96 @@ export function validateLedger(l) {
     ref(`${p}.workId`, q.workId, 'works');
     oneOf(`${p}.state`, q.state, QUEUE_STATE);
     if (q.state === 'leased' && !q.leaseUntil) bad(`${p}.leaseUntil`, 'a leased item needs its lease end');
+    if (q.state === 'returned' && !q.result) bad(`${p}.result`, 'a returned item keeps its result');
+    const w = l.works.find(w => w.id === q.workId);
+    if (w && isGameOnly(w)) bad(`${p}.workId`, 'game-only Works never go to an agent');
+    (q.reports || []).forEach((r, j) => {
+      oneOf(`${p}.reports[${j}].kind`, r.kind, REPORT_KIND);
+      text(`${p}.reports[${j}].text`, r.text);
+      if (r.kind === 'blocked') text(`${p}.reports[${j}].question`, r.question);
+    });
   });
   l.events.forEach((e, i) => oneOf(`events[${i}].kind`, e.kind, EVENT_KIND));
+  const chain = verifyEvents(l.events);
+  if (!chain.ok) bad(`events[${chain.brokenAt}]`, `the event log's chain breaks here: ${chain.why}`);
   return out;
+}
+
+/** Problems with the save's play.missions, empty when sound. One mission at a time: current is the one under way. */
+export function validateMissionPlay(mp) {
+  const out = [];
+  const bad = (path, problem) => out.push({ path, problem });
+  if (!mp || typeof mp !== 'object' || !mp.runs || typeof mp.runs !== 'object') return [{ path: '', problem: 'not mission play' }];
+  for (const [id, r] of Object.entries(mp.runs)) {
+    if (r?.id !== id) bad(`runs.${id}.id`, 'a run is keyed by its own id');
+    if (!MISSION_STATE.includes(r?.state)) bad(`runs.${id}.state`, `${JSON.stringify(r?.state)} is not one of ${MISSION_STATE.join(', ')}`);
+    if (!ISO(r?.startedAt)) bad(`runs.${id}.startedAt`, 'needs an ISO time');
+    if (r?.state === 'done' && !ISO(r.endedAt)) bad(`runs.${id}.endedAt`, 'a finished mission records when it ended');
+  }
+  if (mp.current !== null && mp.current !== undefined) {
+    const r = mp.runs[mp.current];
+    if (!r) bad('current', `no run ${JSON.stringify(mp.current)}`);
+    else if (['done', 'shelved'].includes(r.state)) bad('current', `the current mission can't be ${r.state}`);
+  }
+  const live = Object.values(mp.runs).filter(r => !['done', 'shelved'].includes(r?.state)).map(r => r.id);
+  if (live.some(id => id !== mp.current)) bad('runs', 'only the current mission is under way; the rest are shelved or done');
+  return out;
+}
+export const emptyMissionPlay = () => ({ current: null, runs: {} });
+
+/**
+ * The play state inside a save, with play.missions checked: missing becomes empty, and unsound mission play is
+ * dropped to empty with its problems returned (a warning, never a refusal; the ledger is untouched either way).
+ */
+export function playFromSave(save) {
+  const play = clone(save?.play || {});
+  if (play.missions === undefined) return { play: { ...play, missions: emptyMissionPlay() }, problems: [] };
+  const problems = validateMissionPlay(play.missions);
+  return { play: problems.length ? { ...play, missions: emptyMissionPlay() } : play, problems };
+}
+
+// ---------- the event log's hash chain ----------
+// Each event the store writes is stamped with its place (seq), the hash before it (prevHash) and its own hash, so an
+// event that goes missing or changes shows up. FNV-1a: it catches accidents (a lost write, a hand-edited save), not a
+// determined forger; a source with outside writers can move to SHA-256 later.
+const canon = v => Array.isArray(v) ? `[${v.map(canon).join(',')}]`
+  : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon(v[k])}`).join(',')}}`
+  : JSON.stringify(v ?? null);
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+const bodyOf = ({ seq, prevHash, hash, ...body }) => body;
+/** An event's hash: its body (without the chain fields), its seq and the hash before it. */
+export const eventHash = (e, seq, prevHash) => fnv1a(`${seq}|${prevHash ?? ''}|${canon(bodyOf(e))}`);
+/**
+ * Stamps an event for the end of the log. prev: the last event in the log (or null), seq: how many events come
+ * before this one. An unchained log (events from before the chain) starts the chain with prevHash null.
+ */
+export function chainEvent(e, prev, seq) {
+  const prevHash = prev?.hash ?? null;
+  return { ...bodyOf(e), seq, prevHash, hash: eventHash(e, seq, prevHash) };
+}
+/**
+ * Checks the log's chain. ok with brokenAt null when sound; otherwise brokenAt is the first bad event and why says
+ * what is wrong. Unchained events are fine only before the chain starts.
+ */
+export function verifyEvents(events = []) {
+  let prevHash = null, chained = false;
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e?.hash === undefined) {
+      if (chained) return { ok: false, brokenAt: i, why: 'an unchained event after the chain began' };
+      continue;
+    }
+    chained = true;
+    if (e.seq !== i) return { ok: false, brokenAt: i, why: `expected place ${i}, found ${e.seq} (an event is missing or out of order)` };
+    if ((e.prevHash ?? null) !== prevHash) return { ok: false, brokenAt: i, why: 'it does not follow the event before it' };
+    if (e.hash !== eventHash(e, e.seq, e.prevHash)) return { ok: false, brokenAt: i, why: 'it was changed after it was written' };
+    prevHash = e.hash;
+  }
+  return { ok: true, brokenAt: null, why: null };
 }
 
 /** Problems with a battle record, empty when sound. */
@@ -279,6 +862,17 @@ export function validateBattle(b) {
   if (b.phase === 'won' && open.length) bad('phase', 'won with Riddles unresolved');
   if (b.phase === 'question' && !(b.riddleIds || []).includes(b.current)) bad('current', 'a question pause shows one of the fight\'s Riddles');
   if ((b.lodgeIds || []).includes(b.current) && b.phase !== 'lodge') bad('current', 'confirm/never Riddles are never asked in combat');
+  if (b.heads !== undefined) {
+    if (!Array.isArray(b.heads)) bad('heads', 'not a list');
+    else b.heads.forEach((h, i) => {
+      if (!HEAD_KIND.includes(h.kind)) bad(`heads[${i}].kind`, `${JSON.stringify(h.kind)} is not one of ${HEAD_KIND.join(', ')}`);
+      if (!h.riddleIds?.length || h.riddleIds.some(id => !all.includes(id))) bad(`heads[${i}].riddleIds`, 'a head is made of the fight\'s Riddles');
+      if (!(h.bite >= 1)) bad(`heads[${i}].bite`, 'bites at least 1');
+    });
+    if (!(b.lanternMax > 0) || !(b.lantern >= 0) || b.lantern > b.lanternMax) bad('lantern', 'needs 0 <= lantern <= lanternMax, lanternMax > 0');
+    if (b.lantern === 0 && !['retreated', 'won'].includes(b.phase)) bad('lantern', 'an empty Lantern ends the fight');
+  }
+  if (b.pushed && b.phase !== 'retreated') bad('pushed', 'only a fight that ended in the Lodge was pushed back');
   return out;
 }
 
@@ -288,6 +882,7 @@ export function validateBattle(b) {
  * @typedef {object} LedgerStore
  * @property {() => Promise<Ledger>} snapshot              a deep copy of the whole ledger
  * @property {(kind: string, record: object) => Promise<void>} put   insert or replace by id; stamps updatedAt on works
+ *   and chains events (chainEvent) onto the end of the log
  * @property {(kind: string, id: string) => Promise<void>} remove
  * @property {(ledger: Ledger) => Promise<void>} replace   swap in a whole ledger (sample Realm, a loaded save)
  * @property {(fn: (l: Ledger) => void) => () => void} subscribe   called after every change; returns unsubscribe
@@ -316,7 +911,8 @@ export function memoryStore(initial = emptyLedger()) {
   return {
     async snapshot() { return clone(l); },
     async put(kind, record) {
-      const rows = list(kind), r = clone(record);
+      const rows = list(kind);
+      const r = kind === 'events' ? chainEvent(clone(record), rows.at(-1) || null, rows.length) : clone(record);
       if (kind === 'works') r.updatedAt = new Date().toISOString();
       const i = kind === 'events' ? -1 : rows.findIndex(x => x.id === r.id);
       if (i >= 0) rows[i] = r; else rows.push(r);
@@ -350,7 +946,8 @@ export function makeSave(ledger, play = {}, { withLedger = true } = {}) {
   const parts = ['manifest.json', 'play.json', ...(withLedger ? ['ledger.json', ...Object.keys(marches).map(id => `march/${id}.json`)] : [])];
   return clone({
     manifest: { kind: SAVE_KIND, version: SAVE_VERSION, at: new Date().toISOString(), realm: ledger.realm, parts, withLedger },
-    play, ledger: withLedger ? { keepers: ledger.keepers, events: ledger.events } : null, marches, archives: {},
+    play: { ...play, missions: play.missions ?? emptyMissionPlay() },
+    ledger: withLedger ? { keepers: ledger.keepers, events: ledger.events } : null, marches, archives: {},
   });
 }
 

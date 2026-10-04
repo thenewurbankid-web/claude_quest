@@ -1,0 +1,10 @@
+{
+  "id": "rain-on-the-hollow", "cell": "gcpv", "kind": "weather",
+  "line": "Rain drums on the Hollow's roofs",
+  "hint": "Sample: rain in the forecast (Open-Meteo)",
+  "question": "The well-keeper asks whether to cover the well or let it fill.",
+  "options": ["Cover it", "Let it fill"],
+  "startsAt": "2026-10-03T00:00:00Z", "endsAt": "2030-01-01T00:00:00Z",
+  "writtenAt": "2026-10-03T06:00:00Z", "writer": "template",
+  "source": { "name": "Open-Meteo", "url": "https://open-meteo.com" }
+}

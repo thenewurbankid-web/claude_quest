@@ -4,6 +4,116 @@
 Git repo: github.com/thenewurbankid-web/claude_quest (public). `config.json` is git-ignored; copy `config.example.json`.
 
 ## NEXT SESSION START HERE: the Quest engine (user, 2026-10-03)
+**Live news, moderated (CLA-16, 2026-10-04):** `area-lore/service.mjs` (started by `app.js`) generates lore into a pending queue (`data/lore-queue.json`; `queue.mjs`) every `lore.everyHours` (3) for `config.json` `lore.cell`/`areas`, unloads qwen3:4b after; `/lore-review` (127.0.0.1 only, `public/lore-review.html`) approves, edits, rejects; approve pushes via `publish.mjs` to the orphan `lore` branch of thenewurbankid-web/claude_quest from a clone at `~/.claude-quest/lore-repo`; `boot.js` reads the raw GitHub URL (calendar fallback; `lore.base` override). First real push: empty `cells.json`, commit `a0dccb2` on `lore`. `test/lore-service.test.js`, 223 tests pass. **Untested:** the review page in a browser, a real Ollama run, the game reading GitHub. To use: add `lore` to config.json, restart the server.
+**Marches as 3D regions (CLA-15, 2026-10-04, branch `quest-dev/CLA-15`):** `public/quest/regions.js` (`regionsOf(ledger)`: one region per March, or 4 default regions in local ledger mode; `postLines`), `public/3d/region-map.js` (`regionMap`, `hubGates`: 8 gate slots at the hub's road ends), `scene.js` (gates in the hub, `travel`, `buildRegion`: one region at a time far from the hub, Work posts, gate back), `boot.js` (`quest:regions`, `quest:post`). Demo text page: `/quest/dev-regions.html` on `node dev/static.js 4791`; walk it at `/`: empty ledger = 4 default regions, Ledger panel > sample = Ferry and Orchard. `test/regions.test.js`, 211 pass. **Untested in a browser:** the whole travel (fade, region build, gates, posts, 375px, frame rate), and region trees/ground at night. Not built: Speaking Stones, Fallen Bridge, Keepers in a March, more than 8 gates. Next: R3 Lore quests (unchanged).
+**Bigger hub (CLA-14, 2026-10-04):** `public/3d/hub.js` now builds a 96x64 map in code: the old 48x32 town in the middle (TOWN is [36,24]), streets out to every edge, and a market (stalls `K`, lamps `L`), docks (planks `P`, a pier over a lake), lodge grounds (flowers, lamps), a forest edge with a trail and hut, and a farm; `AREAS` names the rectangles for travel points later. The Ember Well `W` is now actually on the map at the street crossing (it had silently fallen back to a stale cell). `scene.js` keeps static things in 8x8 chunks shown within about 46 cells of the player; `sunnyside.js` shares tree textures per kind. `test/hub.test.js` (BFS reachability); 208 tests pass. **Untested in a browser:** how the new districts look, stall and lamp placeholders, plank paint, frame rate on a phone.
+**CLA-13 (2026-10-04):** a folder URL like `/3d/` no longer kills the server: static serving moved to `lib/static.js` (`serveStatic`: directory serves its `index.html` or 404, missing/traversal 404, stream errors destroy the response, never throw). Test: `test/static.test.js` (203 pass). Not run against the live server on 4777 (config.json absent in worktree); `app.js` only calls the helper. Next: unchanged.
+**R4.5 integration + demo (CLA-9/CLA-12, 2026-10-04):** `boot.js` mounts the Bridge panel (a "Bridge" button under "Ledger"), passes `mqtt.min.js` (loaded in `index.html`, served by `app.js` and `dev/static.js`) as `connect`, publishes `keepersMessage` for every Keeper whenever the link comes up or Keepers/queue change (Bridge on = the opt-in), and `mountRecallBell` has an `onRing` hook that rings the Bridge's Bell. `bridge/demo-agent.js <keeperId>` is a stand-in agent. Tried against the real Bridge and a Node game stand-in (offer -> progress/done reports reach the game as `report` events); **untested in a browser**: the panel, the button at 375px, the mqtt browser bundle, the Bell over the real page. Parked: CLA-10 plugin (backlog), the duplicate `keepers()`/`publishKeepers()`, separate game/agent logins. How to run: see the CLA-12 comment.
+**CLA-7 merged with 3d-world (CLA-8's `publishKeepers`/`keeperList`):** the Bridge subscribes to `keepers`, no ledger file. OPEN for the user: `keeperList` carries only id/name/status, but the Bridge needs ready-made offers (Work text) to hand out work. I kept both: `keeperList` (CLA-8) and the richer `keepersMessage` (adds `queue` with offers; `validateKeepersMessage`). CLA-9 should publish `keepersMessage` via `keepers()`, or the user decides offers come another way. 202 tests pass.
+**CLA-7 reworked (2026-10-04, branch `quest-dev/CLA-7`):** the Bridge starts halted (only the game's `open` clears it); one shared
+Realm login on every connection; WebSocket upgrades from any Origin but the game's are refused; `POST /paperclip/comment` (and every
+HTTP route) needs the login token, and the comment POST also the game Origin; `bridge/ledger.json` is gone: the game publishes a
+retained `keepers` message (`keepersMessage` in work-queue.js, validated by `validateKeepersMessage`; being listed is the opt-in).
+`createBridgeClient().keepers(msg)` publishes it, but nothing in the game's mount calls it yet (CLA-8/9). Untested: real Paperclip
+and a real browser WebSocket (the Origin check is tested with Node `ws`). Needs a game `open` after each connect to start work.
+**R4.5 Keeper-list topic (CLA-8, 2026-10-04, branch `quest-dev/CLA-8`):** contract has a `keepers` topic (game publishes retained, Bridge subscribes, agents denied) and `keeperList()` (id, name, status only); `createBridgeClient().publishKeepers(list)` publishes it retained, qos 1. Safety test + client test added (198 pass). Still open: the Bridge (CLA-7) must subscribe to `keepers` and drop `bridge/ledger.json` for Keepers; CLA-9 must call `publishKeepers` with the opted-in Keepers (no ledger opt-in flag exists yet; the caller decides) and `ring()` on the Bell. Untested in the browser.
+**R4.5 in-game Bridge client built (CLA-8, 2026-10-04, `038fc85`):** `public/quest/bridge-client.js`: `loadBridgeSettings`/`saveBridgeSettings` (localStorage only), `reportToQueue` (via `pasteResult`, marked relayed 'bridge'), `createBridgeClient` (client id `game`, takes `connect` = the mqtt browser build, injected), `mountBridgePanel` (on/off, status, login, placeholders, registrations/refusals with True Sight; returns `ring()`/`open()` for the Bell). `npm test` 196 pass; client tested against the real Bridge over WebSocket. **Untested in the browser:** the whole panel, 375px, and the mqtt browser bundle (`node_modules/mqtt/dist/mqtt.min.js` is not served by `app.js`/`dev/static.js` yet). **For CLA-9:** serve/load the bundle and pass `connect`, mount the panel, call `ring()` when the Recall Bell rings, call `refresh()` when Keepers change, and give the Bridge a ledger snapshot (open item 1 above).
+**R4.5 Bridge process built (CLA-7, 2026-10-04):** `bridge/` (`node bridge/index.js`; `bridge/bridge.js` is `createBridge`): aedes over TCP (4780) and WebSocket+HTTP (4779) on 127.0.0.1, `topicAllowed` on every publish/subscribe, bad agent reports and registrations are replaced by a `refused` message on the status topic, good reports republished with `{queueId, keeperId, report}`, Bell/open via `bridgeHalt`, offers only through `bridgeMayOffer`. Paperclip: `GET /paperclip/api/...` passthrough and `POST /paperclip/comment {issueId, kind: decision|report, body}` (comments only, needs header `x-quest-token` = webhook token). Own git-ignored files `bridge/credential.json` and `bridge/ledger.json`. Deps: `aedes`, `websocket-stream`. `npm test` 189 pass, tested over loopback only; not tried against the real Paperclip or a browser. **Open for CLA-8/9:** (1) the Bridge holds no ledger: it reads a snapshot from `bridge/ledger.json`; the game must write or send one (no topic for it exists yet). (2) The credential has one MQTT login, so roles come from the client id (`game`, `agent-<keeperId>`): an agent holding the password could claim `game`. Separate game/agent logins would need a contract change; user's call. (3) Agents also see the unused `status` refusals. **Next:** CLA-8 in-game client and settings.
+**R4.5 contract done (CLA-6, 2026-10-04, `152c47e`):** `contract.js` "R4.5: the Bridge" (topics `quest/<realm>/...`, `topicAllowed`, `Registration`, `bridgeMayOffer`/`bridgeHalt`, `reportFromBridge` via `parseReport`, `Credential`, `bridgeBindHost`/`isOwnMachine`), `sample-bridge.json`, four Bridge safety tests; `npm test` 181 pass. Slices: CLA-7 Bridge process (`bridge/`), CLA-8 in-game client and settings, CLA-9 integration (`boot.js`), in that order. Nothing here touches the browser. **Next:** CLA-7 (needs `aedes`, `mqtt` and its WebSocket adapter only). `PLAN-engine.md` has the user's 2026-10-04 decisions uncommitted; commit it with the next change.
+**Quest Dev merges its own work (user, 2026-10-04 ~01:20).** The user closed the Claude sessions and watches on Quest Pulse (`node dev/dashboard.js`, http://localhost:4795). Quest Dev now reviews its own diff against the safety lines, merges `3d-world` into its branch, runs `npm test`, fast-forwards `3d-world`, and comments on the next issue to wake it (paperclip/AGENTS.md; PLAN-engine.md Safety 12 exception). R4.5: CLA-6, CLA-7 and CLA-8 are merged; CLA-9 (integration) is next, then CLA-10 (assigned, waits on CLA-9). A returning session should check `git log 3d-world` for what Quest Dev merged.
+**Worktree mode fixed (2026-10-04 ~01:00, user asked).** The cause: with no project workspace policy, Paperclip ran every issue in the shared main checkout. The project now has `executionWorkspacePolicy` set to `{enabled, defaultMode: isolated_workspace, workspaceStrategy: git_worktree from 3d-world, quest-dev/{{issue.identifier}}}`, and CLA-7/8/9 were detached from their old main-checkout workspaces. Paperclip cuts branches from `origin/3d-world`, so AGENTS.md now has each run fast-forward to the local `3d-world` (`002e8f9`). CLA-7 and CLA-8 are running in `.paperclip/worktrees/quest-dev/`; CLA-9 stays blocked, waiting on CLA-8. Open review asks: CLA-7 needs the safety fixes (login on every connection, an Origin check on WebSocket upgrades, start halted, and `POST /paperclip/comment` guarded by the login and the game Origin). CLA-8 (`038fc85`, already on 3d-world, 196 tests pass) needs `publishKeepers`: the retained Keeper-list topic in the contract, with a test that only `game` may publish it. The monitor is stopped; restart it in the next session. CLA-10 is unassigned until CLA-9 is done.
+**Main session duty (2026-10-04, user): monitor and review Quest Dev, merge its branches.**
+- Quest Dev now runs up to 2 issues in parallel, each in a worktree `.paperclip/worktrees/quest-dev/<CLA-n>` on branch
+  `quest-dev/<CLA-n>` cut from `3d-world` (agent config `git_worktree`, `paperclip/AGENTS.md`). It never merges.
+- On each finished branch: review the diff against the plan's safety lines, run `npm test`, merge into `3d-world` with
+  `--no-ff`, and comment on the issue. CLA-8's first run started before the switch and commits straight to `3d-world`.
+- Just in time: assign the next issue when the one it follows is done. CLA-10 (Paperclip plugin) is unassigned until
+  CLA-9 is done. Paperclip's recovery reassigns an unassigned issue that another issue waits on, so CLA-9 stays
+  assigned and its run only comments "waiting".
+- Answer Quest Dev's questions on the issue only when PLAN-engine.md already settles them, citing it; take real design
+  choices to the user.
+- State on 2026-10-04 22:41: CLA-6 is done. CLA-7 (Bridge process, `83edeaf`) was reopened for the review fixes: login on
+  every connection, Origin check, start halted, guarded `POST /paperclip/comment`, game-published Keeper list. CLA-8 is
+  in progress; CLA-9 and CLA-10 are todo.
+
+**Done (2026-10-04): Quest Pulse, a local Paperclip dashboard (user).** `node dev/dashboard.js` (launch config
+`quest-pulse`, port 4795) serves `dev/dashboard/index.html`, refreshing every 5 s:
+- Quest Dev's pulse, releases R0 to R9+ (matched to Paperclip issues by title prefix), issues with their latest comment,
+  runs, and the latest `3d-world` commits.
+- `/pc/*` is a GET-only proxy to Paperclip, because Paperclip sends no CORS header.
+- The Sprite Lab is kept at `dev/dashboard/local/sprite-lab.html`, which is git-ignored because its sprite pack's
+  licence forbids sharing it.
+- The three Quest artifacts are republished as "retired" pages that point here.
+- The public name is now **A Vibe Called Quest** (`8ba453d`); code names are unchanged.
+- Open: Paperclip's parent issue CLA-1 is still `todo` although CLA-2..4 are done.
+
+**R5 integration done (CLA-4, 2026-10-04):** `boot.js` loads missions with `playFromSave` (warns, never refuses), runs `tickMission`/`joinSummoned`/the gate on every ledger change and every 30 s, mounts the HUD and the board's Missions tab (Go on it → briefing by the Keeper; debrief when all Works resolve). Gated: lore riddles refuse `quest:talk`, Town news shows the Haze line, and `scene.js` keeps the player inside the old town (`quest:explore`). A finished saga opens its Sealed Hall through `sealedHalls` (no extra wiring). `npm test` 170 pass. **Untested in the browser:** everything here: the Missions tab, Go on it → briefing, debrief, HUD position (top-left, may overlap other HUDs), the explore lock at the town edge (set a Hall `dueAt` soon so pressure >= 0.75), summoned Keeper joining, 375px. **Next:** R5 browser check on `quest-static` (4790), then R4.5 The Bridge.
+**R5 UI built (CLA-3, 2026-10-04):** `mission-hud.js` (HUD, `briefingLines`/`debriefLines` spoken by the Work's Keeper through `conversation.say`, `talk`), a Missions tab in `town-board.js` (opts `missions`, `gated`, `onBegin`; gated Town news shows the Haze line), and `dev-missions.html`. No `boot.js`/`scene.js` edits. `npm test` 170 pass. **Untested in the browser:** the whole Missions tab, HUD position (top-left, may sit near other HUDs), briefing/debrief boxes, 375px. **Next:** CLA-4, R5 integration (also: the gated Town news must hide lore quests too; open the Sealed Hall on a finished saga).
+**R5 Keepers built (CLA-2, `f637232`, 2026-10-04):** `keeper-controls.js` adds `summon` (spends `summonCost` Ember, refuses a poor Well, empty or taken name), `joinSummoned` (a summoned Keeper joins when a Work it holds is `done`; integration must call it on every ledger change) and `release` (never deletes; refused while a live run exists). `keeper-hud.js` has Summon (form, then a confirm naming the Ember) and Release (press twice) in the Keepers dialog. `npm test` 168 pass. **Untested in the browser:** the Summon form and Release buttons (`dev-keepers.html`), 375px layout. **Next:** CLA-3, R5 UI (Missions tab, mission HUD).
+**Latest (2026-10-03, end of R4 session):** R4 tidy committed (`f08151c`); a parallel session merged its plan
+(`2b00dc3`: R4.5 The Bridge, R5 Missions, R6 Drama, R7 Own Realm, R8 The Source, R9+) and committed the R5 contract
+(`0e54f1d`). **User: build R5 Missions next, before R4.5** (after their R4 play notes). R5 plan: PLAN-engine.md
+"Missions, Keepers and the Bridge" and ~/.claude/plans/study-this-and-see-calm-giraffe.md ("Step 2").
+
+**R5 checklist (from the planning session, 2026-10-03).** Already in the contract (`0e54f1d`): `Work.parentId` (a
+mission is a parent Work and its children; the saga is their Hall), `MISSION_STATE`/`MISSION_MOVES`,
+`validateMissionPlay` (`play.missions`, one mission at a time), `Hall.dueAt`/`Work.dueAt`, `summonCost` in
+`emberLeft`, `summoned`/`released`, `suggest` in `parseReport`, the event hash chain (`chainEvent`/`verifyEvents`,
+stamped by both stores). To build:
+1. Contract: `rules.pressureGate` (start 0.75) and pressure weights; `play.missions` in `makeSave`, checked on load.
+2. `public/quest/missions.js`, pure, returning `{ play, events }` like `boss.js`: `missionsOf` (grouped by Hall, game-only
+   Works left out), `missionWorks`, `begin` (shelves the current one), `tickMission` (active ↔ cliffhanger on an open
+   real Riddle, → debrief when every Work is resolved), `hearBriefing`, `hearDebrief`.
+3. `pressure(ledger, hallId, now, rules)` (open Work weight against days left to `dueAt`, with a "Why?" line) and
+   `gated()`: locks lore quests, the lore tab and exploring past the hub; never `/work`, Riddles, the Lodge, the Bell
+   or saves (safety test).
+4. Keepers: summon (spends Ember), join on the first approved Work, release to the Hall of Champions; R4 controls
+   already respect the statuses (`f08151c`).
+5. UI: a Missions tab on `town-board.js` (by saga, countdown, pressure), briefing/debrief through `conversation.js`
+   spoken by the Work's Keeper, the current mission on the HUD; a finished saga opens its Sealed Hall (`status.js`).
+6. Tests: `test/missions.test.js` plus the gate's safety test; browser check on `quest-static` (4790), never 4777.
+
+**Latest (2026-10-03, R4 session, later): R4 Bring your Keeper is built and integrated.** Slices (a) `/work` page
+(`public/work.html`, `quest/work-queue.js`, `quest/work-page.js`; `work.html?sample` loads the sample) and (b) Keeper
+controls (`quest/keeper-controls.js`, `quest/keeper-hud.js`, `dev-keepers.html`) merged into 3d-world. Wiring: E next to
+a Keeper with no Riddle → 'quest:keeper' {slot} → Start work dialog; Ember meter + Keepers + Recall Bell (key B) dock
+bottom left. User chose: a lapsed lease sends only an in-progress Work back to todo (blocked/in-review stay). `npm test`
+147 pass. Checked on 4791: wake, copy, done paste → in review, Ember 94→91, bell confirm, 375px, no console errors.
+**Open:** walking up to a Keeper and pressing E untested by walking (event dispatched); `startable` offers in-review
+Works (ask whether that's wanted); the dock sits close to the bottom key hint on desktop; contract follow-ups from the
+slices (`manualReport` helper, `LIVE_QUEUE` shared constant, optional `cancelledAt`, the bell comment in contract.js
+says "every leased item" but it cancels queued/leased/lapsed). **Next:** the Paperclip connector release, or R5.
+
+**Earlier (2026-10-03, R4 session): R4 contract done.** User decisions: pastes are read from one fenced `quest-report`
+block (manual kind pick as fallback, paste kept verbatim); the Paperclip connector moves to its own release after R4.
+`contract.js` adds `REPORT_KIND`, `REPORT_INSTRUCTIONS`, `parseReport` (last block wins, never repairs), `branchFor`,
+`KEEPER_CONTROL`, `emberLeft` (rolling-window Ember from reported tokens), Keeper status `wandered`, late pastes on a
+lapsed lease, `work.*`/`keeper.*`/`bell.rung` events, rules `leaseHours`/`emberMax`/`tokensPerEmber`/
+`emberWindowHours`; validation refuses game-only Works in the queue and returned items without a result. Sample:
+`public/quest/sample-work.json`. `npm test` 123 pass. **Next:** the R4 slices side by side: (a) the `/work` page + lease
+(lapse → `wandered`) ∥ (b) start work from an NPC, the Ember readout, Keeper controls and the Recall Bell; then
+integration.
+
+**Latest (2026-10-03, R3 session): R3 Lore quests is built; what is left is the user's one-time setup.** Contract
+(`'lore'` mark source, `isGameOnly`, area-lore entry/index/`cells.json` shapes, Work `endsAt`), client
+(`public/quest/area-lore.js`: geohash-4 cell + 8 neighbours, reads `cells.json` first so no 404s, calendar fallback,
+Town news March/Lore Hall mapping), board (`public/quest/town-board.js`, `B` in the hub, E or tap; lore Riddles are taken
+on there, never carried by Keepers), generator (`area-lore/`: Open-Meteo, iCal/RSS, allowed kinds only, Ollama with
+template fallback, checked for real with qwen3:4b). `isGameOnly` filters bossScore, shouldSummon, riddleWeight,
+realmStats, answerTimes, digest and the Beacon (the last two beyond the plan's list, so errands never turn it amber).
+`npm test` 117 pass; checked on 4793 with `?lore&cell=gcpv` (take on, answer, seal, Work done, Beacon/Haze unchanged,
+375px, no failed requests) and on the plain URL (calendar). The fight's Battle fields and tests are untouched.
+**Open:** (1) the user creates the two repos, deploy key and runner (area-lore/README.md, steps 1-6), then sets
+`LORE_BASE` in boot.js (step 7); until then the board shows the calendar. (2) Walking to the board and pressing E was
+not tested by walking (the event was dispatched). (3) When the Paperclip connector posts Decisions, it must skip Works
+where `isGameOnly` is true. (4) Resolved lore Works stay in the ledger; prune them when saves get archiving.
+**Next after that: R4 (Bring your Keeper),** per PLAN-engine.md's order.
+
+**Latest (user, 2026-10-03, end of the fight session): the R2 playtest no longer blocks R3.** "Don't stop for
+playtest, we tweak numbers later." **Next: build R3 Lore quests** (PLAN-engine.md, "R3 Lore quests"; contract step
+first). The user plays PLAYTEST-R2.md whenever they like, and fight numbers (`DEFAULT_RULES` Lantern/bites) get tuned
+from that later. The fight now has heads and a Lantern (PLAN-fight.md); R3 touches boss.js/contract.js, so keep the
+Battle fields `heads`, `lantern`, `lanternMax`, `pushed`, `bitten` and their tests intact.
 **Read `PLAN-engine.md` first.** Approved plan: a customizable engine driven by lore files, where Paperclip work
 becomes Zelda-balanced play. Paperclip company = Realm (world); project = team = March (region); milestone = Sealed
 Hall (dungeon, locked until the work is done, then won through play); blockers ambush; a weighted backlog summons a
@@ -13,7 +123,7 @@ Each project is a campaign win; Sigils, trophies and the Champions League live i
 collecting (PLAN-adventure §5 rewritten).
 - **No server except a Paperclip connector** (user, 2026-10-03; see "No server" in PLAN-engine.md): the game becomes
   browser-only (static files + IndexedDB). Paperclip goes through a small optional Node connector that only passes
-  reads through and posts sealed comments (Paperclip sends no CORS header), built in R3 or later. Agents come in only through the `/work`
+  reads through and posts sealed comments (Paperclip sends no CORS header), built in R4 or later. Agents come in only through the `/work`
   copy-paste page,
   and `app.js` keeps running today's game until the browser version replaces it. No new features go into `app.js`.
 - **Releases run in parallel** (see "How a release runs" in PLAN-engine.md): contract step first, then each slice in
@@ -58,7 +168,7 @@ collecting (PLAN-adventure §5 rewritten).
   Work, plus "More about this task": status, priority, Keeper, blockers, age, earlier decisions; `riddleContext`),
   **Other…** for your own answer, and **Ask back…**: a question to the agent on the Work (`asks` on the Riddle,
   `askBack`/`replyToAsk`, events `riddle.asked`/`riddle.replied`); the Riddle stays open and shows "Waiting on
-  <Keeper>", and the reply is pasted by hand until R3's /work page delivers it. The Beacon panel and the "While you
+  <Keeper>", and the reply is pasted by hand until R4's /work page delivers it. The Beacon panel and the "While you
   were away" card both start folded to small chips with counts (the user found the open panel too invasive).
   `npm test` 74 pass.
 - **R2 parallel round + integration done (2026-10-03, built in one session, not in worktrees, user's choice):**
@@ -83,6 +193,56 @@ collecting (PLAN-adventure §5 rewritten).
   target; measure it in the playtest before padding anything. The Lodge stays the plain confirm (rule 3).
   **Next: the playtest (gate):** `/?playtest` on a static server, then `/?playtest=heavier` a day later.
   Checklist: `PLAYTEST-R2.md` (fill it in during both sessions).
+- **Bigger world (user, 2026-10-03):** the 3D hub is 48x32 (was 24x16). The old town sits in the middle (`hub.js`
+  `TOWN` offset) with its tree wall opened into a hedge; roads run to every edge; a wood and hamlet north, a lake west,
+  an orchard and fields east, a meadow south. `START` and `KEEPER_SPOTS` come from `hub.js`; `scene.js` reads the
+  width from the map. 6 animals, 12 open-grass trees. Paused for it: the pre-R3 gaps (raise Riddles from the Ledger
+  panel, clickable Beacon log rows, the Keepers' stats board), next in line.
+- **Pre-R3 gap 1 of 3 done (2026-10-03): raise Riddles from the Ledger panel.** `raiseRiddle` in `riddles.js` (text
+  verbatim, choices trimmed and de-duplicated, "Ask me later" always last, optional high risk, event `riddle.raised`);
+  a todo/in-progress Work becomes blocked, the mirror of sealing unblocking it, so the Riddle stands in the world.
+  "Raise a Riddle" form in `ledger-panel.js`; a failed save keeps the typed question. `npm test` 86 pass. Checked on
+  `quest-static-3` (4793; 4790 and 4791 belonged to other chats): raised on Pricing page, Work blocked, no console
+  errors; typing into an open fight question by accident answered nothing. Next: clickable Beacon log rows, then the
+  Keepers' stats board.
+- **Pre-R3 gap 2 of 3 done (2026-10-03): the Beacon log's Riddle rows are buttons.** A click sends `quest:talk`
+  (`from: 'log'`); an answerable Riddle opens in the conversation box as if you'd walked up to its Keeper, and any other
+  one gets a short Lumi note on where it stands (`riddleStanding` in `riddles.js`: put off and when it returns, in the
+  outbox and when it seals, sealed by whom with what, faded with its note, or open on a Work no one waits on). Clicks
+  are ignored during a fight. `npm test` 87 pass; checked on 4793 (open, deferred, sealed rows; no console errors).
+  Next: the Keepers' stats board.
+- **Pre-R3 gap 3 of 3 done (2026-10-03): the stats board in the Keeper's Lodge.** Stand at the Lodge door (the
+  prompt says "Stats board (E)"; a Riddle beside the Lodge comes first) and press E or tap. `realmStats` in
+  `digest.js`: last 7 days and all time (Riddles raised, answered, put off, sealed, faded; Keepers stuck and going
+  again; Gloamwyrms beaten and retreats; play sessions and time played; median question-to-answer time), plus "Who
+  waits on you" per Keeper. `stats-board.js` draws it (Escape, Close or a click outside). Raising a Riddle now also
+  logs `agent.blocked`. The door area is wider than the 2x2 plot because the house draws larger than its cells.
+  `npm test` 89 pass; checked on 4793 by walking there, at 375px, no console errors. **All three pre-R3 gaps are
+  closed; R3 waits only on the R2 playtest gate.**
+- **Playtest session 1, fight 1 attempt 1 failed (2026-10-03):** the player retreated at 15/49 because it was unclear
+  what to do, and asked "where are these questions coming from?" (see PLAYTEST-R2.md). **Next: the fight wording fix
+  in `battle.js`, fake data kept (user's choice):** the opening line says the questions are the Keepers' (agents')
+  work waiting on you; each Face button names who asks and on which Work instead of "asked here · weight 1"; the Lodge
+  pause says why it pauses (money, deploys and the like are answered calmly, not mid-fight). Then replay fight 1 on a
+  static server with `?playtest`.
+  **Done (2026-10-03):** the three lines are in `battle.js` and checked in a fight on 4793. Next: the player replays
+  fight 1. The player also said the fight "has to be interesting"; that's a bigger design question, not scoped yet.
+- **The fight has heads and a Lantern (2026-10-03, PLAN-fight.md, approved and built):** one Gloamwyrm head per stuck
+  Work, named with its Keeper; after a turn that lands a hit, living heads bite your Lantern (snap / dim / echo from
+  why the Work is heavy); a cut head frees its Keeper, who guards. The order you cut is the tactic. An empty Lantern
+  pushes you back to the Lodge with no strength penalty (`boss.pushed`). "Tend the Lantern" spends light. `boss.js`
+  `beat`/`tend`/`headsOf`; `battle.js` Lantern bar and head lines; `gloamwyrm.js` extra heads drop when cut. Playtest
+  ages changed (6/18/30 h; heavier defers p1 twice, p2 once). `npm test` 96 pass; checked on 4793 (dev-battle: a
+  full fight, 375px, no console errors). Then Claude played `?playtest` (fixed: a recall gives the bite's Lantern
+  back; a put-off question no longer says its Keeper is going again) and tuned the Lantern to 3 + 1 per head so a
+  careless order in `?playtest=heavier` is pushed back (checked in the browser). 98 tests. **Next: the player replays fight 1
+  with `?playtest`** (PLAYTEST-R2.md), then tune the numbers. R3 (Lore quests): the Battle record now carries
+  `heads`, `lantern`, `lanternMax`, `pushed`.
+- **R3 is now "Lore quests" (user, 2026-10-03):** players with no work get game-only quests from shared area lore
+  (local weather and happenings, written once per geohash-4 cell by Ollama on a self-hosted runner). Design and run
+  order in PLAN-engine.md, "R3 Lore quests"; Bring your Keeper and everything after it moved down one (R4–R7+).
+  It starts after the R2 playtest gate, like any R3. It touches contract.js, boss.js, riddles.js, digest.js, scene.js
+  and boot.js.
 - Later decisions in PLAN-engine.md: gaps, risks and open questions decided 2026-10-03 (see Risks and gaps), True
   Sight's two-line bubbles at the bottom of the screen, saves carry the full ledger, split into parts with archiving,
   LLM adapter routing.

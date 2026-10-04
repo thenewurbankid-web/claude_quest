@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "cell": "gcpv",
+  "updatedAt": "2026-10-03T06:00:00Z",
+  "entries": [
+    { "id": "bards-at-the-lodge", "kind": "music", "startsAt": "2026-10-03T00:00:00Z", "endsAt": "2030-01-01T00:00:00Z" },
+    { "id": "harvest-stalls", "kind": "market", "startsAt": "2026-10-03T00:00:00Z", "endsAt": "2030-01-01T00:00:00Z" },
+    { "id": "rain-on-the-hollow", "kind": "weather", "startsAt": "2026-10-03T00:00:00Z", "endsAt": "2030-01-01T00:00:00Z" }
+  ]
+}

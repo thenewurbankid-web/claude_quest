@@ -9,7 +9,8 @@ become dungeons you can only win once the work is done, blockers ambush you, bac
 writes itself from the tasks. It must be fun with no work running, and it must never put real work at risk.
 
 This file is the agreed design plus the build order (approved 2026-10-03). It supersedes PLAN-adventure.md where they
-disagree (creature collecting is out; gyms are Sealed Hall dungeons). Build each milestone in its own session,
+disagree (gyms are Sealed Hall dungeons; "creature collecting is out" was reversed on 2026-10-03, see "Missions,
+Keepers and the Bridge"). Build each milestone in its own session,
 scoping it before building.
 
 ## Core gameplay
@@ -119,7 +120,9 @@ kind beside `provider`/`tool3d`/`tool2d` in `lib/plugins.js`; other adapters (e.
   hit power, never an answer (input lock before any sealed choice). You can retreat; the boss returns stronger.
 - **Renown** (XP) is team-wide, from reviewed outcomes only. Leading the work makes the game harder; getting
   ahead of the work makes it unbeatable until the work catches up, shown as the Haze over an unwritten road.
-- Play rewards are trinkets, gear, cosmetics, mounts and shortcuts. **No creature collecting.**
+- Play rewards are trinkets, gear, cosmetics, mounts and shortcuts. ~~No creature collecting.~~ *Reversed
+  (user, 2026-10-03):* Keepers are agents you summon with Ember and can release; no invented creatures or stats (see
+  "Missions, Keepers and the Bridge").
 - PM grounding (accepted): retrospectives (an Embertale after each Sigil), Fallen Bridges for cross-project
   dependencies, capacity as Keepers free vs busy.
 
@@ -166,7 +169,7 @@ Keepers, Lumi, the Ember Well and the Long Night.
 | Blockers / failures | **the Tanglers**: Knot, Fray and their pet Burr, who snarl stuck Works and ambush the player |
 | Planning / special attention | a Keeper or villager asks for a **Council** |
 | Calls from other Marches | **Speaking Stones** ring ("it's the Lab Keeper, got a moment?"), or Lumi brings word |
-| Backlog boss | **a Gloamwyrm**: unanswered Riddles condense in the Haze into a beast whose size follows the weighted score |
+| Backlog boss | **a Gloamwyrm**: unanswered Riddles condense in the Haze into a beast whose size follows the weighted score; from R5 backlog pressure (open work against the release date) is a second input |
 | Retreat from a boss | fall back to the Lodge; the Gloamwyrm returns stronger |
 | XP (team, work-only) | **Renown**, shared by the whole March |
 | Play rewards | trinkets, gear, cosmetics, mounts, shortcuts |
@@ -182,7 +185,12 @@ Keepers, Lumi, the Ember Well and the Long Night.
 | Stale question | the Riddle "fades" with a note |
 | Usage limit hit | **the Long Night** (already in the game) |
 
-## No server, except the Paperclip connector (user, 2026-10-03)
+## No server, except the Bridge (was the Paperclip connector) (user, 2026-10-03)
+> **Reversed in part (user, 2026-10-03): one Bridge for all communication.** "Make one bridge for all communication:
+> MQTT, falling back to polling or a webhook when a user or agent asks for one." One optional local process replaces
+> the Paperclip connector and carries Paperclip reads, sealed write-back, the Source chat and agents. The lines marked
+> *reversed* below no longer hold. The game itself still runs with no server; with the Bridge off it runs on the Local
+> Ledger and `/work` copy-paste as before. See "Missions, Keepers and the Bridge".
 **The game runs entirely in the browser, with no server of any kind,** ours or hosted, **except a small optional
 Paperclip connector** (below). It is static files (GitHub
 Pages, or opened locally) plus browser storage. This overrides every mention below of the Quest server, the polling
@@ -192,11 +200,14 @@ endpoint, the local runner and server-side file writes.
   2026-10-03: no `Access-Control-Allow-Origin` from `127.0.0.1:3100`), so a page can't read it directly. We ship a
   small Node script that the player starts only if they use Paperclip. It is only a connector: it passes the game's
   Paperclip reads through (adding the header for the game's origin) and posts sealed decisions as comments. It holds
-  the Paperclip key, answers only the player's own machine, and does nothing else: no agents, no runner, no saves, no
-  game logic. With it off, the game runs on the Local Ledger. There is no agent-relay path to Paperclip. Built in R3
-  or later; until then the game uses the Local Ledger only.
-- **Agents:** only through the `/work` copy-paste page. The player copies a prompt into their own agent and pastes
-  the result back. No polling, no local runner, and the game never starts a process.
+  the Paperclip key, answers only the player's own machine, and ~~does nothing else: no agents, no runner, no saves, no
+  game logic~~ (*reversed* 2026-10-03: it becomes the Bridge, which also carries agents and the Source chat; still no
+  saves and no game logic). With it off, the game runs on the Local Ledger. Agents never write to Paperclip directly: only sealed
+  decisions are posted. Built in R4.5 as the Bridge; until then the game uses the Local Ledger only.
+- **Agents:** ~~only through the `/work` copy-paste page~~ (*reversed in full* 2026-10-03: opt-in, an agent can also
+  connect through the Bridge, over MQTT or polling/webhook on request, or WebLLM can act as one, and get work and report
+  with no paste). Copy-paste stays the default: the player copies a prompt into their own agent and pastes the result
+  back. The game itself still never starts a process. ~~No polling~~ (*reversed*).
 - **The game's LLM:** WebLLM and templates; Ollama only when the page is on `localhost` (Ollama allows localhost
   origins by default). No `claude` CLI provider.
 - **Saves:** IndexedDB plus a downloaded save file; the atomic-write, checksum and fallback rules apply to the
@@ -227,7 +238,8 @@ work for it on the `/work` page, and only registered agents get work. Agent cont
 resume, recall one run = cancel, the Recall Bell = pause all) are protocol actions, so every source offers them;
 each one is a sealed decision with a token readout. 
 
-**How agents connect: the `/work` relay page** (user, 2026-10-03; the polling endpoint was dropped with the server).
+**How agents connect: the `/work` relay page** (user, 2026-10-03; ~~the polling endpoint was dropped with the server~~, *reversed* 2026-10-03: the Bridge offers
+polling or a webhook as a fallback to MQTT).
 A `/work` route on the game site (works on GitHub
 Pages, no server) lists queued work per agent as ready-to-copy prompts. The player pastes a prompt into their own
 agent (e.g. Claude Code), then pastes the result back on the page, and it enters the protocol like any other
@@ -274,6 +286,9 @@ Riddles, agents, the Beacon) for any source.
 10. Teammates' answers are shown, never overwritten.
 11. The Recall Bell stops all work, from anywhere.
 12. Agents work on branches, and merging always takes a human.
+    *Exception (user, 2026-10-04):* this rule is about Keepers' work in the game. Quest Dev, the Paperclip agent that
+    builds the game, now reviews its own diff against these safety lines and fast-forward-merges its own
+    `quest-dev/*` branch into `3d-world` once `npm test` passes (paperclip/AGENTS.md, "End of every run").
 
 ## Releases (build order, user 2026-10-03; replaces "M0 first")
 Playable slices first; the shared-core refactor waits until the fun is proven. The milestones below stay as the
@@ -286,19 +301,101 @@ feature list; releases pick from them.
   Sight, outbox recall; write-back to the Work in the ledger.
 - **R2 "The Gloamwyrm":** a simple turn-based boss from the weighted backlog score, pausing per real question, with
   retreat. Vertical slice complete: **playtest the fun here**.
-- **R3 "Bring your Keeper":** the `/work` copy-paste page and agent registry, the Paperclip connector (R3 or later,
-  user 2026-10-03), start work from an NPC with a token
-  readout.
-- **R4 "The first Sealed Hall":** one hand-made dungeon themed from its milestone, and a Sigil.
-- **R5 "Your own Realm":** the full Local Ledger (planner NPC, teammates), New Game / Load, split save with archiving.
-- **R6+:** shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes, 2D parity.
-Cost accepted: R0–R4 are built straight into the 3D code and partly moved into the core later.
+- **R3 "Lore quests":** play for days with no work: shared area lore from local weather and real local happenings
+  becomes game-only Riddles and errands, and the hub's board gets a Town news tab (user, 2026-10-03; see "R3 Lore
+  quests" below).
+- **R4 "Bring your Keeper":** the `/work` copy-paste page and agent registry, start work from an NPC with a token
+  readout. **The Paperclip connector is its own small release after R4** (user, 2026-10-03). Pasted results are read
+  from **one fenced `quest-report` block** the prompt asks for (kind progress/done/blocked, summary, question, branch,
+  token counts); with no valid block the player picks the kind by hand, and the paste is always kept verbatim (user,
+  2026-10-03). Contract built 2026-10-03 (`parseReport`, `emberLeft`, `branchFor`, lease/Ember rules, `wandered`).
+- *Build order (user, 2026-10-03): R5 Missions goes before R4.5 The Bridge; missions don't need the Bridge.*
+- **R4.5 "The Bridge"** (was "the Paperclip connector"; user, 2026-10-03): one optional local process for all
+  communication: Paperclip reads and sealed write-back, agents (opt-in: get work and report with no paste), and later
+  the Source chat. MQTT first, polling or a webhook when a user or agent asks for one. It is the first way work reaches
+  agents without a human paste, so it ships with these safety lines, each with a safety test added in R4.5: only
+  registered Keepers get work over the Bridge; Bridge messages are data, never commands, shown as plain text with True
+  Sight; the Bridge answers only the player's own machine, and MQTT/webhook credentials are per Realm, never in
+  prompts; the Recall Bell also tells the Bridge to stop handing out work.
+  *Decisions (user, 2026-10-04):* the Bridge bundles its own MQTT broker, **aedes**, with the **mqtt** client. That is a
+  one-time exception to "no new dependencies", limited to those two packages plus the WebSocket adapter aedes needs for
+  browsers. Paperclip write-back is **comments only** (sealed decisions and finished-work reports); issue status changes
+  stay manual. Quest Dev builds it from one contract-and-split issue and creates the slice issues itself.
+  *Where it runs (user, 2026-10-04):* one Bridge core module (no top-level listen), hosted two ways: as a **Paperclip
+  plugin** worker (`@paperclipai/plugin-sdk`: Paperclip events pushed instead of polled, comments through
+  `ctx.issues.createComment`, and no `issues.update` capability, so write-back stays comments only), and **standalone**
+  (`npm run bridge`) for players without Paperclip, so Paperclip stays optional. The plugin is built and tested in the
+  repo; the user installs it into Paperclip (`paperclipai plugin install --local`).
+  *Bell and restarts (user, 2026-10-04):* the Bridge always **starts halted**; only the game's `open` clears it, so a Bell
+  rung while it was off is never lost. Identity comes from the connection: every connection needs the per-Realm login,
+  and WebSocket upgrades and the Bridge's HTTP writes from any page but the game's own origin are refused (review of
+  `152c47e`/`83edeaf`). *Logins (user, 2026-10-04):* one shared Realm login, as built; anyone with the Realm password can
+  claim any client id, and the user accepts that. *Keepers (user, 2026-10-04):* the game publishes only the opted-in
+  Keepers and their status on a retained topic; the Bridge never holds the full ledger. *Offers (user, 2026-10-04):* that retained
+  message also carries, per queued item, the finished WorkOffer the game's own rules allow now (`keepersMessage`); only
+  the Bridge may read the topic, and the Bridge only relays offers, it never builds them.
+- **R5 "Missions and the first Sealed Hall"** (user, 2026-10-03): missions (a parent Work and its children; the saga is
+  their Hall), backlog pressure against the release date and its gate on side content, the Sealed Hall as the saga's
+  finale and its Sigil, and Keepers summoned with Ember, joining and released. The R4 controls already respect
+  summoned/released (`f08151c`), so R5 only adds summon, join and release. Contract built 2026-10-03 (`0e54f1d`).
+- **R6 "Drama":** "Previously on…" / "Next time…" recaps and promises from the event log, the finale battle with phases
+  (extends R2's boss), and Grill the Keeper (R1's asks, real text verbatim).
+- **R7 "Your own Realm"** (was R6): the full Local Ledger (planner NPC, teammates), New Game / Load, split save with
+  archiving, and checking the event log's chain on load (warn, never refuse).
+- **R8 "The Source":** auto mode (plays, stops for the human) and the Source chat over the Bridge, with the in-game
+  Help panel's "Connect your model" instructions.
+- **R9+** (was R7+): shared core (M0), Ink lore (M2) and LLM routing, progression and the league, other combat modes,
+  2D parity, and an MCP server for agents (from mnehmos/rpg.mcp: one tool per area with an `action` field).
+Cost accepted: R0–R5 are built straight into the 3D code and partly moved into the core later.
 **How a release runs** (user, 2026-10-03): (1) a short **contract** step fixes the shared shapes in code (the ledger
 schema, the Riddle record, the `/work` queue states, the save format) plus a sample data file; (2) every slice is built
 **side by side** in its own git worktree against that contract; (3) an **integration** step joins them into `3d-world`
 and runs the safety tests. Each feature lives in its own module; only integration edits `public/3d/scene.js`. A round
-is one session long. Exceptions: R2's tuning and playtest run in order after its parallel round, and R6's shared core
+is one session long. Exceptions: R2's tuning and playtest run in order after its parallel round, and R7's shared core
 is built alone. The R2 playtest is the gate: nothing from R3 on starts before it passes.
+
+## Marches as 3D regions (CLA-15, user, 2026-10-04)
+- One 3D region per March, reached by a gate at a road end of the hub (8 gate slots; more Marches than that wait: the
+  extra count is known to `hubGates` but nothing draws it yet). The game builds only the region you stand in and drops
+  it on leaving. Regions come from the ledger snapshot (`public/quest/regions.js`), so a Paperclip source and the local
+  ledger take the same path, and the renderer has no special case for either.
+- **Local ledger mode** (user, 2026-10-04): with no real March (a fresh ledger, or only Town news), `regionsOf` returns a
+  default set of four explorable regions (no Works); as soon as the ledger has a March, one region per March replaces them.
+- A region shows its Works as posts (at most 24, most urgent first); E reads one as plain text. Not built yet: Speaking
+  Stones, the Fallen Bridge, Keepers walking a March, an Ember Well in each region.
+
+## Missions, Keepers and the Bridge (user, 2026-10-03)
+Prompted by a study of mnehmos/rpg.mcp and r/aigamedev's list of LLM games, and the user's verdict that fights are
+boring: "more fun and drama like Pokémon and DBZ, some story and milestone drive; it should be mostly missions". Not
+Pokémon itself: "don't force Pokémon mechanics".
+- **Missions:** the player goes on one mission at a time. A mission is a sub-milestone: a parent Work and its child
+  Works (`Work.parentId`, Paperclip's parent issue; one level). A Work with neither is a side mission. Briefing from its
+  Keeper, each Work a step, a waiting Riddle a cliffhanger, then a debrief. Mission progress is play state.
+- **Sagas:** the Hall (milestone) strings its missions together; its finale is the Sealed Hall and its Sigil.
+- **Deadlines and timed releases:** "we work on deadlines and time releases". `Hall.dueAt` is the release date (the
+  saga's clock), `Work.dueAt` a deadline. Deadlines are on work, never on answering.
+- **Backlog pressure:** "if backlog is piling up, link that to the game, so we can control gameplay". Open work weight
+  against the time left to the release date drives the villain, the Haze and mission urgency, and above
+  `rules.pressureGate` it locks side content (lore quests, the lore tab, exploring beyond the hub). It never gates
+  `/work`, Riddles, the Lodge, the Recall Bell or saves (safety test), and never changes hit size or answers.
+- **Keepers are agents, made of Ember:** summoning one spends `rules.summonCost` Ember (it comes back as the window
+  moves on); it joins the Lodge after its first approved Work, and can be released to the Hall of Champions (kept, never
+  deleted). Everything else about a Keeper is read from its real work; the game invents no stats, types or levels.
+- **Auto mode:** the game plays itself (picks missions by pressure, walks, wakes and queues Keepers, plays fight
+  beats) and stops for the human at every Riddle, and at every paste for Keepers on copy-paste; Keepers connected
+  through the Bridge report on their own (opt-in).
+- **The Source:** a chat panel with a model of the player's choice over the Bridge. It reads Paperclip and proposes;
+  every proposal becomes an outbox item the steward seals, and it never merges. Its text is plain text, treated as data,
+  with True Sight flags.
+- **Help: "Connect your model":** copyable instructions generated from the contract (like `REPORT_INSTRUCTIONS`), one
+  block to give any agent and one to do by hand (MQTT commands, a `curl` webhook call), with credentials only as
+  placeholders.
+- **Also from the study:** "did you mean" paste errors and a hash-chained event log (both in the R5 contract).
+- **Agents can connect and report on their own, opt-in** (user, 2026-10-03, "Yes, opt-in"): copy-paste on `/work`
+  stays the default. Optionally an agent connects through the Bridge (Claude Code, Ollama, anything) or WebLLM acts as
+  one in the browser, and gets work and sends reports with no paste. Its reports still pass `parseReport` and the same
+  validation, Riddles still stop for the human, the Recall Bell stops everything, and merging is always a person's
+  job.
 
 ## R2 playtest criteria (approved by the user, 2026-10-03)
 The gate before R3. **Setup:** the sample Realm plus a scripted backlog that crosses the boss threshold with three
@@ -321,6 +418,48 @@ day later with a heavier backlog. **R2 passes only if every line holds;** a miss
    forward to.
 8. **Sound:** no console errors; playable at 375px width by touch and with reduced motion.
 
+## R3 Lore quests (user, 2026-10-03)
+The gap: every system that moves is fed by the ledger, so a player with no work can walk Ember Hollow but nothing
+spawns, the Haze stays at 0 and the Gloamwyrm never comes (Context, "Core gameplay"). R3 adds a second source of
+quests; the loop stays the same.
+- **Two sources, one loop.** Work comes from the ledger as now. **Area lore** comes from local weather and real local
+  happenings. Lore entries become a game-only Lore Hall, a Work per entry and a Riddle with
+  `mark {source:'lore', real:false}` (add `'lore'` to the mark sources in `contract.js`). One helper, `isGameOnly`,
+  keeps them out of `bossScore`, `shouldSummon`, `riddleWeight`, `realmStats` and `answerTimes`, so lore never feeds
+  the Haze, the Gloamwyrm, the stats board or Renown. "Area lore" is not the lore files of PLAN-settlements §12;
+  the code lives in `area-lore/` and `public/quest/area-lore.js` to keep the two apart.
+- **Only some events, written in-world with a hint.** Allowed: festivals, markets, sports, music, seasonal, weather.
+  Anything else is dropped, never filtered after the fact. "Bards gather at the Lodge tonight", with a tooltip naming
+  the real event.
+- **Shared per area.** An area is a geohash-4 cell (about 39x20 km). Each event is written once and reused by every
+  player in the cell until it ends. Clients read their cell plus the 8 neighbours, so a player near an edge still
+  sees what's over the line.
+- **Where it's written (user):** a scheduled GitHub Action on a **self-hosted runner on the user's Mac, using Ollama**
+  (no hosted API; the `askModel` pattern from `lib/story.js`). In-game lines keep the WebLLM-first storyteller of
+  PLAN-settlements §11; only the shared area lore uses Ollama. A missed run while the Mac is off only makes lore late.
+- **Three repos, because this one is public** and a self-hosted runner must never be attached to a public repo:
+  `claude_quest` (public) holds the generator code and the client; a new **private** `claude-quest-lore-gen` holds
+  the hand-kept `areas.json` (cells, and the iCal/RSS feed URLs for each), the workflow (schedule and manual triggers
+  only) and a deploy key; a new public `claude-quest-lore` with no workflows holds only
+  `lore/<cell>/<eventId>.json` and `lore/<cell>/index.json`, read by clients as static files.
+- **The board (user):** the hub's `B` board gets two tabs, Town news (area lore) now and Quest boards when
+  PLAN-settlements §16 lands. Wired like the Lodge: a box check in `riddleTick`, `quest:near {place:'board'}`,
+  E sends `quest:board`, a panel copied from `stats-board.js`.
+- **Never empty:** with no location, no network or nothing live, built-in clock and calendar entries (time of day,
+  season, weekend) fill the board. A rough location is asked for once and kept as `quest.place`, as the weather
+  already does in `atmosphere.js`.
+- **Built 2026-10-03** (see HANDOFF.md): all four steps, plus `lore/cells.json` so clients only ask for cells that exist.
+- **How R3 runs:** contract (the area-lore entry shape, a sample cell file, the mark source, `isGameOnly`) → side by
+  side: (a) the client source, ledger mapping, filters and calendar fallback ∥ (b) the board ∥ (c) the generator
+  (weather from Open-Meteo, feeds, Ollama writer with template fallback, `generate.js` writing to a folder) plus a
+  setup README for the two repos and the runner → integration (scene.js wiring, safety tests: lore never moves the
+  Haze or the stats; a browser check with a local lore folder through `?lore=`).
+- **After R3, not yet placed in the order (user):** a hub built roughly from the real map. OpenStreetMap through
+  Overpass, reduced to the 48x32 hub legend, the town on the densest built-up spot with the Lodge, board and Keeper
+  spots around it. Cell scale is shared (`map.json` from the generator); a finer geohash-5 map is the player's choice,
+  built in the browser and never published. Today's Ember Hollow stays as the fallback. First check scene.js and
+  boot.js for hard-coded coordinates.
+
 ## Risks and gaps (2026-10-03)
 Decided by the user on 2026-10-03, through the Quest Engine Council page (one pick per item).
 
@@ -335,8 +474,8 @@ Decided by the user on 2026-10-03, through the Quest Engine Council page (one pi
   or the AI) before sealing.
 - *Local Ledger lost when browser data is cleared:* autosave plus a "download your save" nudge (kept as is).
 - *Missing art (Tanglers, Gloamwyrm, Wardens, dungeon kits):* **Three.js placeholders for R0–R2, CC0 packs (Kenney,
-  Quaternius) by R4.**
-- *2D + 3D doubles view work:* **2D is frozen until R6.** It keeps working, but gets no new features.
+  Quaternius) by R5.**
+- *2D + 3D doubles view work:* **2D is frozen until R7.** It keeps working, but gets no new features.
 - *Paperclip API drift:* read only the fields we need, **and validate each snapshot against the protocol**. On a
   mismatch, keep the last good world and light a warning on the Beacon.
 
@@ -345,10 +484,10 @@ the hit and clears the item for now, marked `deferred`. The item returns after a
 weight keeps growing with age, so deferring everything can't dodge the next boss.
 
 **Gaps, now designed:**
-- *Agents claiming work (R3):* a **lease** (user picked "renewed by any poll or progress post"; with no server it
+- *Agents claiming work (R4):* a **lease** (user picked "renewed by any poll or progress post"; with no server it
   starts when the player copies the prompt on `/work`, and pasting a progress report renews it). The length is set in
   the lore rules. When it lapses, the work goes back on the board and the Keeper shows as "wandered off".
-- *Who accepts a milestone without Paperclip (R5):* **a council vote for big milestones (`quest:council`), the
+- *Who accepts a milestone without Paperclip (R6):* **a council vote for big milestones (`quest:council`), the
   March's steward otherwise.** When every Work is done, a "Is this milestone shipped?" Riddle appears; sealing it
   breaks the Hall's seal.
 - *Team conflicts (R1 field, used later):* **each March has a steward who seals its decisions, with the Realm owner as
@@ -441,16 +580,18 @@ parallel slices, including the contract and integration steps (about one session
 | R0 The Beacon lights up | 2 | 3 | ledger store ∥ Beacon/panel | the 3D view has no UI layer yet |
 | R1 Riddles | 2 | 5 | conversation box ∥ Riddle logic ∥ outbox/write-back ∥ tests/log/digest | getting the safety flows exactly right |
 | R2 The Gloamwyrm | 3 | 5 | boss ∥ weights ∥ placeholder art, then tuning, then **playtest (gate)** | combat feel; the fun itself |
-| R3 Bring your Keeper | 2 | 4 | `/work` + lease ∥ start work/Ember/Recall Bell ∥ Paperclip connector | relayed results passing validation |
-| R4 The first Sealed Hall | 2 | 5 | layout ∥ puzzles ∥ Warden ∥ Sigil/Embertale | puzzles that are fun |
-| R5 Your own Realm | 2 | 5 | planner NPC ∥ New Game/Load ∥ split save ∥ acceptance | save migrations |
-| R6+ | ~6 | ~12 | shared core alone, then Ink/LLM ∥ progression/league ∥ modes/2D parity | `world.js` is 1,527 lines of globals |
-| **Total** | **~19** | **~39** | | |
+| R3 Lore quests | 2 | 5 | area-lore client + filters ∥ Town news board ∥ generator on the self-hosted runner | events that feel local, not generic |
+| R4 Bring your Keeper | 2 | 4 | `/work` + lease ∥ start work/Ember/Recall Bell ∥ Paperclip connector | relayed results passing validation |
+| R5 The first Sealed Hall | 2 | 5 | layout ∥ puzzles ∥ Warden ∥ Sigil/Embertale | puzzles that are fun |
+| R6 Your own Realm | 2 | 5 | planner NPC ∥ New Game/Load ∥ split save ∥ acceptance | save migrations |
+| R7+ | ~6 | ~12 | shared core alone, then Ink/LLM ∥ progression/league ∥ modes/2D parity | `world.js` is 1,527 lines of globals |
+| **Total** | **~21** | **~44** | | |
 
-**ETA at 5 rounds a week from 2026-10-04:** playtest (7 rounds) 2026-10-13; R5 (13) 2026-10-21; everything (~19)
-2026-10-29. With the 30% tuning/art buffer: R5 2026-10-27, everything 2026-11-06.
-**Hours** at 3–4 h a session: playtest 39–52 h, R0–R5 81–108 h, everything 117–156 h (150–200 h with the buffer).
-Parallel finishes in about 60% of the calendar time of one-at-a-time (~31 sessions, 2026-11-16) but costs about
+**ETA at 5 rounds a week from 2026-10-04** (redone 2026-10-03 with R3 Lore quests added): playtest (7 rounds)
+2026-10-13; R6 Your own Realm (15) 2026-10-24; everything (~21) 2026-11-01. With the 30% tuning/art buffer: R6
+2026-10-30, everything 2026-11-09.
+**Hours** at 3–4 h a session: playtest 39–52 h, R0–R6 96–128 h, everything 132–176 h (170–230 h with the buffer).
+Parallel finishes in about 60% of the calendar time of one-at-a-time (~36 sessions, 2026-11-23) but costs about
 25% more work and tokens per day, and several streams to review at once. The Quest Engine Council artifact compares
 both modes for any start date, cadence and session length.
 
