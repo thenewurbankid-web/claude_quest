@@ -23,6 +23,31 @@ const COLS = Math.max(...HUB.map(r => r.length));
 const rows = HUB.map(r => r.padEnd(COLS, '.').slice(0, COLS));
 const grid = new SquareGrid(COLS, rows.length, 1);
 const at = (c, r) => (grid.inside(c, r) ? rows[r][c] : 'T');
+// What the painted ground sees: the well and stalls stand on paving, so their cells don't paint as grass.
+const groundAt = (c, r) => {
+  const ch = at(c, r);
+  if (ch === 'W') return '=';
+  if (ch === 'K' || ch === 'L') return [[0, -1], [1, 0], [0, 1], [-1, 0]].some(([dc, dr]) => at(c + dc, r + dr) === '=') ? '=' : '.';
+  return ch;
+};
+// Static things (trees, houses, props, water) live in 8x8-cell chunks, shown only near the player: the hub is big and
+// a phone shouldn't submit what the fog already hides.
+const CHUNK = 8, chunks = new Map();
+function chunkGroup(c, r) {
+  const key = Math.floor(c / CHUNK) + ',' + Math.floor(r / CHUNK);
+  let g = chunks.get(key);
+  if (!g) {
+    const x0 = Math.floor(c / CHUNK) * CHUNK, y0 = Math.floor(r / CHUNK) * CHUNK;
+    const a = grid.toWorld(x0, y0), b = grid.toWorld(x0 + CHUNK - 1, y0 + CHUNK - 1);
+    g = new THREE.Group(); g.userData.mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    scene.add(g); chunks.set(key, g);
+  }
+  return g;
+}
+const SHOW_RADIUS = 46;
+function cullChunks(x, z) {
+  for (const g of chunks.values()) g.visible = Math.hypot(g.userData.mid.x - x, g.userData.mid.z - z) < SHOW_RADIUS + CHUNK;
+}
 
 // ---------- renderer, scene, camera ----------
 const canvas = document.getElementById('view');
@@ -67,7 +92,7 @@ const COLORS = {
 function tileColor(ch, c, r) {
   const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
   const pick = a => a[h % a.length];
-  if (ch === '=') return pick(COLORS.road);
+  if (ch === '=' || ch === 'P' || ch === 'W') return pick(COLORS.road);
   if (ch === '~') return pick(COLORS.water);
   if (ch === ',') return pick(COLORS.tall);
   return pick(COLORS.grass);
@@ -98,16 +123,14 @@ function tileColor(ch, c, r) {
 // water surface that shimmers
 const water = (() => {
   const mat = new THREE.MeshStandardMaterial({ color: 0x5fb3e3, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.85 });
-  const group = new THREE.Group();
   for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) if (at(c, r) === '~') {
     const { x, z } = grid.toWorld(c, r);
     // UVs in cells (world space), so a tiling texture runs across neighbouring water cells without seams.
     const geo = new THREE.PlaneGeometry(1, 1), uv = geo.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, c + uv.getX(i), grid.rows - 1 - r + uv.getY(i));
     const q = new THREE.Mesh(geo, mat);
-    q.rotation.x = -Math.PI / 2; q.position.set(x, -0.28, z); group.add(q); // just above the water tile tops (-0.3)
+    q.rotation.x = -Math.PI / 2; q.position.set(x, -0.28, z); chunkGroup(c, r).add(q); // just above the water tile tops (-0.3)
   }
-  scene.add(group);
   return mat;
 })();
 
@@ -191,12 +214,21 @@ function placeholder(kind, color = 0xd97757) {
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.3, 4, 10), mat(color)); body.position.y = 0.38;
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), mat(0xf6d2b0)); head.position.y = 0.82;
     g.add(body, head);
+  } else if (kind === 'stall') {
+    const table = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.6), mat(0x8a6440)); table.position.y = 0.25;
+    const awning = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.08, 0.8), mat(color)); awning.position.set(0, 1.1, 0.05); awning.rotation.x = 0.18;
+    for (const x of [-0.45, 0.45]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.1, 0.06), mat(0x6a4a30)); post.position.set(x, 0.55, -0.25); g.add(post); }
+    g.add(table, awning);
+  } else if (kind === 'lamp') {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.3, 6), mat(0x3a3a44)); pole.position.y = 0.65;
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshStandardMaterial({ color: 0xffe2a0, emissive: 0xffb84a, emissiveIntensity: 1.6 })); bulb.position.y = 1.35;
+    g.add(pole, bulb);
   } else if (kind === 'prop') {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.12), mat(color)); post.position.y = 0.3; g.add(post);
   }
   return shadowed(g);
 }
-async function place(role, fallbackKind, c, r, { color, rot = 0, scale = 1, offset = [0, 0], variant = 0 } = {}) {
+async function place(role, fallbackKind, c, r, { color, rot = 0, scale = 1, offset = [0, 0], variant = 0, still = false } = {}) {
   const m = await model(role, variant);
   const obj = m ? m.obj : placeholder(fallbackKind, color);
   const { x, z } = grid.toWorld(c, r);
@@ -205,7 +237,7 @@ async function place(role, fallbackKind, c, r, { color, rot = 0, scale = 1, offs
   // manifest.height sizes a model to a height in tiles, whatever units the file uses.
   const fit = m && manifest.height?.[role] ? manifest.height[role] / Math.max(0.01, new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).y) : 1;
   obj.scale.setScalar(m ? fit * (manifest.scale?.[role] ?? 1) * scale : scale);
-  scene.add(obj);
+  (still ? chunkGroup(c, r) : scene).add(obj);
   return { obj, clips: m?.clips || [] };
 }
 
@@ -570,7 +602,7 @@ let player, sunny = null;
 // Sunnyside paints the ground, water and meadow; the 3D grass blades go, since they fight the pixel grass.
 function paintSunnyside(ss) {
   const dim = new THREE.Color().setScalar(LOOK.ground.brightness);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(grid.cols, grid.rows), new THREE.MeshLambertMaterial({ map: ss.ground(grid.cols, grid.rows, at), alphaTest: 0.5, color: dim }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(grid.cols, grid.rows), new THREE.MeshLambertMaterial({ map: ss.ground(grid.cols, grid.rows, groundAt), alphaTest: 0.5, color: dim }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = 0.002; ground.receiveShadow = true;
   scene.add(ground);
   meadow.material = new THREE.MeshLambertMaterial({ map: ss.tiled('grass', 160), color: dim });
@@ -584,10 +616,10 @@ async function tree(c, r, opts) {
   // 'mixed' leans on the two big trees, with pines and bushes for variety (indices into sunnyside.js TREES).
   const kinds = LOOK.trees.kind === 'round' ? [0] : LOOK.trees.kind === 'tall' ? [1] : [0, 1, 0, 1, 0, 1, 2, 3, 4, 5, 6, 7];
   const obj = sunny && await sunny.tree(kinds[h % kinds.length], LOOK.trees.scale);
-  if (!obj) return place('tree', 'tree', c, r, opts);
+  if (!obj) return place('tree', 'tree', c, r, { ...opts, still: true });
   const { x, z } = grid.toWorld(c, r), [ox, oz] = opts.offset || [0, 0];
   obj.position.set(x + ox, 0, z + oz);
-  scene.add(obj);
+  chunkGroup(c, r).add(obj);
 }
 // People are 3D models by default (LOOK.characters); 'pixel' uses the Sunnyside sprites. ?chars=pixel|3d overrides.
 const CHARS = new URLSearchParams(location.search).get('chars') || LOOK.characters;
@@ -596,6 +628,7 @@ async function person(role, c, r, color, hair, variant = 0) {
   if (sunny) { const p = await sunny.person(hair); const { x, z } = grid.toWorld(c, r); p.obj.position.set(x, 0, z); scene.add(p.obj); return { obj: p.obj, clips: [], sprite: p.sprite }; }
   return place(role, 'person', c, r, { color });
 }
+const hashCell = (c, r) => ((c * 73856093) ^ (r * 19349663)) >>> 0;
 async function build() {
   await loadManifest();
   sunny = await loadSunnyside();
@@ -613,13 +646,15 @@ async function build() {
     const ch = at(c, r);
     if (ch === 'T') jobs.push(tree(c, r, { rot: (c * 7 + r * 3) % 6, scale: 0.9 + ((c + r) % 3) * 0.12 }));
     // The Keeper's Lodge: the ember-orange house, larger, on its 2x2 plot. Village houses take the blue and green roofs.
-    if (ch === 'C' && sunny) { const h = sunny.house(2, LOOK.houses.lodge), { x, z } = grid.toWorld(c, r); h.position.set(x + 0.5, 0, z - 0.5); scene.add(h); }
-    else if (ch === 'C') jobs.push(place('center', 'center', c, r, { color: 0xd97757, offset: [0.5, -0.5] }));
-    if (ch === 'H' && sunny) { const h = sunny.house((c + r) % 2), { x, z } = grid.toWorld(c, r); h.position.set(x, 0, z); scene.add(h); }
-    else if (ch === 'H') jobs.push(place('house', 'house', c, r, { color: [0xe0a84f, 0x7a8fd0, 0xc05050][(c + r) % 3], rot: Math.PI }));
-    if (ch === 'B') jobs.push(place('board', 'prop', c, r, { color: 0x8a6440 }));
-    if (ch === 'M') jobs.push(place('mailbox', 'prop', c, r, { color: 0xc04040 }));
-    if (ch === 'S') jobs.push(place('waystone', 'prop', c, r, { color: 0x6aa8e8 }));
+    if (ch === 'C' && sunny) { const h = sunny.house(2, LOOK.houses.lodge), { x, z } = grid.toWorld(c, r); h.position.set(x + 0.5, 0, z - 0.5); chunkGroup(c, r).add(h); }
+    else if (ch === 'C') jobs.push(place('center', 'center', c, r, { color: 0xd97757, offset: [0.5, -0.5], still: true }));
+    if (ch === 'H' && sunny) { const h = sunny.house((c + r) % 2), { x, z } = grid.toWorld(c, r); h.position.set(x, 0, z); chunkGroup(c, r).add(h); }
+    else if (ch === 'H') jobs.push(place('house', 'house', c, r, { color: [0xe0a84f, 0x7a8fd0, 0xc05050][(c + r) % 3], rot: Math.PI, still: true }));
+    if (ch === 'B') jobs.push(place('board', 'prop', c, r, { color: 0x8a6440, still: true }));
+    if (ch === 'M') jobs.push(place('mailbox', 'prop', c, r, { color: 0xc04040, still: true }));
+    if (ch === 'K') jobs.push(place('stall', 'stall', c, r, { color: [0xc04040, 0x4f7fc0, 0xd9a441, 0x5aa05a][hashCell(c, r) % 4], rot: Math.PI, still: true }));
+    if (ch === 'L') jobs.push(place('lamp', 'lamp', c, r, { still: true }));
+    if (ch === 'S') jobs.push(place('waystone', 'prop', c, r, { color: 0x6aa8e8, still: true }));
   }
   // A ring of forest beyond the edge so the map never ends at a cliff (LOOK.trees: ring depth and density).
   const ring = LOOK.trees.ring;
@@ -672,7 +707,7 @@ async function build() {
 const timer = new THREE.Timer();
 let snapped = false;
 const camPos = new THREE.Vector3(), look = new THREE.Vector3();
-let lastStepK = 1;
+let lastStepK = 1, cullTick = 0;
 function loop() {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.05), t = timer.getElapsed();
@@ -699,6 +734,7 @@ function loop() {
     snapped = true;
     camera.lookAt(camera.position.x - camOffset.x, 0, camera.position.z - camOffset.z);
     sun.target.position.copy(look);
+    if (++cullTick % 10 === 1) cullChunks(look.x, look.z);
     sun.position.add(look);
   }
   sunny?.update(dt, t, camera, reduceMotion, player?.obj.position);

@@ -44,10 +44,16 @@ export async function load() {
     const c = canvas(cols * PX, rows * PX), g = c.getContext('2d');
     g.imageSmoothingEnabled = false;
     const tile = ([sx, sy], q, r) => g.drawImage(tiles, sx, sy, PX, PX, q * PX, r * PX, PX, PX);
-    const isGrass = (q, r) => { const ch = at(q, r); return ch !== '=' && ch !== '~' && ch !== undefined; };
+    const isGrass = (q, r) => { const ch = at(q, r); return ch !== '=' && ch !== '~' && ch !== 'P' && ch !== undefined; };
     for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
       const ch = at(q, r), h = hash(q, r);
       if (ch === '~') continue;
+      if (ch === 'P') { // dock planks: boards across the cell with dark seams
+        g.fillStyle = '#9c7a4e'; g.fillRect(q * PX, r * PX, PX, PX);
+        for (let i = 0; i < PX; i += 4) { g.fillStyle = '#6f5233'; g.fillRect(q * PX, r * PX + i, PX, 1); }
+        g.fillStyle = '#7d5f3c'; g.fillRect(q * PX + (h % 2) * 8 + 3, r * PX + 4 * (h % 4), 1, 4);
+        continue;
+      }
       if (ch === '=') { const sx = (q * PX) % sw.path.width, sy = (r * PX) % sw.path.height; g.drawImage(sw.path, sx, sy, PX, PX, q * PX, r * PX, PX, PX); continue; }
       const set = h % 100 < 28 ? GRASS.dotted : GRASS.plain;
       tile(set[(h >>> 8) % set.length], q, r);
@@ -159,27 +165,41 @@ export async function load() {
   const TREES = [['Elements/Plants/spr_deco_tree_01_strip4.png', 32, 34], ['Elements/Plants/spr_deco_tree_02_strip4.png', 28, 43],
     [833, 61, 14, 35], [823, 100, 18, 35], [788, 22, 24, 21], [788, 54, 24, 21], [788, 86, 24, 21], [816, 65, 16, 15]];
   const trees = [];
+  // The hub holds well over a thousand trees, so texture, geometry and depth material are built once per kind (a
+  // phone can't hold a texture each); only the material is per tree, for the fade.
+  const treeParts = new Map();
+  async function treeKind(variant, scale) {
+    const key = variant % TREES.length + ':' + scale;
+    if (!treeParts.has(key)) treeParts.set(key, (async () => {
+      const entry = TREES[variant % TREES.length];
+      let t, w, h;
+      if (typeof entry[0] === 'string') {
+        const s = await strip(entry[0]);
+        if (!s) return null;
+        [, w, h] = entry;
+        t = pixelTex(s); t.repeat.set(1 / 4, 1);
+      } else {
+        const [x, y] = entry; [, , w, h] = entry;
+        const c = canvas(w, h); c.getContext('2d').drawImage(tiles, x, y, w, h, 0, 0, w, h);
+        t = pixelTex(c);
+      }
+      const shadow = contact(Math.max(0.6, 1.3 * w / 32) * scale, treeBlob).geometry; // smaller shadow under bushes
+      return { t, geo: quad(w, h, scale / PX), shadow, depth: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: t, alphaTest: 0.5 }) };
+    })());
+    return treeParts.get(key);
+  }
   async function tree(variant = 0, scale = 1) {
-    const entry = TREES[variant % TREES.length];
-    let t, w, h;
-    if (typeof entry[0] === 'string') {
-      const s = await strip(entry[0]);
-      if (!s) return null;
-      [, w, h] = entry;
-      t = pixelTex(s); t.repeat.set(1 / 4, 1);
-    } else {
-      const [x, y] = entry; [, , w, h] = entry;
-      const c = canvas(w, h); c.getContext('2d').drawImage(tiles, x, y, w, h, 0, 0, w, h);
-      t = pixelTex(c);
-    }
+    const kind = await treeKind(variant, scale);
+    if (!kind) return null;
     // Trees stand upright (not tipped back toward the camera) so their trunks meet the ground, and always keep a
     // contact shadow; tipped-back trees without one looked like they were floating.
-    const mesh = new THREE.Mesh(quad(w, h, scale / PX), lit(t));
+    const mesh = new THREE.Mesh(kind.geo, lit(kind.t));
     mesh.castShadow = true;
     mesh.material.transparent = true;
-    mesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: t, alphaTest: 0.5 });
+    mesh.customDepthMaterial = kind.depth;
+    const shadow = new THREE.Mesh(kind.shadow, treeBlob); shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.01;
     const obj = new THREE.Group();
-    obj.add(mesh, contact(Math.max(0.6, 1.3 * w / 32) * scale, treeBlob)); // smaller shadow under bushes
+    obj.add(mesh, shadow);
     trees.push({ obj, mat: mesh.material, fade: 1 });
     return obj;
   }
