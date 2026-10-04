@@ -89,3 +89,25 @@ export function learnedLines(learned) {
   for (const k of learned.kinds.slice(0, 3)) out.push(`Against ${KIND_LABEL[k.kind]}: ${lab(k.tactic)} has won ${k.won} of ${k.rounds}.`);
   return out;
 }
+
+/** Record, training history and condition for the fighter card. Plain counts from the saved fighter and career. */
+export function fighterSummary(fighter, career = null) {
+  const r = fighter.record, played = r.w + r.l + r.d;
+  const lines = [`Record ${r.w}-${r.l}-${r.d} over ${played} fight${played === 1 ? '' : 's'}.`];
+  const camp = STAT_KEYS.reduce((n, k) => n + Math.max(0, fighter.stats[k] - START_STAT - Math.min(career?.trained?.[k]?.gain ?? 0, Math.max(0, fighter.stats[k] - START_STAT))), 0);
+  const sessions = STAT_KEYS.reduce((n, k) => n + (career?.trained?.[k]?.sessions ?? 0), 0);
+  lines.push(`Training: +${camp} stat points from the training camp, ${sessions} gym session${sessions === 1 ? '' : 's'}${fighter.points ? `, ${fighter.points} points unspent` : ''}.`);
+  if (!career) { lines.push('Condition: no career running, so no fatigue or injury.'); return lines; }
+  const e = career.energy;
+  lines.push(`Energy ${e}/100: ${e >= 60 ? 'fresh, no penalty' : `tired, stats ${Math.round(((60 - e) / 60) * 20)}% lower in the ring`}.`);
+  lines.push(career.injury > 0 ? `Injured: ${career.injury} week${career.injury === 1 ? '' : 's'} to heal, stats ${8 + 2 * Math.min(career.injury, 3)}% lower until then.` : 'No injury.');
+  return lines;
+}
+
+/** What a fight changed, for the result screen (quick fights have no career block). Stats only move in training. */
+export function changeLines({ outcome, before, after, gained, pointsAfter, unlocked = [] }) {
+  const word = { w: 'win', l: 'loss', d: 'draw' }[outcome];
+  const out = [`Record ${before.w}-${before.l}-${before.d} → ${after.w}-${after.l}-${after.d} (${word} added).`, `+${gained} training points, ${pointsAfter} to spend. Your stats stay the same until you train.`];
+  for (const u of unlocked) out.push(`Unlocked: ${u.label}.`);
+  return out;
+}

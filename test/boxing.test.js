@@ -628,3 +628,20 @@ test('fight IQ: stat sources split camp from gym, tendencies and the log summary
   assert.equal(learned.kinds[0].kind, 'puncher');
   assert.ok(learnedLines(learned).some((l) => /Against heavy hitters/.test(l)));
 });
+
+test('fighterSummary and changeLines: plain counts', async () => {
+  const { fighterSummary, changeLines } = await import('../public/boxing/fightiq.js');
+  const f = { record: { w: 2, l: 1, d: 0 }, stats: { speed: 56, power: 50, stamina: 50, ringIQ: 50 }, points: 3 };
+  const none = fighterSummary(f, null);
+  assert.match(none[0], /2-1-0 over 3 fights/);
+  assert.match(none[1], /\+6 stat points/);
+  assert.match(none[2], /no career/);
+  const c = { energy: 30, injury: 2, trained: { speed: { gain: 4, sessions: 2 } } };
+  const lines = fighterSummary(f, c);
+  assert.match(lines[1], /\+2 stat points.*2 gym sessions/);
+  assert.match(lines[2], /10% lower/);
+  assert.match(lines[3], /2 weeks.*12%/);
+  const ch = changeLines({ outcome: 'w', before: { w: 1, l: 0, d: 0 }, after: { w: 2, l: 0, d: 0 }, gained: 6, pointsAfter: 9, unlocked: [{ label: 'Varsity' }] });
+  assert.match(ch[0], /1-0-0 → 2-0-0 \(win added\)/);
+  assert.match(ch[2], /Unlocked: Varsity/);
+});

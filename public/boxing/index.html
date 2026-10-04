@@ -552,7 +552,7 @@ import { profileOf, receivedProfile } from './profile.js';
 import { SCREENS, navigate, statCost, REWARDS, outcomeOf, UNLOCKS, unlockFor, isUnlocked, lockedLook, newUnlocks, scorecard, fightStats, punchBreakdown, PUNCH_TYPES, aiPlan, emptyDamage, recordDamage, zoneHeat, DAMAGE_ZONES, cornerTip, TACTIC_BLURB, SPEEDS, normalizeSettings } from './flow.js';
 import { ENERGY, TIERS, newCareer, normalizeCareer, effectiveStats, conditionPenalty, ladder, rankOf, tierIndex, offersFor, rest, applyFight, canDrill, DRILLS, markerAt, drillResult, applyDrill, trainerTip } from './career.js';
 import { createSfx } from './sfx.js';
-import { statSources, tendencies, learnedFromLog, learnedLines } from './fightiq.js';
+import { statSources, tendencies, learnedFromLog, learnedLines, fighterSummary, changeLines } from './fightiq.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -827,6 +827,7 @@ async function renderIq() {
   if (state.screen !== 'fighter') return;
   const learned = learnedLines(learnedFromLog(rows));
   body.replaceChildren(
+    el('h4', { textContent: 'Record and condition' }), ...fighterSummary(state.fighter, state.fighter.career).map((x) => el('p', { textContent: x })),
     el('h4', { textContent: 'How you fight' }), ...t.lines.map((x) => el('p', { textContent: x })), el('p', { textContent: `${t.style} ${t.reaction}.` }),
     el('h4', { textContent: 'Learned from your fights' }), ...learned.map((x) => el('p', { textContent: x })),
     el('p', { className: 'note', textContent: 'Worked out from your stats and the rounds saved on this device. It counts and looks things up; it is not a trained model.' }));
@@ -1175,7 +1176,7 @@ function renderResult() {
       el('div', {}, el('b', { textContent: `+${r.gained}` }), el('span', { textContent: 'XP · training points' })),
       el('div', {}, el('b', { textContent: `${rec('w')}-${rec('l')}-${rec('d')}` }), el('span', { textContent: `record (${recChanged === 'w' ? 'win' : recChanged === 'l' ? 'loss' : 'draw'} added)` })),
       el('div', {}, el('b', { textContent: r.pointsAfter }), el('span', { textContent: 'to spend' }))),
-    ...(r.career ? [careerChanges(r.career)] : []),
+    ...(r.career ? [careerChanges(r.career)] : [el('div', { className: 'card iq', style: 'text-align:left' }, el('h3', { textContent: 'What changed' }), ...changeLines(r).map((x) => el('p', { textContent: x })))]),
     ...r.unlocked.map((u) => el('div', { className: 'unlock' }, el('b', { textContent: 'Unlocked' }), `${u.label}. Find it on the Fighter screen.`)),
     el('div', { id: 'r-actions' },
       ...(r.career ? [el('button', { className: 'big primary', textContent: 'Continue career', onclick: () => { sfx.click(); go('career'); } })] : []),
