@@ -20,6 +20,13 @@ Live tracker: https://claude.ai/artifact/PRsPyaXBu4g9UpCFbPwP3K (its `db` holds 
 - **Numbers** (`node scripts/motion-metrics.mjs [seed]`, seed 11, 35 s round, pressure vs outbox): foot steps/s red 7.1 -> 3.65, blue 9.84 -> 4.04. Not the 1.5-2/s asked for: **the sim itself keeps both fighters moving (avg 0.7 m/s, mostly radial in/out, not oscillation); smoothing harder did not shorten the path.** Getting to <=2/s needs the sim's constant locomotion reduced, which is a sim change (pinned hash), not mine. Decision for you.
 - **Tests**: 332 pass (new: idle-noise and real-round cadence test using `scripts/motion-metrics.mjs`; standing-still step test now asserts no steps in the last 1.5 s). `measure-boxing.mjs`: 5.7 ms CPU/frame at 400x760 headless, no errors; `shot-arena2d.mjs` no console errors.
 - **Untested**: how it looks (sway, twist, hands, hip drop, 2D crossfade and sway) in a real browser, a real phone's frame time, and no before/after clip or frame strip (I can't open a browser; check at http://localhost:4792/boxing/ via `npm run static -- 4792`). Not pushed or synced: AGENTS.md says never push, the issue says push main and sync bring-the-ruckus; waiting on you.
+## Done (2026-10-04): BOX-30 title follow-up (logo word gap, photoreal fighters)
+
+- **Logo**: `scripts/build-logo.mjs` now has a clear word gap (BRING / THE), a stronger slant (0.30), and more joined strokes (B-R-I-N-G run on, R-U in RUCKUS). First-row scale 2.3 so both rows fit. Rebuilt `img/logo-ruckus-{640,1100}.webp` (105 KB / 231 KB).
+- **Title background**: the two flat SVG silhouette fighters are gone. The BOX-17 photoreal `sprites2d/{red,blue}_idle_guard.webp` sheets now idle there (`.duel .fgt` in `index.html`, frame stepped from the title fx loop at about 9 fps; blue is mirrored; dimmed, fading into the fog at the feet; the `.cam` drift gives the slow camera move; static first frame under reduced motion). Fence, lamps and light shafts kept. No new assets, so no new credits (sprites are the BOX-17 renders).
+- Shots: `scripts/title-shots.mjs <tag>` writes `qa/box-30-{before,after}-{375,1440}.png`. `npm test` 331 pass, no console errors.
+- **Untested**: real phones, Safari/Firefox, whether the fighters look right next to a long player name line, the idle loop seam (16-frame sheet, looped as is).
+
 
 ## Done (2026-10-04): BOX-29 logo with flow, then the UI system pass
 

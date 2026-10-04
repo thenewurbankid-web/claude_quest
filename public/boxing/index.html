@@ -78,6 +78,11 @@
   #s-title { justify-content: flex-end; padding: 0 22px calc(var(--bottom) + 26px); overflow: hidden; background: #05070b; --sh: 0; }
   #s-title .cam { filter: saturate(.18) contrast(1.08); position: absolute; inset: -6%; animation: drift 38s ease-in-out infinite alternate; will-change: transform; }
   #s-title .cam svg { width: 100%; height: 100%; display: block; }
+  #s-title .duel { position: absolute; top: 0; bottom: 0; left: 50%; width: min(100%, 520px); transform: translateX(-50%); pointer-events: none; }
+  #s-title .fgt { position: absolute; top: 12%; height: 30%; aspect-ratio: 200 / 536; background-size: 800% 200%; background-repeat: no-repeat; background-position: 0 0;
+    filter: brightness(.58) contrast(1.06); -webkit-mask-image: linear-gradient(#000 70%, transparent 97%); mask-image: linear-gradient(#000 70%, transparent 97%); }
+  #s-title .fgt.red { left: 22%; background-image: url(sprites2d/red_idle_guard.webp); }
+  #s-title .fgt.blue { left: 59%; transform: scaleX(-1); background-image: url(sprites2d/blue_idle_guard.webp); }
   @keyframes drift { from { transform: scale(1.04) translate3d(-1.8%, 0, 0); } to { transform: scale(1.16) translate3d(1.8%, -1.2%, 0); } }
   #s-title .rays { position: absolute; inset: -20% -10% 20%; mix-blend-mode: screen; opacity: .55; pointer-events: none;
     background: conic-gradient(from 168deg at 70% -6%, transparent 0 4deg, rgba(228,228,232,.26) 6deg, transparent 12deg, rgba(228,228,232,.16) 17deg, transparent 22deg, rgba(228,228,232,.22) 27deg, transparent 33deg);
@@ -427,23 +432,8 @@
       <rect y="430" width="400" height="270" fill="url(#tfloor)"/>
       <g stroke="#d9d4c4" stroke-opacity=".35" stroke-width="1.6" fill="none"><path d="M-40 560Q200 500 440 560"/><path d="M60 700L170 436M340 700L230 436"/><ellipse cx="200" cy="560" rx="150" ry="34"/></g>
       <ellipse cx="200" cy="540" rx="190" ry="40" fill="#ffd9a0" opacity=".1"/>
-      <!-- fighters -->
-      <g fill="#04060a" transform="translate(22 -175) scale(.92)">
-        <g transform="translate(116 380)">
-          <ellipse cx="14" cy="164" rx="52" ry="7" opacity=".6"/>
-          <circle cx="22" cy="14" r="15"/><path d="M10 26h24l8 12 22 6 8 22-26-4v24l10 48-10 6-12-38-8 38H10l6-58-18-12 6-30z"/>
-          <path d="M38 52l24-16 10 4-6 14-20 10z"/><circle cx="72" cy="38" r="9"/><path d="M18 54l-14 20 8 12 22-12z"/><circle cx="8" cy="86" r="9"/>
-          <path d="M6 124l-12 40h18l10-30zM30 126l18 38h18l-14-42z"/>
-        </g>
-        <g transform="translate(246 372) scale(-1 1)">
-          <ellipse cx="-14" cy="172" rx="52" ry="7" opacity=".6"/>
-          <circle cx="-22" cy="16" r="15"/><path d="M-10 28h-24l-8 12-22 6-8 22 26-4v24l-10 48 10 6 12-38 8 38h14l-6-58 18-12-6-30z"/>
-          <path d="M-38 54l-24-16-10 4 6 14 20 10z"/><circle cx="-72" cy="40" r="9"/><path d="M-18 56l14 20-8 12-22-12z"/><circle cx="-8" cy="88" r="9"/>
-          <path d="M-6 126l12 40h-18l-10-30zM-30 128l-18 38h-18l14-42z"/>
-        </g>
-      </g>
-      <g stroke="#ffcf8a" stroke-opacity=".5" stroke-width="1.2" fill="none" transform="translate(22 -175) scale(.92)"><path d="M140 394q-9 4-6 20M262 388q9 4 6 20"/></g>
     </svg>
+    <div class="duel"><span class="fgt red" data-s="red"></span><span class="fgt blue" data-s="blue"></span></div>
   </div>
   <div class="rays" aria-hidden="true"></div>
   <div class="haze h1" aria-hidden="true"></div><div class="haze h2" aria-hidden="true"></div>
@@ -794,10 +784,13 @@ function startTitleFx() {
     r: spark ? 0.8 + Math.random() * 1.6 : 0.6 + Math.random() * 1.8, vx: (Math.random() - 0.5) * (spark ? 18 : 8), vy: spark ? -(18 + Math.random() * 40) : -(2 + Math.random() * 8),
     ph: Math.random() * 6.28, life: Math.random() });
   const ps = Array.from({ length: 70 }, (_, i) => mk(i % 4 === 0));
-  let last = performance.now();
+  let last = performance.now(), duelFrame = -1;
+  const duelEls = document.querySelectorAll('#s-title .fgt');
   const frame = (now) => {
     if (state.screen !== 'title') { fxRaf = 0; return; }
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const fi = Math.floor(now / 110) % 16; // idle_guard sheet: 8 columns x 2 rows, slow
+    if (fi !== duelFrame) { duelFrame = fi; for (const f of duelEls) f.style.backgroundPosition = `${(fi % 8) * 100 / 7}% ${fi >> 3 ? 100 : 0}%`; }
     if (cv.clientWidth !== w || cv.clientHeight !== h) size();
     ctx.clearRect(0, 0, w, h);
     for (const p of ps) {
