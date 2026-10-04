@@ -186,6 +186,11 @@ asset packs are CC0 (add-on code is GPL-3.0 but only runs at build time). It is 
 `look-preview.js`: an IntersectionObserver on the preview's parent starts its render loop only while the preview is visible (Look panel shown), and stops it when the panel is hidden or scrolled away, so a fight draws with the arena engine alone. The engine and scene stay alive, and `setLook` still rebuilds the boxer while hidden, so the preview matches the saved look when it returns. `npm test` 100 pass; no test covers it (needs a browser).
 - **Untested in a browser**: that `BABYLON.EngineStore.Instances[i].activeRenderLoops` is empty for the preview during a fight, that it resumes on return, a look change made while hidden showing up afterwards. The preview's WebGL context is still held during a fight (loop stopped, not disposed).
 
+## Done (2026-10-04): person model smoke render in headless Chromium (BOX-10)
+
+`node scripts/measure-boxing.mjs --cam=hard|ringside` at 400 px (Metal GPU): the person loads and fights, no console errors, 122 meshes, ~100 draw calls, CPU frame 3-4 ms. Screenshots: `public/boxing/qa/box-10-person-hard.png` / `-ringside.png`. At 338x190 the fighters read as people in the right outfits (white tee and red wraps vs navy jacket and blue wraps), standing on the court at the right scale. No code changed.
+- **Still untested**: detail the small canvas can't show (tint strength, hair, jeans cut, shoes, mid-punch skinning), the Look panel and its preview at 375px, skin tones, P2P looks, the fallback on a real 404. You check these; balance still needs your numbers.
+
 ## Next jobs
 
 1. **Check the person in a browser** (`npm run static -- 4792`, http://localhost:4792/boxing/): the fight view and the Look panel, using the untested list under BOX-3 above, and tell me what to fix (tint, hair, proportions, shoe heights).
